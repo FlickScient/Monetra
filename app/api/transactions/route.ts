@@ -2,7 +2,19 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/db';
 import { wallets, transactions } from '@/db/schema';
-import { eq, sql, and } from 'drizzle-orm';
+import { eq, sql, and, desc } from 'drizzle-orm';
+
+export async function GET() {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const rows = await db.query.transactions.findMany({
+    where: (t, { eq }) => eq(t.userId, userId),
+    orderBy: (t, { desc }) => desc(t.occurredAt),
+    limit: 50,
+  });
+  return NextResponse.json(rows);
+}
 
 export async function POST(req: Request) {
   const { userId } = await auth();
@@ -24,7 +36,9 @@ export async function POST(req: Request) {
     });
     if (!wallet) throw new Error('Wallet not found');
 
-    const delta = transactionType === 'income' ? amountMinor : -amountMinor;
+    const isCreditCard = wallet.walletType === 'credit_card';
+    const increasesBalance = transactionType === 'income' || (transactionType === 'expense' && isCreditCard);
+    const delta = increasesBalance ? amountMinor : -amountMinor;
 
     const [updatedWallet] = await tx
       .update(wallets)
