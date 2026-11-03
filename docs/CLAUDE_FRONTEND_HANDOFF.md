@@ -110,3 +110,39 @@ Keep it globally mounted and independent of navigation. It is a convenience calc
 - Add migration tests and verify row counts / ownership mapping before retiring organization-backed storage.
 - Run `npm run typecheck`, `npm run lint` if configured, and `npm run build`.
 - Do not report success unless the command actually passed.
+
+
+## Current implementation status — 4 November 2026
+
+The branch contains the frontend foundation, not a production-complete finance system.
+
+- Personal/Family/Business are represented through the existing organization-backed selector for now. The migration to true three-workspace records and removal of user-facing organization concepts is backend/migration work. Do not delete the existing organization tables or APIs before data is migrated and verified.
+- A workspace-switch request guard now clears the previous workspace's visible finance data while the next workspace loads and ignores late responses from older requests. Keep equivalent stale-response protection in any replacement workspace data layer.
+- Due & Debt records, repayment history, and record deletion currently live in React component state only. They reset on refresh and are not durable.
+- The seven Financial Radar tools are present as a frontend prototype. Goal and reconciliation records are not persisted; forecasts and debt comparisons are estimates based on the currently loaded records and documented assumptions.
+- Fiscus A.I. is a non-connected interface. The send action must remain disabled until the authenticated server-side analysis service and evidence contract are implemented.
+- The floating calculator is client-side only and must never create ledger entries implicitly.
+- No database schema or migration was changed by the frontend work.
+
+## Required implementation order for Claude
+
+1. Inspect the current branch and the user's unpushed local changes, especially `db/schema.ts`. Reconcile; do not overwrite.
+2. Diagnose the existing production/preview Neon connection and organization-members lookup failure by confirming which Neon branch/database the deployed `DATABASE_URL` points to. Never request or print secrets in logs.
+3. Design a reversible migration from organization-backed records to the three workspace keys. Preserve IDs, ownership, row counts, balances, ledger history and auditability. Add verification and rollback steps before retiring any legacy path.
+4. Implement and test server-side workspace authorization and workspace-scoped APIs. Do not trust browser-supplied IDs.
+5. Implement Due & Debt persistence and payment history as a separate subledger. Add idempotency and transaction boundaries. Keep principal outside normal income/expense totals and wallet balances unless a user explicitly confirms a separate ledger transaction.
+6. Implement persistent goals and cash reconciliations, then the seven-tool calculation APIs. Add deterministic unit tests for money math, dates, rates, zero balances, and edge cases.
+7. Implement Fiscus retrieval/calculation/evidence first, then LLM narration. Keep sending disabled until this is complete and authorization tests pass.
+8. Wire the frontend to the real APIs, add loading/empty/error/retry states, and remove prototype-only state only when the persistent replacement is working.
+9. Run the repository's actual checks: `npm ci`, `npm run typecheck`, configured lint, `npm run build`, migration verification and authorization tests. Fix failures; report exact commands and outcomes.
+10. Verify Personal, Family and Business isolation with separate test users and cross-workspace negative tests. Verify Due & Debt does not distort wallet, asset, income or expense totals.
+
+## Handoff acceptance criteria
+
+- Existing user data is preserved and mapped exactly once.
+- A user can switch between Personal, Family and Business without stale or cross-workspace data appearing, including during rapid switching and failed requests.
+- Refreshing the browser does not erase Due & Debt records, repayments, goals or reconciliations.
+- Partial repayment/collection updates outstanding principal correctly; duplicate payment submissions are idempotent.
+- Forecasts and debt strategy outputs expose assumptions and never masquerade as guaranteed outcomes.
+- Fiscus answers are grounded in authorized records and include workspace/date-range evidence; unsupported questions are answered as unknown, not guessed.
+- No demo records are presented as user data, no silent ledger mutations occur, and no existing tables or user data are discarded.
