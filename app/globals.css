@@ -125,3 +125,57 @@
 @media (max-width: 390px) {
   .content-wrap { padding-right: 13px; padding-left: 13px; }.page-intro h1 { font-size: 24px; }.intro-action { font-size: 8px; }.metric-card { padding: 10px 8px; }.metric-value { font-size: 13px; }.balance-value { font-size: 30px; }.balance-breakdown { gap: 12px; }.balance-breakdown b { font-size: 10px; }
 }
+
+
+/* Motion system: subtle, purposeful feedback without fighting the content. */
+@keyframes monetra-enter {
+  from { opacity: 0; transform: translateY(12px) scale(.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes monetra-pop {
+  0% { opacity: 0; transform: scale(.94); }
+  70% { transform: scale(1.015); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes monetra-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.page-stack > * { animation: monetra-enter .55s cubic-bezier(.2,.75,.25,1) both; }
+.page-stack > *:nth-child(2) { animation-delay: .045s; }
+.page-stack > *:nth-child(3) { animation-delay: .09s; }
+.page-stack > *:nth-child(4) { animation-delay: .135s; }
+.page-stack > *:nth-child(5) { animation-delay: .18s; }
+.metric-card, .wallet-card, .surface-card, .balance-card {
+  transition: transform .24s cubic-bezier(.2,.75,.25,1), box-shadow .24s ease, border-color .24s ease;
+}
+.metric-card:hover, .wallet-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 34px #183d2b12;
+  border-color: color-mix(in srgb, var(--green) 22%, var(--line));
+}
+.balance-card:hover { box-shadow: 0 20px 42px #173e3028; }
+.balance-orbit { animation: monetra-orbit 48s linear infinite; }
+.orbit-two { animation-direction: reverse; animation-duration: 64s; }
+.donut-chart { animation: monetra-pop .7s .12s cubic-bezier(.2,.75,.25,1) both; }
+.transaction-row { transition: background .18s ease, padding .18s ease; }
+.transaction-row:hover { background: var(--surface-soft); padding-right: 8px; padding-left: 8px; border-radius: 10px; }
+.side-nav-item, .icon-btn, .text-action, .mobile-nav button, .balance-actions button, .add-wallet-row {
+  transition: color .2s ease, background .2s ease, border-color .2s ease, transform .2s ease;
+}
+.side-nav-item:active, .primary-btn:active, .icon-btn:active { transform: scale(.97); }
+.modal-backdrop { animation: monetra-enter .2s ease both; }
+.modal-panel { animation: monetra-pop .28s cubic-bezier(.2,.75,.25,1) both; }
+.field { transition: border-color .2s ease, box-shadow .2s ease, background .2s ease; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
