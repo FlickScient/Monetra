@@ -5,7 +5,7 @@ import {
   ArrowDownLeft, ArrowUpRight, BarChart3, Bell, ChevronRight, CreditCard,
   Home, Moon, Plus, Receipt, Search, Sun, WalletCards, X, ArrowRight,
   CircleHelp, Sparkles, TrendingUp, ShieldCheck, Menu, Landmark, Activity,
-  HandCoins, Settings as SettingsIcon,
+  HandCoins, PiggyBank, Settings as SettingsIcon,
 } from 'lucide-react';
 import { useUser, UserButton } from '@clerk/nextjs';
 import { FiscusView, SettingsView } from '@/components/monetra/module-views';
