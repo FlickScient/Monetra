@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { getOrganizationContext } from '@/lib/organization';
 import { db } from '@/db';
 import { transactions } from '@/db/schema';
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
 
 export async function GET(req: Request) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const context = await getOrganizationContext(req);
+  if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
 
   const url = new URL(req.url);
   const requestedStart = url.searchParams.get('from');
@@ -24,7 +24,7 @@ export async function GET(req: Request) {
         expenseMinor: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.transactionType} = 'expense' THEN ${transactions.amountMinor} ELSE 0 END), 0)::text`,
       })
       .from(transactions)
-      .where(and(eq(transactions.userId, userId), gte(transactions.occurredAt, monthStart), lt(transactions.occurredAt, nextMonthStart)));
+      .where(and(eq(transactions.organizationId, context.organizationId), gte(transactions.occurredAt, monthStart), lt(transactions.occurredAt, nextMonthStart)));
 
     const categoryRows = await db
       .select({
