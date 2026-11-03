@@ -30,6 +30,7 @@ export default function HomePage() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [hasMoreTransactions, setHasMoreTransactions] = useState(false);
   const [summary, setSummary] = useState<FinanceSummary>({ incomeMinor: 0, expenseMinor: 0, categorySpend: [] });
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState<View>('overview');
@@ -58,16 +59,28 @@ export default function HomePage() {
     setLoadError('');
     try {
       const [walletRes, categoryRes, transactionRes, summaryRes] = await Promise.all([
-        fetch('/api/wallets'), fetch('/api/categories'), fetch('/api/transactions'), fetch('/api/transactions/summary'),
+        fetch('/api/wallets'), fetch('/api/categories'), fetch('/api/transactions?limit=50&offset=0'), fetch('/api/transactions/summary'),
       ]);
       if (!walletRes.ok || !categoryRes.ok || !transactionRes.ok || !summaryRes.ok) throw new Error('Some finance data could not be loaded.');
       const [walletData, categoryData, transactionData, summaryData] = await Promise.all([
         walletRes.json(), categoryRes.json(), transactionRes.json(), summaryRes.json(),
       ]);
-      setWallets(walletData); setCategories(categoryData); setTransactions(transactionData); setSummary(summaryData);
+      setWallets(walletData); setCategories(categoryData); setTransactions(transactionData.slice(0, 50)); setHasMoreTransactions(transactionData.length > 50); setSummary(summaryData);
     } catch {
       setLoadError('We couldn’t sync your finance data. Check your connection and try again.');
     } finally { setLoading(false); }
+  }
+
+  async function loadMoreTransactions() {
+    try {
+      const response = await fetch(`/api/transactions?limit=50&offset=${transactions.length}`);
+      if (!response.ok) throw new Error('Unable to load older transactions');
+      const rows: Transaction[] = await response.json();
+      setTransactions((current) => [...current, ...rows.slice(0, 50)]);
+      setHasMoreTransactions(rows.length > 50);
+    } catch {
+      setNotice('Could not load older transactions. Please try again.');
+    }
   }
 
   const totalAssets = wallets.filter((w) => w.walletType !== 'credit_card').reduce((sum, w) => sum + Number(w.currentBalanceMinor), 0);
@@ -177,7 +190,7 @@ export default function HomePage() {
           )}
 
           {activeView === 'wallets' && <WalletsView wallets={wallets} onAdd={() => setShowWalletForm(true)} />}
-          {activeView === 'transactions' && <TransactionsView transactions={transactions} wallets={wallets} categories={categories} onAdd={() => setShowTransactionForm(true)} />}
+          {activeView === 'transactions' && <TransactionsView transactions={transactions} wallets={wallets} categories={categories} onAdd={() => setShowTransactionForm(true)} onLoadMore={loadMoreTransactions} hasMore={hasMoreTransactions} />}
         </div>
       </div>
 
@@ -206,11 +219,12 @@ function WalletsView({ wallets, onAdd }: { wallets: Wallet[]; onAdd: () => void 
   </div>;
 }
 
-function TransactionsView({ transactions, wallets, categories, onAdd }: { transactions: Transaction[]; wallets: Wallet[]; categories: Category[]; onAdd: () => void }) {
+function TransactionsView({ transactions, wallets, categories, onAdd, onLoadMore, hasMore }: { transactions: Transaction[]; wallets: Wallet[]; categories: Category[]; onAdd: () => void; onLoadMore: () => Promise<void>; hasMore: boolean }) {
   const [query, setQuery] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState<'all' | TransactionType>('all');
   const filtered = transactions.filter((t) => t.description.toLowerCase().includes(query.toLowerCase()) && (filter === 'all' || t.transactionType === filter));
-  return <div className="page-stack"><section className="page-intro"><div><p className="eyebrow">YOUR FINANCIAL HISTORY</p><h1>Transactions<span>.</span></h1><p className="intro-copy">Every movement, accounted for.</p></div><button className="primary-btn intro-action" onClick={onAdd}><Plus size={17} /> New transaction</button></section><section className="surface-card ledger-card"><div className="ledger-toolbar"><div className="search-wrap"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search transactions..." /></div><div className="filter-tabs">{(['all', 'income', 'expense', 'transfer'] as const).map((item) => <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div></div>{filtered.length === 0 ? <EmptyState icon={<Search size={22} />} title="Nothing matches" text="Try a different search or filter." /> : <div className="transaction-list">{filtered.map((t) => <TransactionRow key={t.id} transaction={t} wallets={wallets} categories={categories} />)}</div>}</section></div>;
+  return <div className="page-stack"><section className="page-intro"><div><p className="eyebrow">YOUR FINANCIAL HISTORY</p><h1>Transactions<span>.</span></h1><p className="intro-copy">Every movement, accounted for.</p></div><button className="primary-btn intro-action" onClick={onAdd}><Plus size={17} /> New transaction</button></section><section className="surface-card ledger-card"><div className="ledger-toolbar"><div className="search-wrap"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search transactions..." /></div><div className="filter-tabs">{(['all', 'income', 'expense', 'transfer'] as const).map((item) => <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div></div>{filtered.length === 0 ? <EmptyState icon={<Search size={22} />} title="Nothing matches" text="Try a different search or filter." /> : <div className="transaction-list">{filtered.map((t) => <TransactionRow key={t.id} transaction={t} wallets={wallets} categories={categories} />)}</div>}{hasMore && query.trim() === '' && filter === 'all' && <button className="load-more-btn" disabled={loadingMore} onClick={async () => { setLoadingMore(true); await onLoadMore(); setLoadingMore(false); }}>{loadingMore ? 'Loading older activity…' : 'Load older transactions'} <ChevronRight size={15} /></button>}</section></div>;
 }
 
 function WalletModal({ onClose, onSaved }: { onClose: () => void; onSaved: (message: string) => Promise<void> }) {
