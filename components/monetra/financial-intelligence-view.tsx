@@ -7,6 +7,34 @@ type TransactionRecord = { id: string; transactionType: 'income' | 'expense' | '
 const money = (minor: number) => new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(Math.round(minor / 100));
 const minor = (value: string) => { const n = Number(value); return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0; };
 
+type DebtInput = { name: string; balance: number; rate: number };
+function estimatePayoff(order: DebtInput[], monthlyBudget: number): { months: number | null; interest: number; reason?: string } {
+  const balances = order.map(debt => ({ ...debt }));
+  if (!balances.length || monthlyBudget <= 0) return { months: null, interest: 0, reason: 'Enter balances and a monthly budget.' };
+  let interestPaid = 0;
+  for (let month = 1; month <= 600; month += 1) {
+    let interestDue = 0;
+    balances.forEach(debt => { const charge = Math.round(debt.balance * debt.rate / 1200); debt.balance += charge; interestDue += charge; });
+    if (monthlyBudget <= interestDue) return { months: null, interest: interestPaid + interestDue, reason: 'Budget does not cover monthly interest.' };
+    let remaining = monthlyBudget;
+    for (const debt of balances) {
+      const charge = Math.round((debt.balance - debt.balance / (1 + debt.rate / 1200)));
+      const paid = Math.min(remaining, charge);
+      remaining -= paid;
+      interestPaid += paid;
+    }
+    for (const debt of order) {
+      const current = balances.find(item => item.name === debt.name);
+      if (!current || remaining <= 0) continue;
+      const principal = Math.min(remaining, current.balance);
+      current.balance -= principal;
+      remaining -= principal;
+    }
+    if (balances.every(debt => debt.balance <= 0)) return { months: month, interest: interestPaid };
+  }
+  return { months: null, interest: interestPaid, reason: 'Payoff exceeds the 50-year simulation window.' };
+}
+
 function Field({ label, value, onChange, suffix = '৳', type = 'number' }: { label: string; value: string; onChange: (value: string) => void; suffix?: string; type?: string }) {
   return <label className="intelligence-field"><span>{label}</span>{type === 'number' ? <div><input type="number" min="0" step="any" inputMode="decimal" value={value} onChange={e => onChange(e.target.value)} placeholder="0" /><small>{suffix}</small></div> : <input type={type} value={value} onChange={e => onChange(e.target.value)} />}</label>;
 }
@@ -50,6 +78,8 @@ export function FinancialIntelligenceView({ wallets, transactions, monthlyIncome
   const debts = [{ name: aName || 'Debt A', balance: minor(aBalance), rate: Number(aRate) || 0 }, { name: bName || 'Debt B', balance: minor(bBalance), rate: Number(bRate) || 0 }].filter(d => d.balance > 0);
   const snowball = [...debts].sort((a, b) => a.balance - b.balance);
   const avalanche = [...debts].sort((a, b) => b.rate - a.rate);
+  const snowballEstimate = estimatePayoff(snowball, minor(budget));
+  const avalancheEstimate = estimatePayoff(avalanche, minor(budget));
 
   const leakSignals = useMemo(() => {
     const cutoff = Date.now() - 45 * 86400000;
@@ -96,8 +126,8 @@ export function FinancialIntelligenceView({ wallets, transactions, monthlyIncome
       <Card icon={<PiggyBank size={19} />} eyebrow="REPAYMENT PLANNER" title="Debt Strategy Engine" description="Compare Snowball and Avalanche payoff priorities.">
         <div className="debt-simulator-grid"><div className="debt-simulator-item"><b>Debt A</b><Field label="Name" type="text" suffix="" value={aName} onChange={setAName} /><Field label="Balance" value={aBalance} onChange={setABalance} /><Field label="Annual interest" value={aRate} onChange={setARate} suffix="%" /></div><div className="debt-simulator-item"><b>Debt B</b><Field label="Name" type="text" suffix="" value={bName} onChange={setBName} /><Field label="Balance" value={bBalance} onChange={setBBalance} /><Field label="Annual interest" value={bRate} onChange={setBRate} suffix="%" /></div></div>
         <Field label="Monthly repayment budget" value={budget} onChange={setBudget} />
-        {debts.length && minor(budget) ? <div className="debt-order-results"><div><small>SNOWBALL · LOWEST BALANCE FIRST</small><b>{snowball.map(d => d.name).join(' → ')}</b></div><div><small>AVALANCHE · HIGHEST INTEREST FIRST</small><b>{avalanche.map(d => d.name).join(' → ')}</b></div></div> : <p className="intelligence-disclaimer">Enter debt balances and a monthly repayment budget to compare priorities.</p>}
-        <p className="intelligence-disclaimer">Priority comparison only; minimum payments, fees and changing rates are not modeled. No debt records are changed.</p>
+        {debts.length && minor(budget) ? <div className="debt-order-results"><div><small>SNOWBALL · LOWEST BALANCE FIRST</small><b>{snowball.map(d => d.name).join(' → ')}</b><span>{snowballEstimate.months ? snowballEstimate.months + ' months · ' + money(snowballEstimate.interest) + ' estimated interest' : snowballEstimate.reason}</span></div><div><small>AVALANCHE · HIGHEST INTEREST FIRST</small><b>{avalanche.map(d => d.name).join(' → ')}</b><span>{avalancheEstimate.months ? avalancheEstimate.months + ' months · ' + money(avalancheEstimate.interest) + ' estimated interest' : avalancheEstimate.reason}</span></div></div> : <p className="intelligence-disclaimer">Enter debt balances and a monthly repayment budget to compare payoff priorities.</p>}
+        <p className="intelligence-disclaimer">Estimate assumes the budget covers monthly interest first, then targets principal in the chosen order. It excludes lender minimums, fees and changing rates. No debt records are changed.</p>
       </Card>
     </div>
     <footer className="intelligence-footer"><Activity size={15} />Calculations use loaded records and selected workspace. Estimates never silently modify your ledger.</footer>
