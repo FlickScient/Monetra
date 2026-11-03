@@ -1,0 +1,53 @@
+name: Monetra staging database migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_staging_target:
+        description: "Type APPLY_TO_STAGING only after confirming MONETRA_STAGING_DATABASE_URL points to a disposable/staging Neon branch."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monetra-staging-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate-and-verify:
+    if: github.event.inputs.confirm_staging_target == 'APPLY_TO_STAGING'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Confirm staging secret is configured
+        env:
+          DATABASE_URL: ${{ secrets.MONETRA_STAGING_DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::Add MONETRA_STAGING_DATABASE_URL in GitHub Actions secrets. Never paste it into chat or commit it."
+            exit 1
+          fi
+
+      - name: Apply Drizzle migrations to the configured staging database
+        env:
+          DATABASE_URL: ${{ secrets.MONETRA_STAGING_DATABASE_URL }}
+        run: npm run db:migrate
+
+      - name: Verify organization migration and data ownership
+        env:
+          DATABASE_URL: ${{ secrets.MONETRA_STAGING_DATABASE_URL }}
+        run: npm run db:verify:organization
