@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { getOrganizationContext, canWriteOrganization } from '@/lib/organization';
 import { db } from '@/db';
 import { categories } from '@/db/schema';
 import { eq } from 'drizzle-orm';
@@ -18,14 +18,14 @@ const defaults = [
   { name: 'Other', categoryType: 'expense', color: '#78928b' },
 ];
 
-export async function GET() {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export async function GET(req: Request) {
+  const context = await getOrganizationContext(req);
+  if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
 
-  let rows = await db.select().from(categories).where(eq(categories.userId, userId));
-  if (rows.length === 0) {
-    await db.insert(categories).values(defaults.map((c) => ({ ...c, userId })));
-    rows = await db.select().from(categories).where(eq(categories.userId, userId));
+  let rows = await db.select().from(categories).where(eq(categories.organizationId, context.organizationId));
+  if (rows.length === 0 && canWriteOrganization(context.role)) {
+    await db.insert(categories).values(defaults.map((category) => ({ ...category, userId: context.userId, organizationId: context.organizationId })));
+    rows = await db.select().from(categories).where(eq(categories.organizationId, context.organizationId));
   }
   return NextResponse.json(rows);
 }
