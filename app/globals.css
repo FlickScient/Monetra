@@ -202,3 +202,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .topbar-context { display: none; }
   .organization-switcher select { max-width: 105px; }
 }
+
+
+.member-row { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); padding: 10px; }
+.member-identity { display: grid; min-width: 0; flex: 1; gap: 4px; }
+.member-identity b { overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.member-identity small { color: var(--muted); font-size: 8px; text-transform: capitalize; }
+.member-role-label { color: var(--green); font-size: 9px; font-weight: 800; }
+.member-role-select { width: 118px; min-height: 34px; padding: 0 8px; font-size: 9px; }
+.member-remove { border: 0; background: transparent; color: #b65e51; font-size: 9px; font-weight: 800; cursor: pointer; }
+.member-remove:disabled { opacity: .5; cursor: wait; }
+@media (max-width: 390px) {
+  .member-row { flex-wrap: wrap; }
+  .member-identity { min-width: 100%; }
+}
