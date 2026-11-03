@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, type FormEvent } from 'react';
-import { ArrowDownLeft, ArrowUpRight, CalendarClock, Check, CirclePlus, HandCoins, History, Plus, Search, ShieldCheck, Wallet, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, CalendarClock, Check, CirclePlus, HandCoins, History, Plus, Search, ShieldCheck, Trash2, Wallet, X } from 'lucide-react';
 
 type Direction = 'receivable' | 'payable';
 type Entry = { id: string; direction: Direction; person: string; note: string; principal: number; rate: number; dueDate: string; createdAt: string; repayments: { id: string; amount: number; date: string; note: string }[] };
@@ -23,7 +23,7 @@ export function DueDebtView() {
   const [repayId, setRepayId] = useState('');
   const [repayAmount, setRepayAmount] = useState('');
   const [repayNote, setRepayNote] = useState('');
-  const [filter, setFilter] = useState<'all' | Direction>('all');
+  const [filter, setFilter] = useState<'all' | Direction | 'overdue' | 'settled'>('all');
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
 
@@ -34,7 +34,11 @@ export function DueDebtView() {
   const overdue = entries.filter(e => outstanding(e) > 0 && e.dueDate && e.dueDate < today());
   const upcoming = entries.filter(e => outstanding(e) > 0 && e.dueDate && e.dueDate >= today() && e.dueDate <= localDate(new Date(Date.now() + 7 * 86400000)));
   const history = entries.flatMap(e => e.repayments.map(p => ({ ...p, person: e.person, direction: e.direction, entryNote: e.note }))).sort((a, b) => b.date.localeCompare(a.date));
-  const visible = useMemo(() => entries.filter(e => (filter === 'all' || e.direction === filter) && (e.person + ' ' + e.note).toLowerCase().includes(search.toLowerCase())), [entries, filter, search]);
+  const visible = useMemo(() => entries.filter(e => {
+    const remaining = outstanding(e);
+    const statusMatch = filter === 'all' || (filter === 'receivable' && e.direction === 'receivable') || (filter === 'payable' && e.direction === 'payable') || (filter === 'settled' && remaining === 0) || (filter === 'overdue' && remaining > 0 && !!e.dueDate && e.dueDate < today());
+    return statusMatch && (e.person + ' ' + e.note).toLowerCase().includes(search.toLowerCase());
+  }), [entries, filter, search]);
   const selectedRepayEntry = entries.find(entry => entry.id === repayId);
 
   function createEntry(event: FormEvent<HTMLFormElement>) {
@@ -42,6 +46,11 @@ export function DueDebtView() {
     if (!person.trim() || !toMinor(principal)) { setError('Add a person or business name and a valid amount.'); return; }
     setEntries(current => [{ id: crypto.randomUUID(), direction, person: person.trim(), note: note.trim(), principal: toMinor(principal), rate: Math.max(0, Number(rate) || 0), dueDate, createdAt: localDate(), repayments: [] }, ...current]);
     setPerson(''); setNote(''); setPrincipal(''); setRate('0'); setDueDate(''); setError(''); setShowCreate(false);
+  }
+  function deleteEntry(entry: Entry) {
+    if (!window.confirm(`Delete the ${entry.direction === 'receivable' ? 'receivable' : 'payable'} record for ${entry.person}, including its repayment history?`)) return;
+    setEntries(current => current.filter(item => item.id !== entry.id));
+    if (repayId === entry.id) setRepayId('');
   }
   function addRepayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,8 +71,8 @@ export function DueDebtView() {
     </section>
     <section className="surface-card due-ledger">
       <div className="section-heading"><div><p className="eyebrow">YOUR LEDGER</p><h2>All records</h2><p className="section-subtitle">Track counterparties, principal and remaining balances.</p></div><span className="section-icon"><HandCoins size={18}/></span></div>
-      <div className="due-toolbar"><div className="due-search"><Search size={15}/><input aria-label="Search people or notes" placeholder="Search people or notes" value={search} onChange={e=>setSearch(e.target.value)}/></div><div className="due-filters"><button className={filter==='all'?'active':''} onClick={()=>setFilter('all')}>All</button><button className={filter==='receivable'?'active':''} onClick={()=>setFilter('receivable')}>Owed to me</button><button className={filter==='payable'?'active':''} onClick={()=>setFilter('payable')}>I owe</button></div></div>
-      {visible.length ? <div className="due-record-list">{visible.map(entry=>{const remaining=outstanding(entry);const paid=entry.principal-remaining;const isOverdue=remaining>0&&entry.dueDate&&entry.dueDate<today();return <article className="due-record" key={entry.id}><div className={'due-record-mark '+entry.direction}>{entry.direction==='receivable'?<ArrowDownLeft size={17}/>:<ArrowUpRight size={17}/>}</div><div className="due-record-main"><div className="due-record-title"><strong>{entry.person}</strong><span className={'due-direction '+entry.direction}>{entry.direction==='receivable'?'TO COLLECT':'TO REPAY'}</span></div><p>{entry.note||'No description'}{entry.dueDate?' · Due '+entry.dueDate:''}</p><div className="due-record-progress"><span style={{width:Math.min(100,paid/entry.principal*100)+'%'}}/></div><small>{taka(paid)} paid of {taka(entry.principal)}</small></div><div className="due-record-balance"><strong>{taka(remaining)}</strong><small>Outstanding</small>{isOverdue&&<span className="due-overdue">Overdue</span>}{remaining===0&&<span className="due-settled">Settled</span>}</div><button className="due-repay-btn" disabled={remaining===0} onClick={()=>{setRepayId(entry.id);setRepayAmount('');setRepayNote('');setError('');}}>{entry.direction==='receivable'?'Record collection':'Record repayment'}</button></article>})}</div>:<div className="module-empty-state due-empty"><span><HandCoins size={20}/></span><strong>{entries.length?'No matching records':'Your separate ledger starts here'}</strong><p>{entries.length?'Try another search or filter.':'Add money you lent or borrowed. Partial repayments will reduce the outstanding balance here only.'}</p><button className="text-action" onClick={()=>setShowCreate(true)}><CirclePlus size={15}/> Create your first record</button></div>}
+      <div className="due-toolbar"><div className="due-search"><Search size={15}/><input aria-label="Search people or notes" placeholder="Search people or notes" value={search} onChange={e=>setSearch(e.target.value)}/></div><div className="due-filters"><button className={filter==='all'?'active':''} onClick={()=>setFilter('all')}>All</button><button className={filter==='receivable'?'active':''} onClick={()=>setFilter('receivable')}>Owed to me</button><button className={filter==='payable'?'active':''} onClick={()=>setFilter('payable')}>I owe</button><button className={filter==='overdue'?'active':''} onClick={()=>setFilter('overdue')}>Overdue</button><button className={filter==='settled'?'active':''} onClick={()=>setFilter('settled')}>Settled</button></div></div>
+      {visible.length ? <div className="due-record-list">{visible.map(entry=>{const remaining=outstanding(entry);const paid=entry.principal-remaining;const isOverdue=remaining>0&&entry.dueDate&&entry.dueDate<today();return <article className="due-record" key={entry.id}><div className={'due-record-mark '+entry.direction}>{entry.direction==='receivable'?<ArrowDownLeft size={17}/>:<ArrowUpRight size={17}/>}</div><div className="due-record-main"><div className="due-record-title"><strong>{entry.person}</strong><span className={'due-direction '+entry.direction}>{entry.direction==='receivable'?'TO COLLECT':'TO REPAY'}</span></div><p>{entry.note||'No description'}{entry.dueDate?' · Due '+entry.dueDate:''}</p><div className="due-record-progress"><span style={{width:Math.min(100,paid/entry.principal*100)+'%'}}/></div><small>{taka(paid)} paid of {taka(entry.principal)}</small></div><div className="due-record-balance"><strong>{taka(remaining)}</strong><small>Outstanding</small>{isOverdue&&<span className="due-overdue">Overdue</span>}{remaining===0&&<span className="due-settled">Settled</span>}</div><div className="due-record-actions"><button className="due-repay-btn" disabled={remaining===0} onClick={()=>{setRepayId(entry.id);setRepayAmount('');setRepayNote('');setError('');}}>{entry.direction==='receivable'?'Record collection':'Record repayment'}</button><button type="button" className="due-delete-btn" onClick={()=>deleteEntry(entry)} aria-label={`Delete record for ${entry.person}`} title="Delete record"><Trash2 size={14}/></button></div></article>})}</div>:<div className="module-empty-state due-empty"><span><HandCoins size={20}/></span><strong>{entries.length?'No matching records':'Your separate ledger starts here'}</strong><p>{entries.length?'Try another search or filter.':'Add money you lent or borrowed. Partial repayments will reduce the outstanding balance here only.'}</p><button className="text-action" onClick={()=>setShowCreate(true)}><CirclePlus size={15}/> Create your first record</button></div>}
     </section>
     <div className="due-lower-grid">
       <section className="surface-card due-attention"><div className="section-heading"><div><p className="eyebrow">DATE WATCH</p><h2>Upcoming & overdue</h2></div><span className="section-icon"><CalendarClock size={18}/></span></div>{overdue.length+upcoming.length===0?<p className="due-muted">No due dates need attention in the next seven days.</p>:<div className="due-attention-list">{[...overdue,...upcoming].sort((a,b)=>a.dueDate.localeCompare(b.dueDate)).map(e=><div key={e.id}><span><b>{e.person}</b><small>{e.direction==='receivable'?'Collect':'Repay'} · {e.dueDate}</small></span><strong>{taka(outstanding(e))}</strong></div>)}</div>}</section>
