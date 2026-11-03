@@ -119,6 +119,8 @@ The following Phase 1 code has been committed to `main`:
 
 ### Important migration gate
 
+A read-only verifier is available as `npm run db:verify:organization`. It checks required organization tables/columns, null organization ownership, Personal organization + owner membership coverage for existing users, and membership role validity. Run it only after applying the migration to the intended staging or production database; it does not mutate data and cannot prove historical balances match unless you have separately captured pre-migration counts/balances.
+
 **The database migration has been committed but has not been run against the Neon database.** The app code now expects the organization tables and `organization_id` columns to exist. Before using the updated app against production data:
 
 1. Take a Neon snapshot/backup using the controls available in the Neon project.
@@ -132,7 +134,7 @@ Do not claim backup readiness until an actual restore test has been completed.
 
 ### Build verification
 
-The Vercel checks for the latest organization-foundation commits reported a Vercel `build-rate-limit` failure. This is a platform build-limit response, not a compiler diagnostic. The GitHub Actions workflow is now running. Its first typecheck caught an optional-header typing issue in the workspace fetches; that issue was fixed and a fresh run was queued. The latest run had not completed at the time of this update. TypeScript/build verification therefore remains pending. Vercel checks were blocked by the account's `build-rate-limit`, not by a compiler diagnostic.
+The Vercel checks for the latest organization-foundation commits reported a Vercel `build-rate-limit` failure. This is a platform build-limit response, not a compiler diagnostic. The GitHub Actions TypeScript check completed successfully on commit `aefd53c21bc9690b92f11884b04eeffdaf3aac72` (run 41585870409). Vercel checks remain blocked by the account's `build-rate-limit`, not by a compiler diagnostic. Vercel checks were blocked by the account's `build-rate-limit`, not by a compiler diagnostic.
 
 ### Still outstanding in Phase 1
 
