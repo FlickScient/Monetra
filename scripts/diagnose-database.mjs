@@ -54,6 +54,11 @@ try {
     transactions: ['organization_id', 'user_id'],
     ledger_accounts: ['organization_id', 'user_id'],
     ledger_entries: ['organization_id', 'user_id'],
+    savings_goals: ['organization_id', 'user_id'],
+    goal_allocations: ['organization_id', 'goal_id', 'wallet_id'],
+    goal_allocation_events: ['organization_id', 'goal_id', 'wallet_id'],
+    due_debts: ['organization_id', 'user_id'],
+    due_debt_payments: ['organization_id', 'due_debt_id', 'idempotency_key'],
   };
   const tables = await pool.query(
     `select table_name, column_name
