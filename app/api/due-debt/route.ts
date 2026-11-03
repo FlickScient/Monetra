@@ -16,7 +16,7 @@ export async function GET(req: Request) {
     return NextResponse.json(debts.map(debt => {
       const paidMinor = payments.filter(payment => payment.dueDebtId === debt.id)
         .reduce((sum, payment) => sum + Number(payment.amountMinor), 0);
-      return { ...debt, paidMinor, outstandingMinor: Math.max(0, Number(debt.principalMinor) - paidMinor) };
+      return { ...debt, paidMinor, outstandingMinor: Math.max(0, Number(debt.principalMinor) - paidMinor), repayments: payments.filter(payment => payment.dueDebtId === debt.id).map(payment => ({ id: payment.id, amount: Number(payment.amountMinor), date: payment.paidAt.toISOString().slice(0, 10), note: payment.note ?? '' })) };
     }));
   } catch { return NextResponse.json({ error: 'Unable to load Due & Debt records' }, { status: 500 }); }
 }
