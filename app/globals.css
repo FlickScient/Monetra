@@ -350,3 +350,57 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media(max-width:850px){.fiscus-content-grid{grid-template-columns:1fr}.fiscus-side-stack{grid-template-columns:1fr 1fr}}@media(max-width:600px){.fiscus-hero{padding:18px}.fiscus-hero-top{flex-direction:column}.fiscus-offline{align-self:flex-start}.fiscus-identity{gap:11px}.fiscus-hero-mark{width:49px;height:49px}.fiscus-principles{gap:9px 12px}.fiscus-scope-bar{align-items:stretch;flex-direction:column}.fiscus-scope-select select{width:100%}.fiscus-prompt-grid{grid-template-columns:1fr}.fiscus-chat-card,.fiscus-capabilities{padding:15px}.fiscus-side-stack{grid-template-columns:1fr}}
 
 .due-record-actions{display:flex;align-items:center;gap:6px}.due-delete-btn{display:grid;place-items:center;width:31px;height:31px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted)}.due-delete-btn:hover{color:#bd594b;border-color:#bd594b}.due-filters{max-width:100%;overflow-x:auto}.due-filters button{white-space:nowrap}
+
+
+/* Final interaction and small-screen polish */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--green) 78%, #d6b66d);
+  outline-offset: 3px;
+}
+button:disabled { cursor: not-allowed; }
+input, select, textarea { min-width: 0; }
+.surface-card, .metric-card, .wallet-card, .intelligence-card { min-width: 0; }
+@media (max-width: 720px) {
+  .content-wrap { padding: 25px 15px calc(105px + env(safe-area-inset-bottom)); }
+  .topbar { min-height: 62px; height: auto; padding: 9px 13px; }
+  .page-intro { align-items: flex-start; }
+  .page-intro h1 { font-size: clamp(24px, 7vw, 31px); }
+  .page-intro > .primary-btn { flex: 0 0 auto; }
+  .surface-card { border-radius: 15px; padding: 16px; }
+  .ledger-toolbar { align-items: stretch; flex-direction: column; gap: 10px; }
+  .ledger-toolbar .search-wrap { width: 100%; }
+  .filter-tabs { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 3px; scrollbar-width: none; }
+  .filter-tabs::-webkit-scrollbar { display: none; }
+  .filter-tabs button { flex: 0 0 auto; }
+  .balance-card { padding: 21px 18px; }
+  .balance-breakdown { align-items: flex-start; flex-wrap: wrap; gap: 15px 22px; }
+  .balance-actions { width: 100%; margin: 2px 0 0; }
+  .balance-actions button { flex: 1; justify-content: center; }
+  .metric-grid, .wallet-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .metric-card, .wallet-card { padding: 14px; }
+  .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+  .spending-content { align-items: flex-start; flex-direction: column; gap: 18px; }
+  .spending-legend { width: 100%; }
+  .modal-backdrop { align-items: end; padding: 10px; }
+  .modal-panel { width: 100%; max-height: min(88dvh, 760px); border-radius: 20px 20px 14px 14px; padding: 20px 17px calc(18px + env(safe-area-inset-bottom)); }
+  .intelligence-grid { grid-template-columns: minmax(0, 1fr); }
+  .radar-metrics { grid-template-columns: 1fr; gap: 12px; }
+  .radar-metrics > div, .radar-metrics > div:first-child { border-left: 1px solid #ffffff25; padding-left: 12px; }
+  .radar-overview-copy { align-items: flex-start; flex-wrap: wrap; }
+  .radar-overview-copy small { width: 100%; margin-left: 15px; }
+  .debt-simulator-grid { grid-template-columns: 1fr; }
+  .settings-workspace-list { grid-template-columns: 1fr; }
+  .floating-calculator-root { right: 13px; bottom: calc(82px + env(safe-area-inset-bottom)); }
+  .floating-calculator-panel { max-height: min(76dvh, 620px); overflow-y: auto; }
+}
+@media (max-width: 390px) {
+  .metric-grid, .wallet-grid { grid-template-columns: 1fr; }
+  .page-intro { gap: 10px; }
+  .page-intro > .primary-btn { min-height: 38px; padding: 0 10px; font-size: 9px; }
+  .radar-comparison { grid-template-columns: 1fr; }
+  .calculator-keypad { gap: 5px; padding-inline: 10px; }
+  .calculator-key { min-height: 43px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
