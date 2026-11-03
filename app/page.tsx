@@ -58,8 +58,12 @@ export default function HomePage() {
     setLoading(true);
     setLoadError('');
     try {
+      const now = new Date();
+      const localMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const localNextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const summaryUrl = `/api/transactions/summary?from=${encodeURIComponent(localMonthStart.toISOString())}&to=${encodeURIComponent(localNextMonthStart.toISOString())}`;
       const [walletRes, categoryRes, transactionRes, summaryRes] = await Promise.all([
-        fetch('/api/wallets'), fetch('/api/categories'), fetch('/api/transactions?limit=50&offset=0'), fetch('/api/transactions/summary'),
+        fetch('/api/wallets'), fetch('/api/categories'), fetch('/api/transactions?limit=50&offset=0'), fetch(summaryUrl),
       ]);
       if (!walletRes.ok || !categoryRes.ok || !transactionRes.ok || !summaryRes.ok) throw new Error('Some finance data could not be loaded.');
       const [walletData, categoryData, transactionData, summaryData] = await Promise.all([
