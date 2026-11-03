@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   try {
     const rows = await db.query.transactions.findMany({
       where: (t, { eq }) => eq(t.userId, userId),
-      orderBy: (t, { desc }) => desc(t.occurredAt),
+      orderBy: (t, { desc }) => [desc(t.occurredAt), desc(t.id)],
       limit: limit + 1,
       offset,
     });
