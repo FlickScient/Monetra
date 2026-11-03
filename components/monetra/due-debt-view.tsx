@@ -15,21 +15,21 @@ const dueDebtStorageKey = (workspaceId: string) => `monetra-due-debt:${workspace
 
 export function DueDebtView({ workspaceId }: { workspaceId: string }) {
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [storageLoaded, setStorageLoaded] = useState(false);
+  const [loadedWorkspaceId, setLoadedWorkspaceId] = useState('');
   useEffect(() => {
-    setStorageLoaded(false);
+    setLoadedWorkspaceId('');
     try {
       const raw = window.localStorage.getItem(dueDebtStorageKey(workspaceId));
       const parsed = raw ? JSON.parse(raw) : [];
       setEntries(Array.isArray(parsed) ? parsed : []);
     } catch { setEntries([]); }
-    setStorageLoaded(true);
+    setLoadedWorkspaceId(workspaceId);
   }, [workspaceId]);
   useEffect(() => {
-    if (!storageLoaded) return;
+    if (loadedWorkspaceId !== workspaceId) return;
     try { window.localStorage.setItem(dueDebtStorageKey(workspaceId), JSON.stringify(entries)); }
     catch { setError('Could not save this ledger on your device. Check browser storage.'); }
-  }, [entries, storageLoaded, workspaceId]);
+  }, [entries, loadedWorkspaceId, workspaceId]);
   const [direction, setDirection] = useState<Direction>('receivable');
   const [person, setPerson] = useState('');
   const [note, setNote] = useState('');
