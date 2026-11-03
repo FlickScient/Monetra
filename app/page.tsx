@@ -126,7 +126,7 @@ export default function HomePage() {
           {activeView === 'overview' && (
             <div className="page-stack">
               <section className="page-intro">
-                <div><p className="eyebrow">TUESDAY, YOUR MONEY CHECK-IN</p><h1>Good to see you, {firstName}<span>.</span></h1><p className="intro-copy">Here’s what’s happening with your money.</p></div>
+                <div><p className="eyebrow">{new Intl.DateTimeFormat('en-BD', { weekday: 'long' }).format(new Date()).toUpperCase()}, YOUR MONEY CHECK-IN</p><h1>Good to see you, {firstName}<span>.</span></h1><p className="intro-copy">Here’s what’s happening with your money.</p></div>
                 <button className="primary-btn intro-action" onClick={() => setShowTransactionForm(true)}><Plus size={17} /> New transaction</button>
               </section>
 
