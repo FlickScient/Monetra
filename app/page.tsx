@@ -115,14 +115,20 @@ export default function HomePage() {
     }
   }
   async function loadMoreTransactions() {
+    const requestId = financeRequestId.current;
+    const organizationId = activeOrganizationId;
+    const offset = transactions.length;
     try {
-      const response = await fetch(`/api/transactions?limit=50&offset=${transactions.length}`, { headers: { 'x-organization-id': activeOrganizationId } });
+      const response = await fetch(`/api/transactions?limit=50&offset=${offset}`, { headers: { 'x-organization-id': organizationId } });
       if (!response.ok) throw new Error('Unable to load older transactions');
       const rows: Transaction[] = await response.json();
+      if (requestId !== financeRequestId.current || organizationId !== activeOrganizationId) return;
       setTransactions((current) => [...current, ...rows.slice(0, 50)]);
       setHasMoreTransactions(rows.length > 50);
     } catch {
-      setNotice('Could not load older transactions. Please try again.');
+      if (requestId === financeRequestId.current && organizationId === activeOrganizationId) {
+        setNotice('Could not load older transactions. Please try again.');
+      }
     }
   }
 
