@@ -20,7 +20,7 @@ export const organizationMembers = pgTable('organization_members', {
   role: text('role').notNull().default('owner'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
-  memberUnique: uniqueIndex('organization_members_org_user_idx').on(table.organizationId, table.userId),
+  memberUnique: uniqueIndex('organization_members_org_user_unique').on(table.organizationId, table.userId),
   userIdx: index('organization_members_user_idx').on(table.userId),
 }));
 
