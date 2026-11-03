@@ -73,15 +73,19 @@ export default function HomePage() {
     setLoadError('');
     try {
       const response = await fetch('/api/organizations');
-      if (!response.ok) throw new Error('Could not load organizations');
-      const rows: Organization[] = await response.json();
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message = typeof payload?.error === 'string' ? payload.error : 'Could not load organizations';
+        throw new Error(message);
+      }
+      const rows: Organization[] = Array.isArray(payload) ? payload : [];
       setOrganizations(rows);
       const selected = rows[0];
       if (!selected) throw new Error('No personal organization is available');
       setActiveOrganizationId(selected.id);
       await loadFinanceData(selected.id);
-    } catch {
-      setLoadError('We couldn’t open your finance workspace. Please retry in a moment.');
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'We couldn’t open your finance workspace. Please retry in a moment.');
       setLoading(false);
     }
   }
