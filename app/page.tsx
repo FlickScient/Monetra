@@ -2,20 +2,9 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
-  ArrowDownLeft,
-  ArrowUpRight,
-  BarChart3,
-  Bell,
-  ChevronRight,
-  CreditCard,
-  Home,
-  Moon,
-  Plus,
-  Receipt,
-  Search,
-  Sun,
-  WalletCards,
-  X,
+  ArrowDownLeft, ArrowUpRight, BarChart3, Bell, ChevronRight, CreditCard,
+  Home, Moon, Plus, Receipt, Search, Sun, WalletCards, X, ArrowRight,
+  CircleHelp, Sparkles, TrendingUp, ShieldCheck, Menu, Landmark,
 } from 'lucide-react';
 import { useUser, UserButton } from '@clerk/nextjs';
 
@@ -24,13 +13,16 @@ type TransactionType = 'income' | 'expense' | 'transfer';
 type Wallet = { id: string; name: string; walletType: WalletType; currentBalanceMinor: number; currency: string; status: string };
 type Category = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
 type Transaction = { id: string; transactionType: TransactionType; walletId: string; destinationWalletId: string | null; amountMinor: number; description: string; occurredAt: string; categoryId: string | null };
+type View = 'overview' | 'wallets' | 'transactions';
 
 const walletLabels: Record<WalletType, string> = {
-  cash: 'Cash', bkash: 'bKash', nagad: 'Nagad', rocket: 'Rocket', bank: 'Bank', savings: 'Savings', debit_card: 'Debit card', credit_card: 'Credit card', custom: 'Custom',
+  cash: 'Cash', bkash: 'bKash', nagad: 'Nagad', rocket: 'Rocket', bank: 'Bank',
+  savings: 'Savings', debit_card: 'Debit card', credit_card: 'Credit card', custom: 'Custom',
 };
-
-const money = (minor: number, currency = 'BDT') => new Intl.NumberFormat('en-BD', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100);
-const dateLabel = (value: string) => new Intl.DateTimeFormat('en-BD', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
+const money = (minor: number, currency = 'BDT') =>
+  new Intl.NumberFormat('en-BD', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100);
+const dateLabel = (value: string) =>
+  new Intl.DateTimeFormat('en-BD', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
 
 export default function HomePage() {
   const { user, isLoaded } = useUser();
@@ -38,38 +30,42 @@ export default function HomePage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState<'overview' | 'wallets' | 'transactions'>('overview');
+  const [activeView, setActiveView] = useState<View>('overview');
   const [showWalletForm, setShowWalletForm] = useState(false);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [dark, setDark] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    const stored = typeof window !== 'undefined' ? localStorage.getItem('monetra-theme') : null;
-    const prefersDark = stored ? stored === 'dark' : false;
-    setDark(prefersDark);
+    const stored = localStorage.getItem('monetra-theme');
+    setDark(stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
   }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
     try { localStorage.setItem('monetra-theme', dark ? 'dark' : 'light'); } catch {}
   }, [dark]);
-  const [notice, setNotice] = useState('');
 
   useEffect(() => {
-    if (isLoaded && user) loadFinanceData();
+    if (isLoaded && user) void loadFinanceData();
   }, [isLoaded, user]);
 
   async function loadFinanceData() {
     setLoading(true);
-    const [walletRes, categoryRes, transactionRes] = await Promise.all([
-      fetch('/api/wallets'),
-      fetch('/api/categories'),
-      fetch('/api/transactions'),
-    ]);
-    if (walletRes.ok) setWallets(await walletRes.json());
-    if (categoryRes.ok) setCategories(await categoryRes.json());
-    if (transactionRes.ok) setTransactions(await transactionRes.json());
-    setLoading(false);
+    setLoadError('');
+    try {
+      const [walletRes, categoryRes, transactionRes] = await Promise.all([
+        fetch('/api/wallets'), fetch('/api/categories'), fetch('/api/transactions'),
+      ]);
+      if (!walletRes.ok || !categoryRes.ok || !transactionRes.ok) throw new Error('Some finance data could not be loaded.');
+      const [walletData, categoryData, transactionData] = await Promise.all([
+        walletRes.json(), categoryRes.json(), transactionRes.json(),
+      ]);
+      setWallets(walletData); setCategories(categoryData); setTransactions(transactionData);
+    } catch {
+      setLoadError('We couldn’t sync your finance data. Check your connection and try again.');
+    } finally { setLoading(false); }
   }
 
   const totalAssets = wallets.filter((w) => w.walletType !== 'credit_card').reduce((sum, w) => sum + Number(w.currentBalanceMinor), 0);
@@ -79,179 +75,175 @@ export default function HomePage() {
   const monthlyTransactions = transactions.filter((t) => new Date(t.occurredAt) >= monthStart);
   const monthlyIncome = monthlyTransactions.filter((t) => t.transactionType === 'income').reduce((sum, t) => sum + Number(t.amountMinor), 0);
   const monthlyExpense = monthlyTransactions.filter((t) => t.transactionType === 'expense').reduce((sum, t) => sum + Number(t.amountMinor), 0);
-  const categorySpend = useMemo(() => categories.map((c) => ({ ...c, total: monthlyTransactions.filter((t) => t.categoryId === c.id && t.transactionType === 'expense').reduce((sum, t) => sum + Number(t.amountMinor), 0) })).filter((c) => c.total > 0).sort((a, b) => b.total - a.total), [categories, monthlyTransactions]);
+  const categorySpend = useMemo(() => categories.map((c) => ({
+    ...c, total: monthlyTransactions.filter((t) => t.categoryId === c.id && t.transactionType === 'expense').reduce((sum, t) => sum + Number(t.amountMinor), 0),
+  })).filter((c) => c.total > 0).sort((a, b) => b.total - a.total), [categories, monthlyTransactions]);
   const donutTotal = categorySpend.reduce((sum, c) => sum + c.total, 0);
+  const firstName = user?.firstName || 'there';
 
-  if (!isLoaded || loading) return <div className="min-h-screen grid place-items-center bg-background text-foreground">Loading your secure workspace...</div>;
+  if (!isLoaded || loading) return <div className="loading-screen"><div className="loading-mark">M</div><p>Preparing your money space</p><span className="loading-line" /></div>;
+
+  const navItems = [
+    { key: 'overview' as const, label: 'Overview', icon: Home },
+    { key: 'wallets' as const, label: 'Wallets', icon: WalletCards },
+    { key: 'transactions' as const, label: 'Transactions', icon: Receipt },
+  ];
 
   return (
-    <main className="min-h-screen">
-      <header className="flex items-center justify-between px-5 pt-6 pb-4 md:px-10">
-        <div className="flex items-center gap-3">
-          <UserButton afterSignOutUrl="/" />
-          <div>
-            <p className="text-xs text-[#78928b] dark:text-[#9bab9c]">Good morning</p>
-            <h1 className="text-lg font-extrabold tracking-tight">{user?.firstName || 'there'}</h1>
+    <main className="app-shell">
+      <aside className="sidebar">
+        <a className="brand-lockup" href="/" aria-label="Monetra home">
+          <span className="brand-mark">M</span><span className="brand-name">monetra<span>.</span><small>PERSONAL FINANCE</small></span>
+        </a>
+        <p className="side-label">WORKSPACE</p>
+        <nav className="side-nav">
+          {navItems.map(({ key, label, icon: Icon }) => (
+            <button key={key} className={`side-nav-item ${activeView === key ? 'active' : ''}`} onClick={() => setActiveView(key)}>
+              <Icon size={18} strokeWidth={1.8} /><span>{label}</span>{activeView === key && <span className="nav-active-dot" />}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="vault-note"><div className="vault-note-icon"><ShieldCheck size={17} /></div><div><b>Your data, protected.</b><span>Private financial workspace</span></div></div>
+          <div className="sidebar-user"><UserButton afterSignOutUrl="/" /><div className="min-w-0"><b className="truncate">{user?.fullName || firstName}</b><span>Personal account</span></div></div>
+        </div>
+      </aside>
+
+      <div className="main-column">
+        <header className="topbar">
+          <div className="topbar-context"><span className="status-dot" /> YOUR FINANCIAL OVERVIEW <span className="topbar-divider">/</span> <span>{activeView}</span></div>
+          <div className="topbar-actions">
+            <button className="icon-btn" onClick={() => setDark((v) => !v)} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
+            <button className="icon-btn" aria-label="Help"><CircleHelp size={18} /></button>
+            <div className="topbar-user"><UserButton afterSignOutUrl="/" /></div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="icon-btn" onClick={() => setDark((v) => !v)} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
-          <button className="icon-btn"><Bell size={18} /></button>
-        </div>
-      </header>
+        </header>
 
-      <div className="mx-auto max-w-[720px] px-5 pb-28 md:px-10">
-        {notice && <div className="mb-5 rounded-xl border border-[#b6e1ce] bg-[#effbf4] px-4 py-3 text-sm text-[#176b51] dark:border-[#2a362c] dark:bg-[#1f2921] dark:text-[#d9bb5e]">{notice}</div>}
+        <div className="content-wrap">
+          {notice && <div className="notice-bar"><span className="status-dot" />{notice}<button onClick={() => setNotice('')} aria-label="Dismiss"><X size={15} /></button></div>}
+          {loadError && <div className="error-bar">{loadError}<button onClick={() => void loadFinanceData()}>Retry</button></div>}
 
-        {activeView === 'overview' && (
-          <div className="space-y-6">
-            <div className="hero-card">
-              <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Total balance</p>
-              <p className="mt-2 text-4xl font-extrabold tracking-tight">{money(netWorth)}</p>
-              <p className="mt-1 text-xs opacity-70">Assets minus credit card liabilities</p>
-              <div className="mt-6 grid grid-cols-2 gap-3">
-                <button className="flex items-center justify-center gap-2 rounded-xl bg-white/15 px-4 py-3 text-sm font-bold backdrop-blur transition hover:bg-white/25" onClick={() => setShowWalletForm(true)}><Plus size={16} />Add wallet</button>
-                <button className="flex items-center justify-center gap-2 rounded-xl bg-white/15 px-4 py-3 text-sm font-bold backdrop-blur transition hover:bg-white/25" onClick={() => setShowTransactionForm(true)}><Plus size={16} />Add activity</button>
-              </div>
-            </div>
+          {activeView === 'overview' && (
+            <div className="page-stack">
+              <section className="page-intro">
+                <div><p className="eyebrow">TUESDAY, YOUR MONEY CHECK-IN</p><h1>Good to see you, {firstName}<span>.</span></h1><p className="intro-copy">Here’s what’s happening with your money.</p></div>
+                <button className="primary-btn intro-action" onClick={() => setShowTransactionForm(true)}><Plus size={17} /> New transaction</button>
+              </section>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="metric-card metric-mint"><p className="text-xs font-semibold text-[#54736b] dark:text-[#b7c4b8]">This month in</p><p className="mt-3 text-xl font-extrabold">{money(monthlyIncome)}</p></div>
-              <div className="metric-card metric-sand"><p className="text-xs font-semibold text-[#54736b] dark:text-[#b7c4b8]">This month out</p><p className="mt-3 text-xl font-extrabold">{money(monthlyExpense)}</p></div>
-            </div>
-
-            <section className="panel">
-              <div className="panel-heading"><div><h3>Spending mix</h3><p>Categories this month.</p></div><BarChart3 className="text-[#78928b] dark:text-[#9bab9c]" size={19} /></div>
-              {categorySpend.length === 0 ? (
-                <EmptyState icon={<BarChart3 size={22} />} title="Your chart will grow here" text="Record an expense with a category to see your spending mix." />
-              ) : (
-                <div className="mt-6 flex flex-col items-center gap-6 sm:flex-row sm:items-center">
-                  <div className="relative grid h-36 w-36 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(${categorySpend.map((c, i) => `${c.color} ${categorySpend.slice(0, i).reduce((s, x) => s + x.total, 0) / donutTotal * 100}% ${categorySpend.slice(0, i + 1).reduce((s, x) => s + x.total, 0) / donutTotal * 100}%`).join(', ')})` }}>
-                    <div className="grid h-24 w-24 place-items-center rounded-full bg-white text-center dark:bg-[#1f2921]">
-                      <span className="text-sm font-extrabold">{money(donutTotal).replace('BDT', '৳')}</span>
-                      <span className="text-[9px] text-[#78928b] dark:text-[#9bab9c]">spent</span>
-                    </div>
-                  </div>
-                  <div className="w-full space-y-2.5">
-                    {categorySpend.slice(0, 5).map((c) => (
-                      <div key={c.id} className="flex items-center justify-between text-sm">
-                        <span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c.color }} />{c.name}</span>
-                        <b>{money(c.total)}</b>
-                      </div>
-                    ))}
-                  </div>
+              <section className="balance-card">
+                <div className="balance-card-top"><div><span className="balance-kicker">TOTAL NET WORTH</span><span className="balance-period"><span className="status-dot light" /> LIVE BALANCE</span></div><span className="balance-symbol">৳</span></div>
+                <div className="balance-value">{money(netWorth)}</div>
+                <p className="balance-caption">What you own, minus what you owe.</p>
+                <div className="balance-divider" />
+                <div className="balance-breakdown">
+                  <div><span className="breakdown-icon positive"><ArrowDownLeft size={15} /></span><span><small>Total assets</small><b>{money(totalAssets)}</b></span></div>
+                  <div><span className="breakdown-icon negative"><ArrowUpRight size={15} /></span><span><small>Liabilities</small><b>{money(totalLiabilities)}</b></span></div>
+                  <div className="balance-actions"><button onClick={() => setShowWalletForm(true)}><Plus size={15} /> Add wallet</button><button onClick={() => setShowTransactionForm(true)}><Plus size={15} /> Add activity</button></div>
                 </div>
-              )}
-            </section>
+                <div className="balance-orbit orbit-one" /><div className="balance-orbit orbit-two" />
+              </section>
 
-            <section className="panel">
-              <div className="panel-heading"><div><h3>Recent activity</h3><p>Your latest recorded money movement.</p></div><button className="link-btn" onClick={() => setShowTransactionForm(true)}>Add <Plus size={15} /></button></div>
-              {transactions.length === 0 ? (
-                <EmptyState icon={<Receipt size={22} />} title="Nothing recorded yet" text="Your recent income, expenses, and transfers will appear here." action="Record activity" onClick={() => setShowTransactionForm(true)} />
-              ) : (
-                <div className="mt-4 divide-y divide-[#edf2ef] dark:divide-[#2a362c]">{transactions.slice(0, 6).map((t) => <TransactionRow key={t.id} transaction={t} wallets={wallets} categories={categories} />)}</div>
-              )}
-            </section>
-          </div>
-        )}
+              <section className="metric-grid">
+                <article className="metric-card"><div className="metric-top"><span className="metric-icon income"><ArrowDownLeft size={17} /></span><span className="metric-period">THIS MONTH</span></div><p className="metric-label">Money in</p><p className="metric-value">{money(monthlyIncome)}</p><p className="metric-foot">Income recorded this month</p></article>
+                <article className="metric-card"><div className="metric-top"><span className="metric-icon expense"><ArrowUpRight size={17} /></span><span className="metric-period">THIS MONTH</span></div><p className="metric-label">Money out</p><p className="metric-value">{money(monthlyExpense)}</p><p className="metric-foot">Expenses recorded this month</p></article>
+                <article className="metric-card metric-card-accent"><div className="metric-top"><span className="metric-icon net"><TrendingUp size={17} /></span><span className="metric-period">THIS MONTH</span></div><p className="metric-label">Net cash flow</p><p className="metric-value">{money(monthlyIncome - monthlyExpense)}</p><p className="metric-foot">Income minus expenses</p></article>
+              </section>
 
-        {activeView === 'wallets' && <WalletsView wallets={wallets} onAdd={() => setShowWalletForm(true)} />}
-        {activeView === 'transactions' && <TransactionsView transactions={transactions} wallets={wallets} categories={categories} />}
+              <div className="dashboard-grid">
+                <section className="surface-card spending-card">
+                  <div className="section-heading"><div><p className="eyebrow">WHERE IT GOES</p><h2>Spending breakdown</h2><p className="section-subtitle">Your expense categories this month.</p></div><span className="section-icon"><BarChart3 size={18} /></span></div>
+                  {categorySpend.length === 0 ? <EmptyState icon={<BarChart3 size={22} />} title="Your chart starts here" text="Record an expense with a category to see where your money goes." /> : (
+                    <div className="spending-content">
+                      <div className="donut-wrap"><div className="donut-chart" style={{ background: `conic-gradient(${categorySpend.map((c, i) => `${c.color} ${categorySpend.slice(0, i).reduce((s, x) => s + x.total, 0) / donutTotal * 100}% ${categorySpend.slice(0, i + 1).reduce((s, x) => s + x.total, 0) / donutTotal * 100}%`).join(', ')})` }}><div className="donut-hole"><b>{money(donutTotal).replace('BDT', '৳')}</b><span>TOTAL SPENT</span></div></div></div>
+                      <div className="spending-legend">{categorySpend.slice(0, 5).map((c) => <div className="legend-row" key={c.id}><span className="legend-name"><i style={{ background: c.color }} />{c.name}</span><b>{money(c.total)}</b></div>)}</div>
+                    </div>
+                  )}
+                </section>
+
+                <section className="surface-card wallet-preview">
+                  <div className="section-heading"><div><p className="eyebrow">YOUR ACCOUNTS</p><h2>Wallets</h2><p className="section-subtitle">{wallets.length} active account{wallets.length === 1 ? '' : 's'}</p></div><button className="text-action" onClick={() => setActiveView('wallets')}>View all <ArrowRight size={14} /></button></div>
+                  {wallets.length === 0 ? <EmptyState icon={<WalletCards size={22} />} title="No wallets yet" text="Add your cash, bank, or mobile wallet to get started." action="Add a wallet" onClick={() => setShowWalletForm(true)} /> : <div className="wallet-preview-list">{wallets.slice(0, 4).map((w) => <div className="wallet-preview-row" key={w.id}><span className="wallet-mini-icon">{w.walletType === 'bank' ? <Landmark size={17} /> : w.walletType === 'credit_card' || w.walletType === 'debit_card' ? <CreditCard size={17} /> : <WalletCards size={17} />}</span><span className="wallet-preview-name"><b>{w.name}</b><small>{walletLabels[w.walletType]}</small></span><b className={w.walletType === 'credit_card' ? 'liability-text' : ''}>{w.walletType === 'credit_card' ? '−' : ''}{money(Math.abs(Number(w.currentBalanceMinor)), w.currency)}</b></div>)}</div>}
+                  {wallets.length > 0 && <button className="add-wallet-row" onClick={() => setShowWalletForm(true)}><Plus size={15} /> Add another wallet</button>}
+                </section>
+              </div>
+
+              <section className="surface-card activity-card">
+                <div className="section-heading"><div><p className="eyebrow">THE LATEST</p><h2>Recent activity</h2><p className="section-subtitle">A clear view of your latest money movement.</p></div><button className="text-action" onClick={() => setActiveView('transactions')}>All transactions <ArrowRight size={14} /></button></div>
+                {transactions.length === 0 ? <EmptyState icon={<Receipt size={22} />} title="A clean slate" text="Your income, expenses, and transfers will show up here." action="Record your first activity" onClick={() => setShowTransactionForm(true)} /> : <div className="transaction-list">{transactions.slice(0, 6).map((t) => <TransactionRow key={t.id} transaction={t} wallets={wallets} categories={categories} />)}</div>}
+              </section>
+              <footer className="page-footer"><span>MONETRA · YOUR MONEY, UNDER COMMAND.</span><span><ShieldCheck size={13} /> PRIVATE BY DESIGN</span></footer>
+            </div>
+          )}
+
+          {activeView === 'wallets' && <WalletsView wallets={wallets} onAdd={() => setShowWalletForm(true)} />}
+          {activeView === 'transactions' && <TransactionsView transactions={transactions} wallets={wallets} categories={categories} />}
+        </div>
       </div>
 
-      <nav className="bottom-nav">
-        {([['overview', 'Home', Home], ['wallets', 'Wallets', WalletCards], ['transactions', 'Activity', Receipt]] as const).map(([key, label, Icon]) => (
-          <button key={key} className={`bottom-nav-item ${activeView === key ? 'bottom-nav-item-active' : ''}`} onClick={() => setActiveView(key)}>
-            <Icon size={20} />{label}
-          </button>
-        ))}
-      </nav>
-
+      <nav className="mobile-nav">{navItems.map(({ key, label, icon: Icon }) => <button key={key} className={activeView === key ? 'active' : ''} onClick={() => setActiveView(key)}><Icon size={20} /><span>{label}</span></button>)}</nav>
       {showWalletForm && <WalletModal onClose={() => setShowWalletForm(false)} onSaved={async (message) => { setShowWalletForm(false); setNotice(message); await loadFinanceData(); }} />}
       {showTransactionForm && <TransactionModal wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={async (message) => { setShowTransactionForm(false); setNotice(message); await loadFinanceData(); }} />}
     </main>
   );
 }
 
-function EmptyState({ icon, title, text, action, onClick }: { icon: React.ReactNode; title: string; text: string; action?: string; onClick?: () => void }) { return <div className="grid place-items-center py-10 text-center"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#eaf4ef] text-[#0f766e] dark:bg-[#263129] dark:text-[#d9bb5e]">{icon}</div><h4 className="mt-4 font-bold">{title}</h4><p className="mt-2 max-w-xs text-sm leading-6 text-[#78928b] dark:text-[#9bab9c]">{text}</p>{action && onClick && <button className="link-btn mt-4" onClick={onClick}>{action}<ChevronRight size={15} /></button>}</div>; }
+function EmptyState({ icon, title, text, action, onClick }: { icon: React.ReactNode; title: string; text: string; action?: string; onClick?: () => void }) {
+  return <div className="empty-state"><div className="empty-icon">{icon}</div><h3>{title}</h3><p>{text}</p>{action && onClick && <button className="text-action" onClick={onClick}>{action}<ChevronRight size={15} /></button>}</div>;
+}
 
 function TransactionRow({ transaction, wallets, categories }: { transaction: Transaction; wallets: Wallet[]; categories: Category[] }) {
   const wallet = wallets.find((w) => w.id === transaction.walletId);
   const category = categories.find((c) => c.id === transaction.categoryId);
   const positive = transaction.transactionType === 'income';
-  return (
-    <div className="flex items-center gap-4 py-4">
-      <div className={`wallet-icon ${positive ? 'bg-[#e6f5ef] text-[#17725f] dark:bg-[#263129] dark:text-[#d9bb5e]' : 'bg-[#fff4ed] text-[#b76542] dark:bg-[#2e261c] dark:text-[#e3b27a]'}`}>{positive ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}</div>
-      <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{transaction.description}</p><p className="mt-1 text-xs text-[#78928b] dark:text-[#9bab9c]">{category?.name || transaction.transactionType} · {wallet?.name || 'Wallet'} · {dateLabel(transaction.occurredAt)}</p></div>
-      <p className={`text-sm font-bold ${positive ? 'text-[#17725f] dark:text-[#d9bb5e]' : ''}`}>{positive ? '+' : '-'}{money(Number(transaction.amountMinor), wallet?.currency || 'BDT')}</p>
-    </div>
-  );
+  const transfer = transaction.transactionType === 'transfer';
+  return <div className="transaction-row"><span className={`transaction-icon ${positive ? 'income' : transfer ? 'transfer' : 'expense'}`}>{positive ? <ArrowDownLeft size={18} /> : transfer ? <ArrowRight size={18} /> : <ArrowUpRight size={18} />}</span><span className="transaction-main"><b>{transaction.description}</b><small>{category?.name || transaction.transactionType} <i /> {wallet?.name || 'Wallet'} <i /> {dateLabel(transaction.occurredAt)}</small></span><b className={`transaction-amount ${positive ? 'positive' : transfer ? 'neutral' : ''}`}>{positive ? '+' : transfer ? '' : '−'}{money(Number(transaction.amountMinor), wallet?.currency || 'BDT')}</b></div>;
 }
 
 function WalletsView({ wallets, onAdd }: { wallets: Wallet[]; onAdd: () => void }) {
-  return (
-    <div className="space-y-6">
-      <div className="flex items-end justify-between"><div><p className="eyebrow">Accounts</p><h2 className="mt-2 text-2xl font-extrabold tracking-tight">Wallets</h2></div><button className="primary-btn" onClick={onAdd}><Plus size={17} />Add</button></div>
-      {wallets.length === 0 ? (
-        <section className="panel"><EmptyState icon={<WalletCards size={22} />} title="No wallets yet" text="Start with your everyday wallet, bank account, or a card." action="Add your first wallet" onClick={onAdd} /></section>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {wallets.map((wallet) => (
-            <div key={wallet.id} className="panel">
-              <div className="flex items-start justify-between"><div className="wallet-icon bg-[#e6f5ef] text-[#17725f] dark:bg-[#263129] dark:text-[#d9bb5e]">{wallet.walletType === 'credit_card' ? <CreditCard size={18} /> : <WalletCards size={18} />}</div><span className="rounded-full bg-[#edf5f1] px-2.5 py-1 text-[11px] font-bold text-[#5d8176] dark:bg-[#263129] dark:text-[#a8b8a9]">Active</span></div>
-              <h3 className="mt-6 text-lg font-extrabold">{wallet.name}</h3>
-              <p className="mt-1 text-sm text-[#78928b] dark:text-[#9bab9c]">{walletLabels[wallet.walletType]}</p>
-              <p className={`mt-6 text-2xl font-extrabold ${wallet.walletType === 'credit_card' ? 'text-[#b75235] dark:text-[#e3876a]' : ''}`}>{wallet.walletType === 'credit_card' ? '-' : ''}{money(Math.abs(Number(wallet.currentBalanceMinor)), wallet.currency)}</p>
-              <p className="mt-2 text-xs text-[#78928b] dark:text-[#9bab9c]">{wallet.walletType === 'credit_card' ? 'Liability balance' : 'Current balance'}</p>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  return <div className="page-stack"><section className="page-intro"><div><p className="eyebrow">YOUR MONEY, ORGANIZED</p><h1>Wallets<span>.</span></h1><p className="intro-copy">Every account, one clear picture.</p></div><button className="primary-btn intro-action" onClick={onAdd}><Plus size={17} /> Add wallet</button></section>
+    {wallets.length === 0 ? <section className="surface-card"><EmptyState icon={<WalletCards size={22} />} title="No wallets yet" text="Start with your everyday cash, bank account, or a card." action="Add your first wallet" onClick={onAdd} /></section> : <div className="wallet-grid">{wallets.map((wallet) => <article key={wallet.id} className={`wallet-card ${wallet.walletType === 'credit_card' ? 'credit-wallet' : ''}`}><div className="wallet-card-top"><span className="wallet-card-icon">{wallet.walletType === 'bank' ? <Landmark size={20} /> : wallet.walletType.includes('card') ? <CreditCard size={20} /> : <WalletCards size={20} />}</span><span className="wallet-status"><i />{wallet.status || 'Active'}</span></div><h3>{wallet.name}</h3><p>{walletLabels[wallet.walletType]}</p><div className="wallet-card-balance">{wallet.walletType === 'credit_card' ? '−' : ''}{money(Math.abs(Number(wallet.currentBalanceMinor)), wallet.currency)}</div><small>{wallet.walletType === 'credit_card' ? 'Outstanding liability' : 'Available balance'}</small></article>)}</div>}
+  </div>;
 }
 
 function TransactionsView({ transactions, wallets, categories }: { transactions: Transaction[]; wallets: Wallet[]; categories: Category[] }) {
   const [query, setQuery] = useState('');
-  const filtered = transactions.filter((t) => t.description.toLowerCase().includes(query.toLowerCase()));
-  return (
-    <div className="space-y-6">
-      <div><p className="eyebrow">Ledger</p><h2 className="mt-2 text-2xl font-extrabold tracking-tight">Transactions</h2></div>
-      <section className="panel">
-        <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#78928b] dark:text-[#9bab9c]" size={18} /><input className="field pl-11" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search descriptions" /></div>
-        {filtered.length === 0 ? <EmptyState icon={<Search size={22} />} title="No matching activity" text="Try another search or record your first transaction." /> : <div className="mt-5 divide-y divide-[#edf2ef] dark:divide-[#2a362c]">{filtered.map((t) => <TransactionRow key={t.id} transaction={t} wallets={wallets} categories={categories} />)}</div>}
-      </section>
-    </div>
-  );
+  const [filter, setFilter] = useState<'all' | TransactionType>('all');
+  const filtered = transactions.filter((t) => t.description.toLowerCase().includes(query.toLowerCase()) && (filter === 'all' || t.transactionType === filter));
+  return <div className="page-stack"><section className="page-intro"><div><p className="eyebrow">YOUR FINANCIAL HISTORY</p><h1>Transactions<span>.</span></h1><p className="intro-copy">Every movement, accounted for.</p></div></section><section className="surface-card ledger-card"><div className="ledger-toolbar"><div className="search-wrap"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search transactions..." /></div><div className="filter-tabs">{(['all', 'income', 'expense', 'transfer'] as const).map((item) => <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div></div>{filtered.length === 0 ? <EmptyState icon={<Search size={22} />} title="Nothing matches" text="Try a different search or filter." /> : <div className="transaction-list">{filtered.map((t) => <TransactionRow key={t.id} transaction={t} wallets={wallets} categories={categories} />)}</div>}</section></div>;
 }
 
 function WalletModal({ onClose, onSaved }: { onClose: () => void; onSaved: (message: string) => Promise<void> }) {
   const [name, setName] = useState(''); const [type, setType] = useState<WalletType>('cash'); const [opening, setOpening] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
-    const amount = Math.round(Number(opening || 0) * 100);
-    const res = await fetch('/api/wallets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, walletType: type, currency: 'BDT', openingBalanceMinor: amount }) });
-    if (!res.ok) setError('Could not add this wallet. Please try again.'); else await onSaved('Wallet added. Your balance is now synced.');
-    setBusy(false);
+    try {
+      const amount = Math.round(Number(opening || 0) * 100);
+      const res = await fetch('/api/wallets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, walletType: type, currency: 'BDT', openingBalanceMinor: amount }) });
+      if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not add this wallet.'); }
+      else await onSaved('Wallet added. Your balance is now synced.');
+    } catch { setError('Connection issue. Please try again.'); }
+    finally { setBusy(false); }
   }
-  return <Modal title="Add a wallet" onClose={onClose}><form className="space-y-4" onSubmit={submit}><label className="field-label">Wallet name<input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Everyday cash" required /></label><label className="field-label">Wallet type<select className="field" value={type} onChange={(e) => setType(e.target.value as WalletType)}>{Object.entries(walletLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="field-label">Opening balance<input className="field" type="number" min="0" step="0.01" value={opening} onChange={(e) => setOpening(e.target.value)} placeholder="0.00" /></label>{type === 'credit_card' && <p className="rounded-xl bg-[#fff4ed] px-4 py-3 text-xs leading-5 text-[#9b6046] dark:bg-[#2e261c] dark:text-[#e3b27a]">Credit cards are recorded as liabilities. Their balance reduces net worth and is never counted as available money.</p>}{error && <p className="text-sm text-red-600">{error}</p>}<button className="primary-btn w-full" disabled={busy}>{busy ? 'Saving...' : 'Add wallet'}</button></form></Modal>;
+  return <Modal title="Add a wallet" subtitle="Bring another account into your overview." onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Wallet name<input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Everyday cash" required /></label><label className="field-label">Wallet type<select className="field" value={type} onChange={(e) => setType(e.target.value as WalletType)}>{Object.entries(walletLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="field-label">Opening balance<input className="field" type="number" min="0" step="0.01" value={opening} onChange={(e) => setOpening(e.target.value)} placeholder="0.00" /></label>{type === 'credit_card' && <p className="form-hint">Credit cards are liabilities. Their balance reduces net worth and is not counted as available money.</p>}{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy}>{busy ? 'Saving...' : 'Create wallet'}</button></form></Modal>;
 }
 
 function TransactionModal({ wallets, categories, onClose, onSaved }: { wallets: Wallet[]; categories: Category[]; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
   const [type, setType] = useState<TransactionType>('expense'); const [wallet, setWallet] = useState(wallets[0]?.id || ''); const [destination, setDestination] = useState(wallets[1]?.id || ''); const [category, setCategory] = useState(categories.find((c) => c.categoryType === 'expense')?.id || ''); const [amount, setAmount] = useState(''); const [description, setDescription] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
-    const amountMinor = Math.round(Number(amount) * 100);
-    const endpoint = type === 'transfer' ? '/api/transfers' : '/api/transactions';
-    const body = type === 'transfer'
-      ? { walletId: wallet, destinationWalletId: destination, amountMinor, description }
-      : { walletId: wallet, transactionType: type, categoryId: category || null, amountMinor, description };
-    const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not post this activity. Please check the details and try again.'); }
-    else await onSaved('Activity posted. Your balances are up to date.');
-    setBusy(false);
+    try {
+      const amountMinor = Math.round(Number(amount) * 100);
+      const endpoint = type === 'transfer' ? '/api/transfers' : '/api/transactions';
+      const body = type === 'transfer' ? { walletId: wallet, destinationWalletId: destination, amountMinor, description } : { walletId: wallet, transactionType: type, categoryId: category || null, amountMinor, description };
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not post this activity. Check the details and try again.'); }
+      else await onSaved('Activity posted. Your balances are up to date.');
+    } catch { setError('Connection issue. Please try again.'); }
+    finally { setBusy(false); }
   }
-  return <Modal title="Record activity" onClose={onClose}><form className="space-y-4" onSubmit={submit}><label className="field-label">Type<select className="field" value={type} onChange={(e) => setType(e.target.value as TransactionType)}>{(['income', 'expense', 'transfer'] as TransactionType[]).map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label><label className="field-label">{type === 'transfer' ? 'From wallet' : 'Wallet'}<select className="field" value={wallet} onChange={(e) => setWallet(e.target.value)} required>{wallets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{type === 'transfer' && <label className="field-label">To wallet<select className="field" value={destination} onChange={(e) => setDestination(e.target.value)} required>{wallets.filter((item) => item.id !== wallet).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{type !== 'transfer' && <label className="field-label">Category<select className="field" value={category} onChange={(e) => setCategory(e.target.value)}><option value="">Uncategorized</option>{categories.filter((item) => item.categoryType === (type === 'income' ? 'income' : 'expense')).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<label className="field-label">Amount<input className="field" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required /></label><label className="field-label">Description<input className="field" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What was this for?" required /></label>{error && <p className="text-sm text-red-600">{error}</p>}<button className="primary-btn w-full" disabled={busy || wallets.length === 0}>{busy ? 'Posting...' : 'Post activity'}</button></form></Modal>;
+  return <Modal title="Record activity" subtitle="Keep your money movement up to date." onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Activity type<select className="field" value={type} onChange={(e) => setType(e.target.value as TransactionType)}>{(['income', 'expense', 'transfer'] as TransactionType[]).map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label><label className="field-label">{type === 'transfer' ? 'From wallet' : 'Wallet'}<select className="field" value={wallet} onChange={(e) => setWallet(e.target.value)} required>{wallets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{type === 'transfer' && <label className="field-label">To wallet<select className="field" value={destination} onChange={(e) => setDestination(e.target.value)} required>{wallets.filter((item) => item.id !== wallet).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{type !== 'transfer' && <label className="field-label">Category<select className="field" value={category} onChange={(e) => setCategory(e.target.value)}><option value="">Uncategorized</option>{categories.filter((item) => item.categoryType === (type === 'income' ? 'income' : 'expense')).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<label className="field-label">Amount<input className="field" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required /></label><label className="field-label">Description<input className="field" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What was this for?" required /></label>{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy || wallets.length === 0}>{busy ? 'Posting...' : 'Post activity'}</button></form></Modal>;
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) { return <div className="fixed inset-0 z-50 grid place-items-center bg-[#15342d]/30 p-5 backdrop-blur-sm"><div className="w-full max-w-md rounded-[26px] bg-white p-7 shadow-2xl dark:bg-[#1f2921]"><div className="mb-7 flex items-center justify-between"><h2 className="text-xl font-extrabold">{title}</h2><button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button></div>{children}</div></div>; }
+function Modal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode }) {
+  return <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}><div className="modal-panel"><div className="modal-heading"><div><p className="eyebrow">MONETRA WORKSPACE</p><h2>{title}</h2><p>{subtitle}</p></div><button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button></div>{children}</div></div>;
+}
