@@ -4,15 +4,22 @@ import { db } from '@/db';
 import { wallets, transactions, categories } from '@/db/schema';
 import { eq, sql, and, desc, gte } from 'drizzle-orm';
 
-export async function GET() {
+export async function GET(req: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const url = new URL(req.url);
+  const requestedLimit = Number(url.searchParams.get('limit') ?? 50);
+  const requestedOffset = Number(url.searchParams.get('offset') ?? 0);
+  const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
+  const offset = Number.isInteger(requestedOffset) ? Math.min(Math.max(requestedOffset, 0), 100000) : 0;
 
   try {
     const rows = await db.query.transactions.findMany({
       where: (t, { eq }) => eq(t.userId, userId),
       orderBy: (t, { desc }) => desc(t.occurredAt),
-      limit: 50,
+      limit: limit + 1,
+      offset,
     });
     return NextResponse.json(rows);
   } catch {
