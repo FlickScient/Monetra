@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownLeft, ArrowUpRight, BarChart3, Bell, ChevronRight, CreditCard,
   Home, Moon, Plus, Receipt, Search, Sun, WalletCards, X, ArrowRight,
-  CircleHelp, Sparkles, TrendingUp, ShieldCheck, Menu, Landmark,
+  CircleHelp, Sparkles, TrendingUp, ShieldCheck, Menu, Landmark, Activity,
   HandCoins, Settings as SettingsIcon,
 } from 'lucide-react';
 import { useUser, UserButton } from '@clerk/nextjs';
