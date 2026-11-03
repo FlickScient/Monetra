@@ -28,7 +28,7 @@ export async function GET() {
         totalMinor: sql<string>`COALESCE(SUM(${transactions.amountMinor}), 0)::text`,
       })
       .from(transactions)
-      .where(and(eq(transactions.userId, userId), eq(transactions.transactionType, 'expense'), gte(transactions.occurredAt, monthStart)))
+      .where(and(eq(transactions.userId, userId), eq(transactions.transactionType, 'expense'), gte(transactions.occurredAt, monthStart), lt(transactions.occurredAt, nextMonthStart)))
       .groupBy(transactions.categoryId);
 
     return NextResponse.json({
