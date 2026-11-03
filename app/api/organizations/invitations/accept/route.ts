@@ -34,31 +34,40 @@ export async function POST(req: Request) {
       const [invitation] = await tx
         .select()
         .from(invitations)
-        .where(and(
-          eq(invitations.tokenHash, tokenHash),
-          isNull(invitations.acceptedAt),
-          gt(invitations.expiresAt, now),
-        ))
+        .where(eq(invitations.tokenHash, tokenHash))
         .limit(1);
 
-      if (!invitation) throw new Error('INVITATION_INVALID');
+      if (!invitation || invitation.expiresAt <= now) throw new Error('INVITATION_INVALID');
       if (invitation.email.toLowerCase() !== primaryEmail.emailAddress.toLowerCase()) {
         throw new Error('INVITATION_EMAIL_MISMATCH');
       }
 
-      const [claimed] = await tx
-        .update(invitations)
-        .set({ acceptedAt: now })
-        .where(and(eq(invitations.id, invitation.id), isNull(invitations.acceptedAt), gt(invitations.expiresAt, now)))
-        .returning({ id: invitations.id });
+      // A retry from the same verified account is safe and idempotent.
+      if (invitation.acceptedAt) {
+        const [existingMembership] = await tx
+          .select({ id: organizationMembers.id })
+          .from(organizationMembers)
+          .where(and(
+            eq(organizationMembers.organizationId, invitation.organizationId),
+            eq(organizationMembers.userId, user.id),
+          ))
+          .limit(1);
+        if (!existingMembership) throw new Error('INVITATION_INVALID');
+      } else {
+        const [claimed] = await tx
+          .update(invitations)
+          .set({ acceptedAt: now })
+          .where(and(eq(invitations.id, invitation.id), isNull(invitations.acceptedAt), gt(invitations.expiresAt, now)))
+          .returning({ id: invitations.id });
 
-      if (!claimed) throw new Error('INVITATION_INVALID');
+        if (!claimed) throw new Error('INVITATION_INVALID');
 
-      await tx.insert(organizationMembers).values({
-        organizationId: invitation.organizationId,
-        userId: user.id,
-        role: invitation.role,
-      }).onConflictDoNothing();
+        await tx.insert(organizationMembers).values({
+          organizationId: invitation.organizationId,
+          userId: user.id,
+          role: invitation.role,
+        }).onConflictDoNothing();
+      }
 
       const [organization] = await tx
         .select({ id: organizations.id, name: organizations.name, type: organizations.organizationType })
@@ -70,6 +79,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(result);
+
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
     if (code === 'INVITATION_EMAIL_MISMATCH') {
