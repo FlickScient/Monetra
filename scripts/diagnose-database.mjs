@@ -87,9 +87,6 @@ try {
     const applied = await pool.query(
       'select hash, created_at from drizzle.__drizzle_migrations order by created_at desc limit 10',
     );
-    const hasFoundation = applied.rows.some((row) =>
-      typeof row.hash === 'string' && row.hash.length > 0
-    );
     report('Drizzle migration history', true,
       `${applied.rows.length} recent migration record(s) found. Confirm 0000_organization_foundation is applied from the schema check above.`);
   }
