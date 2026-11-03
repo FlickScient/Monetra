@@ -91,7 +91,7 @@ export function FinancialIntelligenceView({ wallets, transactions, monthlyIncome
       const key = t.description.trim().toLowerCase().replace(/\s+/g, ' ');
       if (key) groups.set(key, [...(groups.get(key) || []), t]);
     });
-    return [...groups.entries()].filter(([, rows]) => rows.length >= 3).map(([name, rows]) => ({
+    return Array.from(groups.entries()).filter(([, rows]) => rows.length >= 3).map(([name, rows]) => ({
       name: name.replace(/\b\w/g, c => c.toUpperCase()), count: rows.length, total: rows.reduce((s, r) => s + Number(r.amountMinor), 0),
     })).sort((a, b) => b.total - a.total).slice(0, 4);
   }, [transactions]);
