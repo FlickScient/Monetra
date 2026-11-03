@@ -1,5 +1,5 @@
 import { auth } from '@clerk/nextjs/server';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { organizationMembers, organizations } from '@/db/schema';
 
@@ -110,7 +110,18 @@ export async function getOrganizationContext(request?: Request): Promise<Organiz
           ? { name: cause.name, message: cause.message }
           : cause;
 
+    let databaseDiagnostics: unknown;
+    try {
+      const [identity] = await db.execute(sql`select current_database() as database_name, current_schema() as current_schema, current_schemas(true) as search_path, to_regclass('public.organization_members')::text as organization_members_table, to_regclass('public.organizations')::text as organizations_table`);
+      databaseDiagnostics = identity;
+    } catch (diagnosticError) {
+      databaseDiagnostics = {
+        message: diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError),
+      };
+    }
+
     console.error('MONETRA_ORG_ERROR:', {
+      databaseDiagnostics,
       name: error instanceof Error ? error.name : 'UnknownError',
       message: error instanceof Error ? error.message : String(error),
       code:
