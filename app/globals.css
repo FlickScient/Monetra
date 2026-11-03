@@ -183,3 +183,22 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .load-more-btn { display: flex; width: 100%; align-items: center; justify-content: center; gap: 8px; margin: 14px 0 8px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); padding: 12px; color: var(--green); font-size: 10px; font-weight: 750; cursor: pointer; transition: border-color .2s ease, background .2s ease, transform .2s ease; }
 .load-more-btn:hover:not(:disabled) { border-color: color-mix(in srgb, var(--green) 35%, var(--line)); background: var(--green-soft); transform: translateY(-1px); }
 .load-more-btn:disabled { opacity: .6; cursor: wait; }
+
+
+.organization-switcher { display: flex; align-items: center; gap: 6px; margin-right: 5px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); padding: 4px 5px 4px 9px; }
+.organization-switcher select { max-width: 150px; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 10px; font-weight: 750; cursor: pointer; }
+.organization-switcher button { min-height: 28px; border: 0; border-radius: 8px; background: var(--green-soft); padding: 0 8px; color: var(--green); font-size: 9px; font-weight: 800; cursor: pointer; transition: .2s; }
+.organization-switcher button:hover { filter: brightness(.96); transform: translateY(-1px); }
+@media (max-width: 720px) {
+  .topbar { gap: 8px; }
+  .topbar-context { max-width: 30%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .topbar-actions { gap: 4px; }
+  .organization-switcher { gap: 3px; margin-right: 0; padding: 3px 4px 3px 7px; }
+  .organization-switcher select { max-width: 92px; font-size: 9px; }
+  .organization-switcher button { min-height: 27px; padding: 0 6px; font-size: 8px; }
+  .topbar-actions > .icon-btn { width: 31px; height: 34px; }
+}
+@media (max-width: 390px) {
+  .topbar-context { display: none; }
+  .organization-switcher select { max-width: 105px; }
+}
