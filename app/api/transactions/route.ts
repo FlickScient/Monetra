@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { getOrganizationContext, canWriteOrganization } from '@/lib/organization';
 import { db } from '@/db';
 import { wallets, transactions, categories } from '@/db/schema';
 import { eq, sql, and, desc, gte } from 'drizzle-orm';
 
 export async function GET(req: Request) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const context = await getOrganizationContext(req);
+  if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
 
   const url = new URL(req.url);
   const requestedLimit = Number(url.searchParams.get('limit') ?? 50);
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
 
   try {
     const rows = await db.query.transactions.findMany({
-      where: (t, { eq }) => eq(t.userId, userId),
+      where: (t, { eq }) => eq(t.organizationId, context.organizationId),
       orderBy: (t, { desc }) => [desc(t.occurredAt), desc(t.id)],
       limit: limit + 1,
       offset,
@@ -28,8 +28,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const context = await getOrganizationContext(req);
+  if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
+  if (!canWriteOrganization(context.role)) return NextResponse.json({ error: 'Read-only organization access' }, { status: 403 });
 
   let body: Record<string, unknown>;
   try {
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
   try {
     const result = await db.transaction(async (tx) => {
       const wallet = await tx.query.wallets.findFirst({
-        where: and(eq(wallets.id, walletId), eq(wallets.userId, userId)),
+        where: and(eq(wallets.id, walletId), eq(wallets.organizationId, context.organizationId)),
       });
       if (!wallet || wallet.status !== 'active') {
         throw new Error('WALLET_NOT_AVAILABLE');
@@ -76,7 +77,7 @@ export async function POST(req: Request) {
 
       if (categoryId) {
         const category = await tx.query.categories.findFirst({
-          where: and(eq(categories.id, categoryId), eq(categories.userId, userId)),
+          where: and(eq(categories.id, categoryId), eq(categories.organizationId, context.organizationId)),
         });
         if (!category || category.categoryType !== transactionType) {
           throw new Error('INVALID_CATEGORY');
@@ -100,7 +101,7 @@ export async function POST(req: Request) {
         .where(
           and(
             eq(wallets.id, walletId),
-            eq(wallets.userId, userId),
+            eq(wallets.organizationId, context.organizationId),
             ...(decreasesBalance ? [gte(wallets.currentBalanceMinor, amountMinor)] : []),
           ),
         )
@@ -111,7 +112,8 @@ export async function POST(req: Request) {
       const [txn] = await tx
         .insert(transactions)
         .values({
-          userId,
+          userId: context.userId,
+          organizationId: context.organizationId,
           transactionType,
           walletId,
           categoryId: categoryId ? categoryId : null,
