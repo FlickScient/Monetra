@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { getOrganizationContext } from '@/lib/organization';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { organizationMembers, organizations } from '@/db/schema';
 
-export async function GET() {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export async function GET(req: Request) {
+  const context = await getOrganizationContext(req);
+  if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
+  const userId = context.userId;
 
   const rows = await db
     .select({
