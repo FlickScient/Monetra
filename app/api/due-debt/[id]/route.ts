@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { dueDebts, dueDebtPayments } from '@/db/modules-schema';
 import { getOrganizationContext, canWriteOrganization } from '@/lib/organization';
