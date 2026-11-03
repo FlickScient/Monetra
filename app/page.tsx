@@ -31,6 +31,7 @@ export default function HomePage() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [activeOrganizationId, setActiveOrganizationId] = useState('');
   const [showOrganizationForm, setShowOrganizationForm] = useState(false);
+  const [showInvitationForm, setShowInvitationForm] = useState(false);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -160,6 +161,7 @@ export default function HomePage() {
                 {organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
               </select>
               <button type="button" onClick={() => setShowOrganizationForm(true)}>+ Space</button>
+              {activeOrganization && (activeOrganization.role === 'owner' || activeOrganization.role === 'administrator') && <button type="button" onClick={() => setShowInvitationForm(true)}>Invite</button>}
             </div>
             <button className="icon-btn" onClick={() => setDark((v) => !v)} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
             <button className="icon-btn" aria-label="Help"><CircleHelp size={18} /></button>
@@ -232,6 +234,7 @@ export default function HomePage() {
       {showWalletForm && <WalletModal organizationId={activeOrganizationId} onClose={() => setShowWalletForm(false)} onSaved={async (message) => { setShowWalletForm(false); setNotice(message); await loadFinanceData(); }} />}
       {showTransactionForm && <TransactionModal organizationId={activeOrganizationId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={async (message) => { setShowTransactionForm(false); setNotice(message); await loadFinanceData(); }} />}
       {showOrganizationForm && <OrganizationModal onClose={() => setShowOrganizationForm(false)} onSaved={async (organization) => { setOrganizations((current) => [...current, organization]); setShowOrganizationForm(false); setActiveOrganizationId(organization.id); setNotice(`${organization.name} space created.`); await loadFinanceData(organization.id); }} />}
+      {showInvitationForm && activeOrganization && <InvitationModal organizationId={activeOrganization.id} canInviteAdministrators={activeOrganization.role === 'owner'} onClose={() => setShowInvitationForm(false)} />}
     </main>
   );
 }
@@ -292,6 +295,63 @@ function TransactionModal({ organizationId, wallets, categories, onClose, onSave
     finally { setBusy(false); }
   }
   return <Modal title="Record activity" subtitle="Keep your money movement up to date." onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Activity type<select className="field" value={type} onChange={(e) => setType(e.target.value as TransactionType)}>{(['income', 'expense', 'transfer'] as TransactionType[]).map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label><label className="field-label">{type === 'transfer' ? 'From wallet' : 'Wallet'}<select className="field" value={wallet} onChange={(e) => setWallet(e.target.value)} required>{wallets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{type === 'transfer' && <label className="field-label">To wallet<select className="field" value={destination} onChange={(e) => setDestination(e.target.value)} required>{wallets.filter((item) => item.id !== wallet).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{type !== 'transfer' && <label className="field-label">Category<select className="field" value={category} onChange={(e) => setCategory(e.target.value)}><option value="">Uncategorized</option>{categories.filter((item) => item.categoryType === (type === 'income' ? 'income' : 'expense')).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<label className="field-label">Amount<input className="field" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required /></label><label className="field-label">Description<input className="field" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What was this for?" required /></label>{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy || wallets.length === 0}>{busy ? 'Posting...' : 'Post activity'}</button></form></Modal>;
+}
+
+function InvitationModal({ organizationId, canInviteAdministrators, onClose }: { organizationId: string; canInviteAdministrators: boolean; onClose: () => void }) {
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<'administrator' | 'editor' | 'viewer'>('editor');
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    setInviteUrl('');
+    try {
+      const response = await fetch('/api/organizations/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-organization-id': organizationId },
+        body: JSON.stringify({ email, role }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(data.error || 'Could not create invitation.');
+        return;
+      }
+      setInviteUrl(data.inviteUrl);
+    } catch {
+      setError('Connection issue. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyInvite() {
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+    } catch {
+      setError('Could not copy automatically. Select and copy the invitation link.');
+    }
+  }
+
+  return <Modal title="Invite a member" subtitle="Share access without mixing private financial spaces." onClose={onClose}>
+    {!inviteUrl ? <form className="modal-form" onSubmit={submit}>
+      <label className="field-label">Email address<input className="field" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="person@example.com" required /></label>
+      <label className="field-label">Access role<select className="field" value={role} onChange={(event) => setRole(event.target.value as 'administrator' | 'editor' | 'viewer')}><option value="editor">Editor — can manage finances</option><option value="viewer">Viewer — read only</option>{canInviteAdministrators && <option value="administrator">Administrator — manage workspace</option>}</select></label>
+      <p className="form-hint">The invitation link is valid for 7 days. The invited person must sign in with this exact verified email. No email is sent automatically yet.</p>
+      {error && <p className="form-error">{error}</p>}
+      <button className="primary-btn w-full" disabled={busy}>{busy ? 'Creating link…' : 'Generate invitation link'}</button>
+    </form> : <div className="modal-form">
+      <p className="form-hint">Invitation created for <b>{email}</b>. Share this link with them; it expires in 7 days.</p>
+      <input className="field" value={inviteUrl} readOnly onFocus={(event) => event.currentTarget.select()} />
+      <button className="primary-btn w-full" type="button" onClick={copyInvite}>{copied ? 'Copied' : 'Copy invitation link'}</button>
+      <button className="text-action" type="button" onClick={onClose}>Done</button>
+    </div>}
+  </Modal>;
 }
 
 function OrganizationModal({ onClose, onSaved }: { onClose: () => void; onSaved: (organization: Organization) => Promise<void> }) {
