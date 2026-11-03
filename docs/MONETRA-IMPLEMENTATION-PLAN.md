@@ -132,14 +132,18 @@ Do not claim backup readiness until an actual restore test has been completed.
 
 ### Build verification
 
-The Vercel checks for the latest organization-foundation commits reported a Vercel `build-rate-limit` failure. This is a platform build-limit response, not a compiler diagnostic. The GitHub Actions workflow was added, but no workflow run was visible at the time of this update. TypeScript/build verification therefore remains pending.
+The Vercel checks for the latest organization-foundation commits reported a Vercel `build-rate-limit` failure. This is a platform build-limit response, not a compiler diagnostic. The GitHub Actions workflow is now running. Its first typecheck caught an optional-header typing issue in the workspace fetches; that issue was fixed and a fresh run was queued. The latest run had not completed at the time of this update. TypeScript/build verification therefore remains pending. Vercel checks were blocked by the account's `build-rate-limit`, not by a compiler diagnostic.
 
 ### Still outstanding in Phase 1
 
 - Apply and verify the migration against a staging Neon database and then production.
 - Add automated migration/backfill verification tests.
 - Configure actual invitation email delivery (the current flow creates a secure link for manual sharing).
-- Add UI for member administration and invitation revocation.
 - Verify the Clerk dashboard settings for Google OAuth, email verification, and password recovery.
 - Verify organization access behavior with multiple real test accounts and roles.
 
+
+
+### Additional release risks found during dependency installation
+
+The CI dependency install reported 29 npm audit advisories (8 moderate, 20 high, 1 critical) and specifically warned that the currently locked Next.js 13.5.6 version has a published security vulnerability. Do not run `npm audit fix --force` blindly; schedule a controlled dependency upgrade with compatibility checks and a lockfile update before calling the platform production-hardened.
