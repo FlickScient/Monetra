@@ -144,6 +144,7 @@ export default function HomePage() {
   const donutTotal = categorySpend.reduce((sum, c) => sum + c.total, 0);
   const firstName = user?.firstName || 'there';
   const activeOrganization = organizations.find((organization) => organization.id === activeOrganizationId);
+  const workspaceLabel = (organization: Organization) => organization.type === 'personal' ? 'Personal' : organization.type === 'family' ? 'Family' : 'Business';
 
   if (!isLoaded || loading) return <div className="loading-screen"><div className="loading-mark">M</div><p>Preparing your money space</p><span className="loading-line" /></div>;
 
@@ -173,7 +174,7 @@ export default function HomePage() {
         </nav>
         <div className="sidebar-bottom">
           <div className="vault-note"><div className="vault-note-icon"><ShieldCheck size={17} /></div><div><b>Your data, protected.</b><span>Private financial workspace</span></div></div>
-          <div className="sidebar-user"><UserButton afterSignOutUrl="/" /><div className="min-w-0"><b className="truncate">{user?.fullName || firstName}</b><span>{activeOrganization?.name || 'Personal account'}</span></div></div>
+          <div className="sidebar-user"><UserButton afterSignOutUrl="/" /><div className="min-w-0"><b className="truncate">{user?.fullName || firstName}</b><span>{activeOrganization ? workspaceLabel(activeOrganization) : 'Personal'}</span></div></div>
         </div>
       </aside>
 
@@ -183,9 +184,9 @@ export default function HomePage() {
           <div className="topbar-actions">
             <div className="organization-switcher">
               <select aria-label="Switch financial space" value={activeOrganizationId} onChange={(event) => { const id = event.target.value; setActiveOrganizationId(id); void loadFinanceData(id); }}>
-                {organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
+                {organizations.map((organization) => <option key={organization.id} value={organization.id}>{workspaceLabel(organization)}</option>)}
               </select>
-              <button type="button" onClick={() => setShowOrganizationForm(true)}>+ Space</button>
+              <button type="button" onClick={() => setShowOrganizationForm(true)}>+ Add space</button>
 
             </div>
             <button className="icon-btn" onClick={() => setDark((v) => !v)} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
@@ -254,7 +255,7 @@ export default function HomePage() {
           {activeView === 'transactions' && <TransactionsView transactions={transactions} wallets={wallets} categories={categories} onAdd={() => setShowTransactionForm(true)} onLoadMore={loadMoreTransactions} hasMore={hasMoreTransactions} />}
           {activeView === 'intelligence' && <FinancialIntelligenceView wallets={wallets} transactions={transactions} monthlyIncomeMinor={monthlyIncome} monthlyExpenseMinor={monthlyExpense} />}
           {activeView === 'due-debt' && <DueDebtView />}
-          {activeView === 'vault' && <FiscusView />}
+          {activeView === 'vault' && <FiscusView workspaces={organizations.map(({ id, type }) => ({ id, type }))} activeWorkspaceId={activeOrganizationId} />}
           {activeView === 'settings' && <SettingsView dark={dark} onToggleTheme={() => setDark((current) => !current)} />}
         </div>
       </div>

@@ -47,14 +47,19 @@ const insightAreas = [
   { icon: HandCoins, title: 'Debt intelligence', detail: 'Receivables, payables, repayment pace, and strategy.' },
 ];
 
-export function FiscusView() {
+type FiscusWorkspace = { id: string; type: 'personal' | 'family' | 'business' };
+
+export function FiscusView({ workspaces, activeWorkspaceId }: { workspaces: FiscusWorkspace[]; activeWorkspaceId: string }) {
   const [draft, setDraft] = useState('');
   const [scope, setScope] = useState('current');
+  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
+  const workspaceName = (workspace: FiscusWorkspace) => workspace.type === 'personal' ? 'Personal workspace' : workspace.type === 'family' ? 'Family workspace' : 'Business workspace';
+  const selectedWorkspace = workspaces.find((workspace) => workspace.id === scope);
   const scopeLabel = scope === 'all'
     ? 'All workspaces + Due & Debt'
     : scope === 'current'
-      ? 'Selected workspace'
-      : scope;
+      ? (activeWorkspace ? workspaceName(activeWorkspace) : 'Selected workspace')
+      : (selectedWorkspace ? workspaceName(selectedWorkspace) : 'Selected workspace');
 
   return (
     <div className="page-stack module-page fiscus-page">
@@ -81,9 +86,7 @@ export function FiscusView() {
         <label className="fiscus-scope-select"><span className="sr-only">Choose analysis scope</span>
           <select value={scope} onChange={(event) => setScope(event.target.value)}>
             <option value="current">Selected workspace</option>
-            <option value="Personal">Personal workspace</option>
-            <option value="Family">Family workspace</option>
-            <option value="Business">Business workspace</option>
+            {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspaceName(workspace)}</option>)}
             <option value="all">All workspaces + Due & Debt</option>
           </select>
         </label>
