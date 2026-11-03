@@ -12,7 +12,7 @@ export async function PATCH(req: Request, { params }: Params) {
   if (!canWriteOrganization(context.role)) return NextResponse.json({ error: 'Read-only workspace access' }, { status: 403 });
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
-  const values: Record<string, unknown> = { updatedAt: new Date() };
+  const values: Partial<typeof savingsGoals.$inferInsert> = { updatedAt: new Date() };
   if (body.name !== undefined) {
     if (typeof body.name !== 'string' || !body.name.trim() || body.name.trim().length > 100) return NextResponse.json({ error: 'Invalid goal name' }, { status: 400 });
     values.name = body.name.trim();
