@@ -149,3 +149,18 @@ The Vercel checks for the latest organization-foundation commits reported a Verc
 ### Additional release risks found during dependency installation
 
 The CI dependency install reported 29 npm audit advisories (8 moderate, 20 high, 1 critical) and specifically warned that the currently locked Next.js 13.5.6 version has a published security vulnerability. Do not run `npm audit fix --force` blindly; schedule a controlled dependency upgrade with compatibility checks and a lockfile update before calling the platform production-hardened.
+
+
+### Staging migration execution
+
+A guarded manual workflow is available at `.github/workflows/staging-migration.yml`.
+
+1. In Neon, create a **separate staging branch/database** from the current production branch. Do not use the production connection string.
+2. In GitHub, open **Settings → Secrets and variables → Actions → New repository secret**.
+3. Name it `MONETRA_STAGING_DATABASE_URL` and set its value to the staging branch's pooled or direct PostgreSQL connection string. Never paste it into chat, source code, or a committed `.env`.
+4. Open **Actions → Monetra staging database migration → Run workflow**.
+5. Enter exactly `APPLY_TO_STAGING` only after confirming the secret points to the staging branch.
+6. The workflow installs dependencies, runs `npm run db:migrate`, then runs `npm run db:verify:organization`. A failed check stops the job.
+7. Review the workflow logs. The verifier is read-only; the migration itself changes the staging database.
+
+This workflow deliberately has no automatic production migration path. Do not create a production secret or run this workflow against production. Before production rollout, separately capture baseline row counts and wallet balances, take a Neon restore point, test on staging, compare post-migration records/balances, and arrange a controlled maintenance window.
