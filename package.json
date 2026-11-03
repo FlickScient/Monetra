@@ -9,7 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "db:migrate": "drizzle-kit migrate",
-    "db:verify:organization": "node scripts/verify-organization-migration.mjs"
+    "db:verify:organization": "node scripts/verify-organization-migration.mjs",
+    "db:diagnose": "node scripts/diagnose-database.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.7.6",
