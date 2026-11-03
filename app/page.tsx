@@ -13,6 +13,7 @@ type TransactionType = 'income' | 'expense' | 'transfer';
 type Wallet = { id: string; name: string; walletType: WalletType; currentBalanceMinor: number; currency: string; status: string };
 type Category = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
 type Transaction = { id: string; transactionType: TransactionType; walletId: string; destinationWalletId: string | null; amountMinor: number; description: string; occurredAt: string; categoryId: string | null };
+type FinanceSummary = { incomeMinor: number; expenseMinor: number; categorySpend: { categoryId: string | null; totalMinor: number }[] };
 type View = 'overview' | 'wallets' | 'transactions';
 
 const walletLabels: Record<WalletType, string> = {
@@ -29,6 +30,7 @@ export default function HomePage() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [summary, setSummary] = useState<FinanceSummary>({ incomeMinor: 0, expenseMinor: 0, categorySpend: [] });
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState<View>('overview');
   const [showWalletForm, setShowWalletForm] = useState(false);
@@ -55,14 +57,14 @@ export default function HomePage() {
     setLoading(true);
     setLoadError('');
     try {
-      const [walletRes, categoryRes, transactionRes] = await Promise.all([
-        fetch('/api/wallets'), fetch('/api/categories'), fetch('/api/transactions'),
+      const [walletRes, categoryRes, transactionRes, summaryRes] = await Promise.all([
+        fetch('/api/wallets'), fetch('/api/categories'), fetch('/api/transactions'), fetch('/api/transactions/summary'),
       ]);
-      if (!walletRes.ok || !categoryRes.ok || !transactionRes.ok) throw new Error('Some finance data could not be loaded.');
-      const [walletData, categoryData, transactionData] = await Promise.all([
-        walletRes.json(), categoryRes.json(), transactionRes.json(),
+      if (!walletRes.ok || !categoryRes.ok || !transactionRes.ok || !summaryRes.ok) throw new Error('Some finance data could not be loaded.');
+      const [walletData, categoryData, transactionData, summaryData] = await Promise.all([
+        walletRes.json(), categoryRes.json(), transactionRes.json(), summaryRes.json(),
       ]);
-      setWallets(walletData); setCategories(categoryData); setTransactions(transactionData);
+      setWallets(walletData); setCategories(categoryData); setTransactions(transactionData); setSummary(summaryData);
     } catch {
       setLoadError('We couldn’t sync your finance data. Check your connection and try again.');
     } finally { setLoading(false); }
@@ -71,13 +73,12 @@ export default function HomePage() {
   const totalAssets = wallets.filter((w) => w.walletType !== 'credit_card').reduce((sum, w) => sum + Number(w.currentBalanceMinor), 0);
   const totalLiabilities = wallets.filter((w) => w.walletType === 'credit_card').reduce((sum, w) => sum + Number(w.currentBalanceMinor), 0);
   const netWorth = totalAssets - totalLiabilities;
-  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-  const monthlyTransactions = transactions.filter((t) => new Date(t.occurredAt) >= monthStart);
-  const monthlyIncome = monthlyTransactions.filter((t) => t.transactionType === 'income').reduce((sum, t) => sum + Number(t.amountMinor), 0);
-  const monthlyExpense = monthlyTransactions.filter((t) => t.transactionType === 'expense').reduce((sum, t) => sum + Number(t.amountMinor), 0);
-  const categorySpend = useMemo(() => categories.map((c) => ({
-    ...c, total: monthlyTransactions.filter((t) => t.categoryId === c.id && t.transactionType === 'expense').reduce((sum, t) => sum + Number(t.amountMinor), 0),
-  })).filter((c) => c.total > 0).sort((a, b) => b.total - a.total), [categories, monthlyTransactions]);
+  const monthlyIncome = summary.incomeMinor;
+  const monthlyExpense = summary.expenseMinor;
+  const categorySpend = useMemo(() => summary.categorySpend.map((entry) => {
+    const category = categories.find((item) => item.id === entry.categoryId);
+    return { id: entry.categoryId || 'uncategorized', name: category?.name || 'Uncategorized', color: category?.color || '#78928b', total: entry.totalMinor };
+  }).filter((item) => item.total > 0).sort((a, b) => b.total - a.total), [categories, summary]);
   const donutTotal = categorySpend.reduce((sum, c) => sum + c.total, 0);
   const firstName = user?.firstName || 'there';
 
