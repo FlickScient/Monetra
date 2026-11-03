@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { getOrganizationContext, canWriteOrganization } from '@/lib/organization';
 import { db } from '@/db';
 import { wallets, transactions } from '@/db/schema';
 import { eq, sql, and, gte } from 'drizzle-orm';
 
 export async function POST(req: Request) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const context = await getOrganizationContext(req);
+  if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
+  if (!canWriteOrganization(context.role)) return NextResponse.json({ error: 'Read-only organization access' }, { status: 403 });
 
   let body: Record<string, unknown>;
   try {
@@ -40,10 +41,10 @@ export async function POST(req: Request) {
   try {
     const result = await db.transaction(async (tx) => {
       const fromWallet = await tx.query.wallets.findFirst({
-        where: and(eq(wallets.id, walletId), eq(wallets.userId, userId)),
+        where: and(eq(wallets.id, walletId), eq(wallets.organizationId, context.organizationId)),
       });
       const toWallet = await tx.query.wallets.findFirst({
-        where: and(eq(wallets.id, destinationWalletId), eq(wallets.userId, userId)),
+        where: and(eq(wallets.id, destinationWalletId), eq(wallets.organizationId, context.organizationId)),
       });
 
       if (
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
         .where(
           and(
             eq(wallets.id, walletId),
-            eq(wallets.userId, userId),
+            eq(wallets.organizationId, context.organizationId),
             gte(wallets.currentBalanceMinor, amountMinor),
           ),
         )
@@ -90,12 +91,13 @@ export async function POST(req: Request) {
           currentBalanceMinor: sql`${wallets.currentBalanceMinor} + ${destinationDelta}`,
           updatedAt: new Date(),
         })
-        .where(and(eq(wallets.id, destinationWalletId), eq(wallets.userId, userId)));
+        .where(and(eq(wallets.id, destinationWalletId), eq(wallets.organizationId, context.organizationId)));
 
       const [txn] = await tx
         .insert(transactions)
         .values({
-          userId,
+          userId: context.userId,
+          organizationId: context.organizationId,
           transactionType: 'transfer',
           walletId,
           destinationWalletId,
