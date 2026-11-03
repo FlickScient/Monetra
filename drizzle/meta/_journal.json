@@ -8,6 +8,13 @@
       "when": 1793700000000,
       "tag": "0000_organization_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793786400000,
+      "tag": "0001_goals_due_debt",
+      "breakpoints": true
     }
   ]
 }
