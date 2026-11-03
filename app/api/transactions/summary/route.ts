@@ -4,14 +4,18 @@ import { db } from '@/db';
 import { transactions } from '@/db/schema';
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
 
-export async function GET() {
+export async function GET(req: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-  const nextMonthStart = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1);
+  const url = new URL(req.url);
+  const requestedStart = url.searchParams.get('from');
+  const requestedEnd = url.searchParams.get('to');
+  const monthStart = requestedStart ? new Date(requestedStart) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const nextMonthStart = requestedEnd ? new Date(requestedEnd) : new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1);
+  if (Number.isNaN(monthStart.getTime()) || Number.isNaN(nextMonthStart.getTime()) || monthStart >= nextMonthStart) {
+    return NextResponse.json({ error: 'Invalid summary date range' }, { status: 400 });
+  }
 
   try {
     const [totals] = await db
