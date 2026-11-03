@@ -91,8 +91,21 @@ export async function getOrganizationContext(request?: Request): Promise<Organiz
       organizationId: membership.organizationId,
       role: membership.role as OrganizationRole,
     };
-  } catch {
-    return { ok: false, status: 403, error: 'Organization access is not available' };
+  } catch (error) {
+    console.error('MONETRA_ORG_ERROR:', {
+      name: error instanceof Error ? error.name : 'UnknownError',
+      message: error instanceof Error ? error.message : String(error),
+      code:
+        typeof error === 'object' && error !== null && 'code' in error
+          ? error.code
+          : undefined,
+    });
+
+    return {
+      ok: false,
+      status: 403,
+      error: 'Organization access is not available',
+    };
   }
 }
 
