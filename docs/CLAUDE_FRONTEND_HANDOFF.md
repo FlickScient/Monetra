@@ -146,3 +146,16 @@ The branch contains the frontend foundation, not a production-complete finance s
 - Forecasts and debt strategy outputs expose assumptions and never masquerade as guaranteed outcomes.
 - Fiscus answers are grounded in authorized records and include workspace/date-range evidence; unsupported questions are answered as unknown, not guessed.
 - No demo records are presented as user data, no silent ledger mutations occur, and no existing tables or user data are discarded.
+
+
+## Savings goals and local prototype storage — November 2026
+
+The frontend now includes a Savings Goals view, backed by existing real wallets:
+- Goals have a name, target amount, optional target date, and per-wallet allocations.
+- Allocations reserve part of a wallet's available balance across all goals. They do not create transactions, move money between accounts, or increase assets.
+- Users can allocate and release amounts from a selected wallet. Deleting a goal with allocations explicitly confirms that those allocations will be released.
+- Due & Debt and Savings Goals currently persist in browser localStorage, each isolated by workspace ID. This is a temporary single-device prototype, not cloud persistence or secure server storage.
+- Do not treat localStorage as authoritative financial data. Replace it with authenticated, server-authorized APIs and database transactions before production. Migrate or explicitly discard prototype-local data only with user consent; never silently imply that local browser data has synced to the account.
+- Suggested persistent goal model: workspace_id, owner_id, name, target_minor, currency, target_date, status, created_at, updated_at.
+- Suggested allocation model: goal_id, wallet_id, amount_minor, created_at, updated_at. Enforce that allocations across all active goals for a wallet cannot exceed its eligible available balance. Reconcile against wallet transactions and transfers on the server; do not duplicate wallet balances.
+- Goal contribution/release history should be auditable. A contribution is an allocation record, not an income transaction. A real transfer between separate bank/cash accounts remains a wallet transfer and must be recorded separately.
