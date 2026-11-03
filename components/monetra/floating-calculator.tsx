@@ -196,14 +196,14 @@ export function FloatingCalculator() {
                 <div className="calculator-result-row"><strong>{preview || result}</strong><button type="button" onClick={() => void copyResult()} aria-label="Copy result" title="Copy result"><Copy size={14} />{copied ? 'Copied' : 'Copy'}</button></div>
               </div>
               <div className="calculator-keypad">
-                {keys.map((key) => <button key={key.label} type="button" className={\`calculator-key calculator-key-\${key.kind}\`} onClick={key.action}>{key.label === '⌫' ? <Delete size={17} /> : key.label}</button>)}
+                {keys.map((key) => <button key={key.label} type="button" className={`calculator-key calculator-key-${key.kind}`} onClick={key.action}>{key.label === '⌫' ? <Delete size={17} /> : key.label}</button>)}
               </div>
               <p className="calculator-footnote">Keyboard supported · Press Esc to close</p>
             </>
           )}
         </section>
       )}
-      <button className={\`floating-calculator-trigger \${open ? 'is-open' : ''}\`} type="button" onClick={() => { setOpen((value) => !value); setShowHistory(false); }} aria-label={open ? 'Close calculator' : 'Open calculator'} aria-expanded={open}>
+      <button className={`floating-calculator-trigger ${open ? 'is-open' : ''}`} type="button" onClick={() => { setOpen((value) => !value); setShowHistory(false); }} aria-label={open ? 'Close calculator' : 'Open calculator'} aria-expanded={open}>
         {open ? <Minus size={21} /> : <Calculator size={21} />}
       </button>
     </div>

@@ -166,7 +166,7 @@ export default function HomePage() {
 
       <div className="main-column">
         <header className="topbar">
-          <div className="topbar-context"><span className="status-dot" /> YOUR FINANCIAL OVERVIEW <span className="topbar-divider">/</span> <span>{activeView}</span></div>
+          <div className="topbar-context"><span className="status-dot" /> YOUR FINANCIAL OVERVIEW <span className="topbar-divider">/</span> <span>{navItems.find((item) => item.key === activeView)?.label || activeView}</span></div>
           <div className="topbar-actions">
             <div className="organization-switcher">
               <select aria-label="Switch financial space" value={activeOrganizationId} onChange={(event) => { const id = event.target.value; setActiveOrganizationId(id); void loadFinanceData(id); }}>
