@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 :root {
+  --background: 150 18% 96%;
+  --foreground: 150 14% 15%;
+  --border: 145 14% 90%;
+  --radius: 1.1rem;
   color-scheme: light;
   --bg: #f5f6f2;
   --surface: #ffffff;
@@ -17,6 +21,9 @@
   --radius: 20px;
 }
 .dark {
+  --background: 150 16% 9%;
+  --foreground: 90 18% 93%;
+  --border: 145 12% 23%;
   color-scheme: dark;
   --bg: #111815;
   --surface: #19221d;
