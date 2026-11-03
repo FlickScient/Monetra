@@ -1,6 +1,6 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { and, asc, eq, gt, isNull } from 'drizzle-orm';
+import { and, asc, eq, gt, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { invitations, organizations } from '@/db/schema';
 import { getOrganizationContext } from '@/lib/organization';
@@ -51,6 +51,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid invitation role' }, { status: 400 });
   }
 
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const [recentInvitations] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(invitations)
+    .where(and(
+      eq(invitations.organizationId, context.organizationId),
+      eq(invitations.invitedBy, context.userId),
+      gt(invitations.createdAt, hourAgo),
+    ));
+  if ((recentInvitations?.count ?? 0) >= 20) {
+    return NextResponse.json({ error: 'Invitation limit reached. Try again later.' }, { status: 429 });
+  }
+
   const token = randomBytes(32).toString('base64url');
   const tokenHash = createHash('sha256').update(token).digest('hex');
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -71,8 +84,7 @@ export async function POST(req: Request) {
       expiresAt,
     });
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
-    const inviteUrl = new URL(`/invite/${token}`, baseUrl).toString();
+    const inviteUrl = new URL(`/invite/${token}`, new URL(req.url).origin).toString();
 
     return NextResponse.json({
       email,
