@@ -14,6 +14,7 @@ type Wallet = { id: string; name: string; walletType: WalletType; currentBalance
 type Category = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
 type Transaction = { id: string; transactionType: TransactionType; walletId: string; destinationWalletId: string | null; amountMinor: number; description: string; occurredAt: string; categoryId: string | null };
 type FinanceSummary = { incomeMinor: number; expenseMinor: number; categorySpend: { categoryId: string | null; totalMinor: number }[] };
+type Organization = { id: string; name: string; type: 'personal' | 'family' | 'business'; role: 'owner' | 'administrator' | 'editor' | 'viewer' };
 type View = 'overview' | 'wallets' | 'transactions';
 
 const walletLabels: Record<WalletType, string> = {
@@ -27,6 +28,9 @@ const dateLabel = (value: string) =>
 
 export default function HomePage() {
   const { user, isLoaded } = useUser();
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [activeOrganizationId, setActiveOrganizationId] = useState('');
+  const [showOrganizationForm, setShowOrganizationForm] = useState(false);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -51,10 +55,28 @@ export default function HomePage() {
   }, [dark]);
 
   useEffect(() => {
-    if (isLoaded && user) void loadFinanceData();
-  }, [isLoaded, user]);
+    if (isLoaded && user) void initializeWorkspace();
+  }, [isLoaded, user?.id]);
 
-  async function loadFinanceData() {
+  async function initializeWorkspace() {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const response = await fetch('/api/organizations');
+      if (!response.ok) throw new Error('Could not load organizations');
+      const rows: Organization[] = await response.json();
+      setOrganizations(rows);
+      const selected = rows[0];
+      if (!selected) throw new Error('No personal organization is available');
+      setActiveOrganizationId(selected.id);
+      await loadFinanceData(selected.id);
+    } catch {
+      setLoadError('We couldn’t open your finance workspace. Please retry in a moment.');
+      setLoading(false);
+    }
+  }
+
+  async function loadFinanceData(organizationId = activeOrganizationId) {
     setLoading(true);
     setLoadError('');
     try {
@@ -62,8 +84,9 @@ export default function HomePage() {
       const localMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const localNextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
       const summaryUrl = `/api/transactions/summary?from=${encodeURIComponent(localMonthStart.toISOString())}&to=${encodeURIComponent(localNextMonthStart.toISOString())}`;
+      const headers = organizationId ? { 'x-organization-id': organizationId } : {};
       const [walletRes, categoryRes, transactionRes, summaryRes] = await Promise.all([
-        fetch('/api/wallets'), fetch('/api/categories'), fetch('/api/transactions?limit=50&offset=0'), fetch(summaryUrl),
+        fetch('/api/wallets', { headers }), fetch('/api/categories', { headers }), fetch('/api/transactions?limit=50&offset=0', { headers }), fetch(summaryUrl, { headers }),
       ]);
       if (!walletRes.ok || !categoryRes.ok || !transactionRes.ok || !summaryRes.ok) throw new Error('Some finance data could not be loaded.');
       const [walletData, categoryData, transactionData, summaryData] = await Promise.all([
@@ -77,7 +100,7 @@ export default function HomePage() {
 
   async function loadMoreTransactions() {
     try {
-      const response = await fetch(`/api/transactions?limit=50&offset=${transactions.length}`);
+      const response = await fetch(`/api/transactions?limit=50&offset=${transactions.length}`, { headers: { 'x-organization-id': activeOrganizationId } });
       if (!response.ok) throw new Error('Unable to load older transactions');
       const rows: Transaction[] = await response.json();
       setTransactions((current) => [...current, ...rows.slice(0, 50)]);
@@ -98,6 +121,7 @@ export default function HomePage() {
   }).filter((item) => item.total > 0).sort((a, b) => b.total - a.total), [categories, summary]);
   const donutTotal = categorySpend.reduce((sum, c) => sum + c.total, 0);
   const firstName = user?.firstName || 'there';
+  const activeOrganization = organizations.find((organization) => organization.id === activeOrganizationId);
 
   if (!isLoaded || loading) return <div className="loading-screen"><div className="loading-mark">M</div><p>Preparing your money space</p><span className="loading-line" /></div>;
 
@@ -123,7 +147,7 @@ export default function HomePage() {
         </nav>
         <div className="sidebar-bottom">
           <div className="vault-note"><div className="vault-note-icon"><ShieldCheck size={17} /></div><div><b>Your data, protected.</b><span>Private financial workspace</span></div></div>
-          <div className="sidebar-user"><UserButton afterSignOutUrl="/" /><div className="min-w-0"><b className="truncate">{user?.fullName || firstName}</b><span>Personal account</span></div></div>
+          <div className="sidebar-user"><UserButton afterSignOutUrl="/" /><div className="min-w-0"><b className="truncate">{user?.fullName || firstName}</b><span>{activeOrganization?.name || 'Personal account'}</span></div></div>
         </div>
       </aside>
 
@@ -131,6 +155,12 @@ export default function HomePage() {
         <header className="topbar">
           <div className="topbar-context"><span className="status-dot" /> YOUR FINANCIAL OVERVIEW <span className="topbar-divider">/</span> <span>{activeView}</span></div>
           <div className="topbar-actions">
+            <div className="organization-switcher">
+              <select aria-label="Switch financial space" value={activeOrganizationId} onChange={(event) => { const id = event.target.value; setActiveOrganizationId(id); void loadFinanceData(id); }}>
+                {organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
+              </select>
+              <button type="button" onClick={() => setShowOrganizationForm(true)}>+ Space</button>
+            </div>
             <button className="icon-btn" onClick={() => setDark((v) => !v)} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
             <button className="icon-btn" aria-label="Help"><CircleHelp size={18} /></button>
             <div className="topbar-user"><UserButton afterSignOutUrl="/" /></div>
@@ -199,8 +229,9 @@ export default function HomePage() {
       </div>
 
       <nav className="mobile-nav">{navItems.map(({ key, label, icon: Icon }) => <button key={key} className={activeView === key ? 'active' : ''} onClick={() => setActiveView(key)}><Icon size={20} /><span>{label}</span></button>)}</nav>
-      {showWalletForm && <WalletModal onClose={() => setShowWalletForm(false)} onSaved={async (message) => { setShowWalletForm(false); setNotice(message); await loadFinanceData(); }} />}
-      {showTransactionForm && <TransactionModal wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={async (message) => { setShowTransactionForm(false); setNotice(message); await loadFinanceData(); }} />}
+      {showWalletForm && <WalletModal organizationId={activeOrganizationId} onClose={() => setShowWalletForm(false)} onSaved={async (message) => { setShowWalletForm(false); setNotice(message); await loadFinanceData(); }} />}
+      {showTransactionForm && <TransactionModal organizationId={activeOrganizationId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={async (message) => { setShowTransactionForm(false); setNotice(message); await loadFinanceData(); }} />}
+      {showOrganizationForm && <OrganizationModal onClose={() => setShowOrganizationForm(false)} onSaved={async (organization) => { setOrganizations((current) => [...current, organization]); setShowOrganizationForm(false); setActiveOrganizationId(organization.id); setNotice(`${organization.name} space created.`); await loadFinanceData(organization.id); }} />}
     </main>
   );
 }
@@ -231,13 +262,13 @@ function TransactionsView({ transactions, wallets, categories, onAdd, onLoadMore
   return <div className="page-stack"><section className="page-intro"><div><p className="eyebrow">YOUR FINANCIAL HISTORY</p><h1>Transactions<span>.</span></h1><p className="intro-copy">Every movement, accounted for.</p></div><button className="primary-btn intro-action" onClick={onAdd}><Plus size={17} /> New transaction</button></section><section className="surface-card ledger-card"><div className="ledger-toolbar"><div className="search-wrap"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search transactions..." /></div><div className="filter-tabs">{(['all', 'income', 'expense', 'transfer'] as const).map((item) => <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div></div>{filtered.length === 0 ? <EmptyState icon={<Search size={22} />} title="Nothing matches" text="Try a different search or filter." /> : <div className="transaction-list">{filtered.map((t) => <TransactionRow key={t.id} transaction={t} wallets={wallets} categories={categories} />)}</div>}{hasMore && query.trim() === '' && filter === 'all' && <button className="load-more-btn" disabled={loadingMore} onClick={async () => { setLoadingMore(true); await onLoadMore(); setLoadingMore(false); }}>{loadingMore ? 'Loading older activity…' : 'Load older transactions'} <ChevronRight size={15} /></button>}</section></div>;
 }
 
-function WalletModal({ onClose, onSaved }: { onClose: () => void; onSaved: (message: string) => Promise<void> }) {
+function WalletModal({ organizationId, onClose, onSaved }: { organizationId: string; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
   const [name, setName] = useState(''); const [type, setType] = useState<WalletType>('cash'); const [opening, setOpening] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
     try {
       const amount = Math.round(Number(opening || 0) * 100);
-      const res = await fetch('/api/wallets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, walletType: type, currency: 'BDT', openingBalanceMinor: amount }) });
+      const res = await fetch('/api/wallets', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-organization-id': organizationId }, body: JSON.stringify({ name, walletType: type, currency: 'BDT', openingBalanceMinor: amount }) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not add this wallet.'); }
       else await onSaved('Wallet added. Your balance is now synced.');
     } catch { setError('Connection issue. Please try again.'); }
@@ -246,7 +277,7 @@ function WalletModal({ onClose, onSaved }: { onClose: () => void; onSaved: (mess
   return <Modal title="Add a wallet" subtitle="Bring another account into your overview." onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Wallet name<input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Everyday cash" required /></label><label className="field-label">Wallet type<select className="field" value={type} onChange={(e) => setType(e.target.value as WalletType)}>{Object.entries(walletLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="field-label">Opening balance<input className="field" type="number" min="0" step="0.01" value={opening} onChange={(e) => setOpening(e.target.value)} placeholder="0.00" /></label>{type === 'credit_card' && <p className="form-hint">Credit cards are liabilities. Their balance reduces net worth and is not counted as available money.</p>}{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy}>{busy ? 'Saving...' : 'Create wallet'}</button></form></Modal>;
 }
 
-function TransactionModal({ wallets, categories, onClose, onSaved }: { wallets: Wallet[]; categories: Category[]; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
+function TransactionModal({ organizationId, wallets, categories, onClose, onSaved }: { organizationId: string; wallets: Wallet[]; categories: Category[]; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
   const [type, setType] = useState<TransactionType>('expense'); const [wallet, setWallet] = useState(wallets[0]?.id || ''); const [destination, setDestination] = useState(wallets[1]?.id || ''); const [category, setCategory] = useState(categories.find((c) => c.categoryType === 'expense')?.id || ''); const [amount, setAmount] = useState(''); const [description, setDescription] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
@@ -254,13 +285,45 @@ function TransactionModal({ wallets, categories, onClose, onSaved }: { wallets: 
       const amountMinor = Math.round(Number(amount) * 100);
       const endpoint = type === 'transfer' ? '/api/transfers' : '/api/transactions';
       const body = type === 'transfer' ? { walletId: wallet, destinationWalletId: destination, amountMinor, description } : { walletId: wallet, transactionType: type, categoryId: category || null, amountMinor, description };
-      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-organization-id': organizationId }, body: JSON.stringify(body) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not post this activity. Check the details and try again.'); }
       else await onSaved('Activity posted. Your balances are up to date.');
     } catch { setError('Connection issue. Please try again.'); }
     finally { setBusy(false); }
   }
   return <Modal title="Record activity" subtitle="Keep your money movement up to date." onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Activity type<select className="field" value={type} onChange={(e) => setType(e.target.value as TransactionType)}>{(['income', 'expense', 'transfer'] as TransactionType[]).map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label><label className="field-label">{type === 'transfer' ? 'From wallet' : 'Wallet'}<select className="field" value={wallet} onChange={(e) => setWallet(e.target.value)} required>{wallets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{type === 'transfer' && <label className="field-label">To wallet<select className="field" value={destination} onChange={(e) => setDestination(e.target.value)} required>{wallets.filter((item) => item.id !== wallet).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{type !== 'transfer' && <label className="field-label">Category<select className="field" value={category} onChange={(e) => setCategory(e.target.value)}><option value="">Uncategorized</option>{categories.filter((item) => item.categoryType === (type === 'income' ? 'income' : 'expense')).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<label className="field-label">Amount<input className="field" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required /></label><label className="field-label">Description<input className="field" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What was this for?" required /></label>{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy || wallets.length === 0}>{busy ? 'Posting...' : 'Post activity'}</button></form></Modal>;
+}
+
+function OrganizationModal({ onClose, onSaved }: { onClose: () => void; onSaved: (organization: Organization) => Promise<void> }) {
+  const [name, setName] = useState('');
+  const [type, setType] = useState<'family' | 'business'>('family');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch('/api/organizations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, type }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(data.error || 'Could not create this space.');
+        return;
+      }
+      await onSaved(data as Organization);
+    } catch {
+      setError('Connection issue. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <Modal title="Create a space" subtitle="Keep personal, family, and business money separate." onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Space name<input className="field" value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Family finances" maxLength={80} required /></label><label className="field-label">Space type<select className="field" value={type} onChange={(event) => setType(event.target.value as 'family' | 'business')}><option value="family">Family</option><option value="business">Business</option></select></label>{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy}>{busy ? 'Creating…' : 'Create space'}</button></form></Modal>;
 }
 
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode }) {
