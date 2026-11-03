@@ -24,7 +24,7 @@ export async function PATCH(req: Request, { params }: Params) {
   if (!canWriteOrganization(context.role)) return NextResponse.json({ error: 'Read-only workspace access' }, { status: 403 });
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
-  const values: Record<string, unknown> = { updatedAt: new Date() };
+  const values: Partial<typeof dueDebts.$inferInsert> = { updatedAt: new Date() };
   if (body.counterpartyName !== undefined) {
     if (typeof body.counterpartyName !== 'string' || !body.counterpartyName.trim() || body.counterpartyName.trim().length > 120) return NextResponse.json({ error: 'Invalid counterparty name' }, { status: 400 });
     values.counterpartyName = body.counterpartyName.trim();
