@@ -10,6 +10,7 @@ import {
 import { useUser, UserButton } from '@clerk/nextjs';
 import { DueDebtView, SettingsView, VaultView } from '@/components/monetra/module-views';
 import { FiscusMark } from '@/components/monetra/fiscus-mark';
+import { FloatingCalculator } from '@/components/monetra/floating-calculator';
 
 type WalletType = 'cash' | 'bkash' | 'nagad' | 'rocket' | 'bank' | 'savings' | 'debit_card' | 'credit_card' | 'custom';
 type TransactionType = 'income' | 'expense' | 'transfer';
@@ -247,6 +248,7 @@ export default function HomePage() {
       {showOrganizationForm && <OrganizationModal onClose={() => setShowOrganizationForm(false)} onSaved={async (organization) => { setOrganizations((current) => [...current, organization]); setShowOrganizationForm(false); setActiveOrganizationId(organization.id); setNotice(`${organization.name} space created.`); await loadFinanceData(organization.id); }} />}
       {showInvitationForm && activeOrganization && <InvitationModal organizationId={activeOrganization.id} canInviteAdministrators={activeOrganization.role === 'owner'} onClose={() => setShowInvitationForm(false)} />}
       {showMembersForm && activeOrganization && <OrganizationMembersModal organizationId={activeOrganization.id} currentRole={activeOrganization.role} onClose={() => setShowMembersForm(false)} />}
+      <FloatingCalculator />
     </main>
   );
 }
