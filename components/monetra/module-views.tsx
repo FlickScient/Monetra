@@ -5,6 +5,7 @@ import { FiscusMark } from '@/components/monetra/fiscus-mark';
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Activity,
   CalendarClock,
   CheckCircle2,
   CircleHelp,
