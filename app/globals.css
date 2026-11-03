@@ -2,8 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { --background: 150 25% 97%; --foreground: 165 31% 15%; --border: 145 19% 88%; --radius: 0.9rem; }
-.dark { --background: 165 28% 8%; --foreground: 150 31% 96%; --border: 160 22% 22%; }
+:root { --background: 40 25% 97%; --foreground: 160 25% 12%; --border: 100 15% 88%; --radius: 1.1rem; }
+.dark { --background: 140 14% 11%; --foreground: 45 30% 94%; --border: 140 12% 20%; }
 
 @layer base {
   * { @apply border-border; }
@@ -12,26 +12,27 @@
 }
 
 @layer components {
-  .eyebrow { @apply text-[11px] font-bold uppercase tracking-[0.2em] text-[#0f766e]; }
-  .nav-item { @apply flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold text-[#668078] transition hover:bg-[#edf5f1] hover:text-[#17463f] dark:text-[#a5c2b8] dark:hover:bg-[#1c3530] dark:hover:text-white; }
-  .nav-item-active { @apply bg-[#e4f4ed] text-[#0f766e] dark:bg-[#1b4038] dark:text-[#b8e9d6]; }
-  .icon-btn { @apply grid h-10 w-10 place-items-center rounded-xl text-[#668078] transition hover:bg-[#e8f1ed] hover:text-[#0f766e] dark:hover:bg-[#1c3530] dark:hover:text-white; }
-  .avatar { @apply grid h-9 w-9 place-items-center rounded-full bg-[#d6efe3] text-sm font-bold text-[#0f766e]; }
-  .primary-btn { @apply inline-flex items-center justify-center gap-2 rounded-xl bg-[#0f766e] px-4 py-3 text-sm font-bold text-white shadow-[0_7px_16px_rgba(15,118,110,0.18)] transition hover:-translate-y-0.5 hover:bg-[#0b635d] disabled:cursor-not-allowed disabled:opacity-60; }
-  .secondary-btn { @apply inline-flex items-center justify-center gap-2 rounded-xl border border-[#cfe1d8] bg-white px-4 py-3 text-sm font-bold text-[#25665b] transition hover:-translate-y-0.5 hover:border-[#9dc8b8] hover:bg-[#f5fbf7] dark:border-[#31524a] dark:bg-[#15201f] dark:text-[#b8e9d6]; }
-  .link-btn { @apply inline-flex items-center gap-1 text-xs font-bold text-[#0f766e] transition hover:gap-2; }
-  .panel { @apply rounded-[22px] border border-[#dce8e2] bg-white p-5 shadow-[0_12px_35px_rgba(34,74,62,0.05)] dark:border-[#28403b] dark:bg-[#15201f] md:p-7; }
+  .eyebrow { @apply text-[11px] font-bold uppercase tracking-[0.2em] text-[#0f766e] dark:text-[#c9a84c]; }
+  .nav-item { @apply flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold text-[#668078] transition hover:bg-[#edf5f1] hover:text-[#17463f] dark:text-[#a8b8a9] dark:hover:bg-[#263129] dark:hover:text-[#f1ede2]; }
+  .nav-item-active { @apply bg-[#e4f4ed] text-[#0f766e] dark:bg-[#2b362d] dark:text-[#d9bb5e]; }
+  .icon-btn { @apply grid h-10 w-10 place-items-center rounded-xl text-[#668078] transition hover:bg-[#e8f1ed] hover:text-[#0f766e] dark:text-[#a8b8a9] dark:hover:bg-[#263129] dark:hover:text-[#f1ede2]; }
+  .primary-btn { @apply inline-flex items-center justify-center gap-2 rounded-xl bg-[#0f766e] px-4 py-3 text-sm font-bold text-white shadow-[0_7px_16px_rgba(15,118,110,0.18)] transition hover:-translate-y-0.5 hover:bg-[#0b635d] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#c9a84c] dark:text-[#1b231e] dark:hover:bg-[#dcbd5f] dark:shadow-[0_7px_16px_rgba(201,168,76,0.25)]; }
+  .secondary-btn { @apply inline-flex items-center justify-center gap-2 rounded-xl border border-[#cfe1d8] bg-white px-4 py-3 text-sm font-bold text-[#25665b] transition hover:-translate-y-0.5 hover:border-[#9dc8b8] hover:bg-[#f5fbf7] dark:border-[#38463a] dark:bg-[#212b23] dark:text-[#e3dcc5]; }
+  .link-btn { @apply inline-flex items-center gap-1 text-xs font-bold text-[#0f766e] transition hover:gap-2 dark:text-[#d9bb5e]; }
+  .panel { @apply rounded-[22px] border border-[#e6e0d2] bg-white p-5 shadow-[0_12px_35px_rgba(34,74,62,0.05)] dark:border-[#2a362c] dark:bg-[#1f2921] md:p-7; }
   .panel-heading { @apply flex items-start justify-between gap-4; }
   .panel-heading h3 { @apply text-base font-extrabold; }
-  .panel-heading p { @apply mt-1 text-xs text-[#78928b]; }
+  .panel-heading p { @apply mt-1 text-xs text-[#78928b] dark:text-[#9bab9c]; }
+  .hero-card { @apply rounded-[26px] bg-gradient-to-br from-[#0f766e] to-[#115c56] p-6 text-white shadow-[0_18px_40px_rgba(15,118,110,0.25)] dark:from-[#263129] dark:to-[#1b231e] dark:shadow-[0_18px_40px_rgba(0,0,0,0.35)]; }
   .metric-card { @apply rounded-[22px] border p-5 shadow-[0_12px_35px_rgba(34,74,62,0.05)] md:p-6; }
-  .metric-teal { @apply border-[#146e68] bg-[#0f766e] text-white; }
-  .metric-mint { @apply border-[#c5e6d5] bg-[#e9f8f0] text-[#19332e] dark:bg-[#173b35] dark:text-white; }
-  .metric-sand { @apply border-[#eee0c7] bg-[#fff8ed] text-[#19332e] dark:bg-[#3a3021] dark:text-white; }
-  .metric-teal .text-\[\#54736b\] { @apply text-[#d0eee3]; }
+  .metric-teal { @apply border-[#146e68] bg-[#0f766e] text-white dark:border-[#c9a84c] dark:bg-[#c9a84c] dark:text-[#1b231e]; }
+  .metric-mint { @apply border-[#c5e6d5] bg-[#e9f8f0] text-[#19332e] dark:border-[#2a362c] dark:bg-[#1f2921] dark:text-[#f1ede2]; }
+  .metric-sand { @apply border-[#eee0c7] bg-[#fff8ed] text-[#19332e] dark:border-[#2a362c] dark:bg-[#1f2921] dark:text-[#f1ede2]; }
   .metric-dot { @apply h-2.5 w-2.5 rounded-full bg-current opacity-50; }
   .wallet-icon { @apply grid h-10 w-10 shrink-0 place-items-center rounded-xl; }
-  .field-label { @apply block text-xs font-bold text-[#527069]; }
-  .field { @apply mt-2 block w-full rounded-xl border border-[#d5e5dd] bg-white px-4 py-3 text-sm font-medium text-[#19332e] outline-none transition placeholder:text-[#a1b5ae] focus:border-[#0f766e] focus:ring-4 focus:ring-[#0f766e]/10 dark:border-[#31524a] dark:bg-[#172522] dark:text-white; }
-  .auth-stat { @apply flex flex-col gap-2 rounded-2xl border border-[#dce8e2] bg-white p-4 text-xs font-bold text-[#54736b] shadow-sm; }
+  .field-label { @apply block text-xs font-bold text-[#527069] dark:text-[#b7c4b8]; }
+  .field { @apply mt-2 block w-full rounded-xl border border-[#d5e5dd] bg-white px-4 py-3 text-sm font-medium text-[#19332e] outline-none transition placeholder:text-[#a1b5ae] focus:border-[#0f766e] focus:ring-4 focus:ring-[#0f766e]/10 dark:border-[#38463a] dark:bg-[#212b23] dark:text-[#f1ede2] dark:focus:border-[#c9a84c] dark:focus:ring-[#c9a84c]/10; }
+  .bottom-nav { @apply fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-[#e6e0d2] bg-white/95 px-2 py-2 backdrop-blur dark:border-[#2a362c] dark:bg-[#1b231e]/95; }
+  .bottom-nav-item { @apply flex flex-col items-center gap-1 rounded-xl px-4 py-2 text-[10px] font-bold text-[#8a9b8c] transition dark:text-[#7c8c7e]; }
+  .bottom-nav-item-active { @apply text-[#0f766e] dark:text-[#d9bb5e]; }
 }
