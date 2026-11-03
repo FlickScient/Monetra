@@ -11,7 +11,7 @@ const storageKey = (workspaceId: string) => `monetra-savings-goals:${workspaceId
 
 export function SavingsGoalsView({ workspaceId, wallets }: { workspaceId: string; wallets: WalletRecord[] }) {
   const [goals, setGoals] = useState<Goal[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [loadedWorkspaceId, setLoadedWorkspaceId] = useState('');
   const [name, setName] = useState('');
   const [target, setTarget] = useState('');
   const [targetDate, setTargetDate] = useState('');
@@ -21,20 +21,20 @@ export function SavingsGoalsView({ workspaceId, wallets }: { workspaceId: string
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setLoaded(false);
+    setLoadedWorkspaceId('');
     try {
       const raw = window.localStorage.getItem(storageKey(workspaceId));
       const parsed = raw ? JSON.parse(raw) : [];
       setGoals(Array.isArray(parsed) ? parsed : []);
     } catch { setGoals([]); }
-    setLoaded(true);
+    setLoadedWorkspaceId(workspaceId);
   }, [workspaceId]);
 
   useEffect(() => {
-    if (!loaded) return;
+    if (loadedWorkspaceId !== workspaceId) return;
     try { window.localStorage.setItem(storageKey(workspaceId), JSON.stringify(goals)); }
     catch { setError('Could not save goals on this device. Check available browser storage.'); }
-  }, [goals, loaded, workspaceId]);
+  }, [goals, loadedWorkspaceId, workspaceId]);
 
   const allocatedByWallet = useMemo(() => {
     const totals = new Map<string, number>();
