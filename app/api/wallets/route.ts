@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { getOrganizationContext, canWriteOrganization } from '@/lib/organization';
 import { db } from '@/db';
 import { wallets } from '@/db/schema';
 
@@ -16,8 +16,9 @@ const WALLET_TYPES = new Set([
 ]);
 
 export async function POST(req: Request) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const context = await getOrganizationContext(req);
+  if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
+  if (!canWriteOrganization(context.role)) return NextResponse.json({ error: 'Read-only organization access' }, { status: 403 });
 
   let body: Record<string, unknown>;
   try {
@@ -52,7 +53,8 @@ export async function POST(req: Request) {
     const [wallet] = await db
       .insert(wallets)
       .values({
-        userId,
+        userId: context.userId,
+        organizationId: context.organizationId,
         name: name.trim(),
         walletType,
         currency,
@@ -67,13 +69,13 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET() {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export async function GET(req: Request) {
+  const context = await getOrganizationContext(req);
+  if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
 
   try {
     const userWallets = await db.query.wallets.findMany({
-      where: (w, { eq }) => eq(w.userId, userId),
+      where: (w, { eq }) => eq(w.organizationId, context.organizationId),
       orderBy: (w, { asc }) => asc(w.createdAt),
     });
 
