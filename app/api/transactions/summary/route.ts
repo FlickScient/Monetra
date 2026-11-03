@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/db';
 import { transactions } from '@/db/schema';
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, sql } from 'drizzle-orm';
 
 export async function GET() {
   const { userId } = await auth();
@@ -11,6 +11,7 @@ export async function GET() {
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
+  const nextMonthStart = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1);
 
   try {
     const [totals] = await db
@@ -19,7 +20,7 @@ export async function GET() {
         expenseMinor: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.transactionType} = 'expense' THEN ${transactions.amountMinor} ELSE 0 END), 0)::text`,
       })
       .from(transactions)
-      .where(and(eq(transactions.userId, userId), gte(transactions.occurredAt, monthStart)));
+      .where(and(eq(transactions.userId, userId), gte(transactions.occurredAt, monthStart), lt(transactions.occurredAt, nextMonthStart)));
 
     const categoryRows = await db
       .select({
