@@ -32,6 +32,7 @@ export default function HomePage() {
   const [activeOrganizationId, setActiveOrganizationId] = useState('');
   const [showOrganizationForm, setShowOrganizationForm] = useState(false);
   const [showInvitationForm, setShowInvitationForm] = useState(false);
+  const [showMembersForm, setShowMembersForm] = useState(false);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -161,7 +162,7 @@ export default function HomePage() {
                 {organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
               </select>
               <button type="button" onClick={() => setShowOrganizationForm(true)}>+ Space</button>
-              {activeOrganization && (activeOrganization.role === 'owner' || activeOrganization.role === 'administrator') && <button type="button" onClick={() => setShowInvitationForm(true)}>Invite</button>}
+              {activeOrganization && (activeOrganization.role === 'owner' || activeOrganization.role === 'administrator') && <><button type="button" onClick={() => setShowInvitationForm(true)}>Invite</button><button type="button" onClick={() => setShowMembersForm(true)}>Team</button></>}
             </div>
             <button className="icon-btn" onClick={() => setDark((v) => !v)} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
             <button className="icon-btn" aria-label="Help"><CircleHelp size={18} /></button>
@@ -235,6 +236,7 @@ export default function HomePage() {
       {showTransactionForm && <TransactionModal organizationId={activeOrganizationId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={async (message) => { setShowTransactionForm(false); setNotice(message); await loadFinanceData(); }} />}
       {showOrganizationForm && <OrganizationModal onClose={() => setShowOrganizationForm(false)} onSaved={async (organization) => { setOrganizations((current) => [...current, organization]); setShowOrganizationForm(false); setActiveOrganizationId(organization.id); setNotice(`${organization.name} space created.`); await loadFinanceData(organization.id); }} />}
       {showInvitationForm && activeOrganization && <InvitationModal organizationId={activeOrganization.id} canInviteAdministrators={activeOrganization.role === 'owner'} onClose={() => setShowInvitationForm(false)} />}
+      {showMembersForm && activeOrganization && <OrganizationMembersModal organizationId={activeOrganization.id} currentRole={activeOrganization.role} onClose={() => setShowMembersForm(false)} />}
     </main>
   );
 }
@@ -295,6 +297,87 @@ function TransactionModal({ organizationId, wallets, categories, onClose, onSave
     finally { setBusy(false); }
   }
   return <Modal title="Record activity" subtitle="Keep your money movement up to date." onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Activity type<select className="field" value={type} onChange={(e) => setType(e.target.value as TransactionType)}>{(['income', 'expense', 'transfer'] as TransactionType[]).map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label><label className="field-label">{type === 'transfer' ? 'From wallet' : 'Wallet'}<select className="field" value={wallet} onChange={(e) => setWallet(e.target.value)} required>{wallets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{type === 'transfer' && <label className="field-label">To wallet<select className="field" value={destination} onChange={(e) => setDestination(e.target.value)} required>{wallets.filter((item) => item.id !== wallet).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{type !== 'transfer' && <label className="field-label">Category<select className="field" value={category} onChange={(e) => setCategory(e.target.value)}><option value="">Uncategorized</option>{categories.filter((item) => item.categoryType === (type === 'income' ? 'income' : 'expense')).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<label className="field-label">Amount<input className="field" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required /></label><label className="field-label">Description<input className="field" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What was this for?" required /></label>{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy || wallets.length === 0}>{busy ? 'Posting...' : 'Post activity'}</button></form></Modal>;
+}
+
+function OrganizationMembersModal({ organizationId, currentRole, onClose }: { organizationId: string; currentRole: Organization['role']; onClose: () => void }) {
+  type Member = { id: string; userId: string; role: Organization['role']; joinedAt: string };
+  const [members, setMembers] = useState<Member[]>([]);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState('');
+  const [workingId, setWorkingId] = useState('');
+
+  async function loadMembers() {
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch('/api/organizations/members', { headers: { 'x-organization-id': organizationId } });
+      const data = await response.json().catch(() => []);
+      if (!response.ok) throw new Error(data.error || 'Could not load members.');
+      setMembers(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load members.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => { void loadMembers(); }, [organizationId]);
+
+  async function updateMember(member: Member, role: Organization['role']) {
+    setWorkingId(member.id);
+    setError('');
+    try {
+      const response = await fetch(`/api/organizations/members/${member.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-organization-id': organizationId },
+        body: JSON.stringify({ role }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not update this member.');
+      await loadMembers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update this member.');
+    } finally {
+      setWorkingId('');
+    }
+  }
+
+  async function removeMember(member: Member) {
+    if (!window.confirm('Remove this member from the organization? They will lose access to its financial data.')) return;
+    setWorkingId(member.id);
+    setError('');
+    try {
+      const response = await fetch(`/api/organizations/members/${member.id}`, {
+        method: 'DELETE',
+        headers: { 'x-organization-id': organizationId },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not remove this member.');
+      await loadMembers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove this member.');
+    } finally {
+      setWorkingId('');
+    }
+  }
+
+  return <Modal title="Workspace team" subtitle="Control who can see and manage this space." onClose={onClose}>
+    <div className="modal-form">
+      {busy ? <p className="form-hint">Loading members…</p> : members.map((member) => {
+        const canManage = member.role !== 'owner' && (currentRole === 'owner' || member.role !== 'administrator');
+        return <div className="member-row" key={member.id}>
+          <div className="member-identity"><b>{member.userId.slice(0, 15)}{member.userId.length > 15 ? '…' : ''}</b><small>{member.role}</small></div>
+          {member.role === 'owner' ? <span className="member-role-label">Owner</span> : <select className="field member-role-select" aria-label="Member role" value={member.role} disabled={!canManage || workingId === member.id} onChange={(event) => void updateMember(member, event.target.value as Organization['role'])}>
+            {currentRole === 'owner' && <option value="administrator">Administrator</option>}
+            <option value="editor">Editor</option><option value="viewer">Viewer</option>
+          </select>}
+          {canManage && <button className="member-remove" type="button" disabled={workingId === member.id} onClick={() => void removeMember(member)}>Remove</button>}
+        </div>;
+      })}
+      {error && <p className="form-error">{error}</p>}
+      <button className="text-action" type="button" onClick={onClose}>Done</button>
+    </div>
+  </Modal>;
 }
 
 function InvitationModal({ organizationId, canInviteAdministrators, onClose }: { organizationId: string; canInviteAdministrators: boolean; onClose: () => void }) {
