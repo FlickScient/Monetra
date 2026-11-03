@@ -4,6 +4,7 @@ import { Activity, AlertTriangle, Calculator, CheckCircle2, ClipboardCheck, Ligh
 
 type WalletRecord = { id: string; name: string; walletType: string; currentBalanceMinor: number; currency: string };
 type TransactionRecord = { id: string; transactionType: 'income' | 'expense' | 'transfer'; walletId: string; amountMinor: number; description: string; occurredAt: string };
+const localDateInput = (date: Date) => { const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; };
 const money = (minor: number) => new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(Math.round(minor / 100));
 const minor = (value: string) => { const n = Number(value); return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0; };
 
@@ -63,7 +64,7 @@ export function FinancialIntelligenceView({ wallets, transactions, monthlyIncome
   const [goalName, setGoalName] = useState('Emergency fund');
   const [target, setTarget] = useState('');
   const [saved, setSaved] = useState('');
-  const [targetDate, setTargetDate] = useState(() => new Date(now.getFullYear(), now.getMonth() + 6, 1).toISOString().slice(0, 10));
+  const [targetDate, setTargetDate] = useState(() => localDateInput(new Date(now.getFullYear(), now.getMonth() + 6, 1)));
   const months = Math.max(1, Math.ceil((new Date(targetDate + 'T12:00:00').getTime() - now.getTime()) / 2629800000));
   const goalGap = Math.max(0, minor(target) - minor(saved));
 

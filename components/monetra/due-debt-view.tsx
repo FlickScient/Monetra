@@ -8,7 +8,8 @@ type Entry = { id: string; direction: Direction; person: string; note: string; p
 const taka = (minor: number) => new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(Math.round(minor / 100));
 const toMinor = (value: string) => { const n = Number(value); return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0; };
 const outstanding = (entry: Entry) => Math.max(0, entry.principal - entry.repayments.reduce((sum, payment) => sum + payment.amount, 0));
-const today = () => new Date().toISOString().slice(0, 10);
+const localDate = (date = new Date()) => { const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; };
+const today = () => localDate();
 
 export function DueDebtView() {
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -31,7 +32,7 @@ export function DueDebtView() {
   const totalReceivable = receivables.reduce((sum, e) => sum + outstanding(e), 0);
   const totalPayable = payables.reduce((sum, e) => sum + outstanding(e), 0);
   const overdue = entries.filter(e => outstanding(e) > 0 && e.dueDate && e.dueDate < today());
-  const upcoming = entries.filter(e => outstanding(e) > 0 && e.dueDate && e.dueDate >= today() && e.dueDate <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
+  const upcoming = entries.filter(e => outstanding(e) > 0 && e.dueDate && e.dueDate >= today() && e.dueDate <= localDate(new Date(Date.now() + 7 * 86400000)));
   const history = entries.flatMap(e => e.repayments.map(p => ({ ...p, person: e.person, direction: e.direction, entryNote: e.note }))).sort((a, b) => b.date.localeCompare(a.date));
   const visible = useMemo(() => entries.filter(e => (filter === 'all' || e.direction === filter) && (e.person + ' ' + e.note).toLowerCase().includes(search.toLowerCase())), [entries, filter, search]);
   const selectedRepayEntry = entries.find(entry => entry.id === repayId);
@@ -39,7 +40,7 @@ export function DueDebtView() {
   function createEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!person.trim() || !toMinor(principal)) { setError('Add a person or business name and a valid amount.'); return; }
-    setEntries(current => [{ id: crypto.randomUUID(), direction, person: person.trim(), note: note.trim(), principal: toMinor(principal), rate: Math.max(0, Number(rate) || 0), dueDate, createdAt: today(), repayments: [] }, ...current]);
+    setEntries(current => [{ id: crypto.randomUUID(), direction, person: person.trim(), note: note.trim(), principal: toMinor(principal), rate: Math.max(0, Number(rate) || 0), dueDate, createdAt: localDate(), repayments: [] }, ...current]);
     setPerson(''); setNote(''); setPrincipal(''); setRate('0'); setDueDate(''); setError(''); setShowCreate(false);
   }
   function addRepayment(event: FormEvent<HTMLFormElement>) {
@@ -47,7 +48,7 @@ export function DueDebtView() {
     const amount = toMinor(repayAmount);
     const entry = entries.find(e => e.id === repayId);
     if (!entry || !amount || amount > outstanding(entry)) { setError('Enter a repayment greater than zero and no more than the outstanding principal.'); return; }
-    setEntries(current => current.map(e => e.id === repayId ? { ...e, repayments: [...e.repayments, { id: crypto.randomUUID(), amount, date: today(), note: repayNote.trim() }] } : e));
+    setEntries(current => current.map(e => e.id === repayId ? { ...e, repayments: [...e.repayments, { id: crypto.randomUUID(), amount, date: localDate(), note: repayNote.trim() }] } : e));
     setRepayAmount(''); setRepayNote(''); setRepayId(''); setError('');
   }
 
