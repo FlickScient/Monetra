@@ -8,7 +8,7 @@ const localDateInput = (date: Date) => { const year = date.getFullYear(); const 
 const money = (minor: number) => new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(Math.round(minor / 100));
 const minor = (value: string) => { const n = Number(value); return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0; };
 
-type DebtInput = { name: string; balance: number; rate: number };
+type DebtInput = { id: string; name: string; balance: number; rate: number };
 function estimatePayoff(order: DebtInput[], monthlyBudget: number): { months: number | null; interest: number; reason?: string } {
   const balances = order.map(debt => ({ ...debt, interestDue: 0 }));
   if (!balances.length || monthlyBudget <= 0) return { months: null, interest: 0, reason: 'Enter balances and a monthly budget.' };
@@ -25,7 +25,7 @@ function estimatePayoff(order: DebtInput[], monthlyBudget: number): { months: nu
       interestPaid += paid;
     }
     for (const debt of order) {
-      const current = balances.find(item => item.name === debt.name);
+      const current = balances.find(item => item.id === debt.id);
       if (!current || remaining <= 0) continue;
       const principal = Math.min(remaining, current.balance);
       current.balance -= principal;
@@ -65,7 +65,9 @@ export function FinancialIntelligenceView({ wallets, transactions, monthlyIncome
   const [target, setTarget] = useState('');
   const [saved, setSaved] = useState('');
   const [targetDate, setTargetDate] = useState(() => localDateInput(new Date(now.getFullYear(), now.getMonth() + 6, 1)));
-  const months = Math.max(1, Math.ceil((new Date(targetDate + 'T12:00:00').getTime() - now.getTime()) / 2629800000));
+  const targetTimestamp = targetDate ? new Date(targetDate + 'T12:00:00').getTime() : Number.NaN;
+  const goalDateValid = Number.isFinite(targetTimestamp) && targetTimestamp > now.getTime();
+  const months = goalDateValid ? Math.max(1, Math.ceil((targetTimestamp - now.getTime()) / 2629800000)) : 0;
   const goalGap = Math.max(0, minor(target) - minor(saved));
 
   const [walletId, setWalletId] = useState(wallets[0]?.id || '');
@@ -76,7 +78,7 @@ export function FinancialIntelligenceView({ wallets, transactions, monthlyIncome
   const [aName, setAName] = useState('Debt A'), [aBalance, setABalance] = useState(''), [aRate, setARate] = useState('');
   const [bName, setBName] = useState('Debt B'), [bBalance, setBBalance] = useState(''), [bRate, setBRate] = useState('');
   const [budget, setBudget] = useState('');
-  const debts = [{ name: aName || 'Debt A', balance: minor(aBalance), rate: Number(aRate) || 0 }, { name: bName || 'Debt B', balance: minor(bBalance), rate: Number(bRate) || 0 }].filter(d => d.balance > 0);
+  const debts = [{ id: 'debt-a', name: aName || 'Debt A', balance: minor(aBalance), rate: Math.max(0, Math.min(100, Number(aRate) || 0)) }, { id: 'debt-b', name: bName || 'Debt B', balance: minor(bBalance), rate: Math.max(0, Math.min(100, Number(bRate) || 0)) }].filter(d => d.balance > 0);
   const snowball = [...debts].sort((a, b) => a.balance - b.balance);
   const avalanche = [...debts].sort((a, b) => b.rate - a.rate);
   const snowballEstimate = estimatePayoff(snowball, minor(budget));
@@ -118,7 +120,7 @@ export function FinancialIntelligenceView({ wallets, transactions, monthlyIncome
       </Card>
       <Card icon={<Target size={19} />} eyebrow="FLEXIBLE SAVING PLAN" title="Adaptive Goals" description="Calculate the monthly pace needed to reach a target.">
         <div className="intelligence-form-grid"><Field label="Goal name" type="text" suffix="" value={goalName} onChange={setGoalName} /><Field label="Target date" type="date" suffix="" value={targetDate} onChange={setTargetDate} /><Field label="Target amount" value={target} onChange={setTarget} /><Field label="Already saved" value={saved} onChange={setSaved} /></div>
-        <div className="scenario-result"><span>{goalName || 'Your goal'} · {months} months</span><strong>{money(Math.ceil(goalGap / months))} / month</strong></div><p className="intelligence-disclaimer">{goalGap ? 'Planning calculation only; goal is not saved to your account yet.' : 'The amount entered already covers this target.'}</p>
+        <div className="scenario-result"><span>{goalName || 'Your goal'} · {goalDateValid ? `${months} months` : 'Choose a future date'}</span><strong>{goalDateValid ? `${money(Math.ceil(goalGap / months))} / month` : '—'}</strong></div><p className="intelligence-disclaimer">{!goalDateValid ? 'Choose a valid future target date to calculate your monthly pace.' : goalGap ? 'Planning calculation only; goal is not saved to your account yet.' : 'The amount entered already covers this target.'}</p>
       </Card>
       <Card icon={<ClipboardCheck size={19} />} eyebrow="CASH CONTROL" title="Cash Reconciliation" description="Compare the recorded wallet balance with the amount counted.">
         {wallets.length ? <><label className="intelligence-field"><span>Wallet to reconcile</span><select value={walletId} onChange={e => { setWalletId(e.target.value); setCounted(''); }}>{wallets.map(w => <option key={w.id} value={w.id}>{w.name} · {w.currency}</option>)}</select></label><div className="intelligence-mini-stats"><span>Recorded balance <b>{money(Number(wallet?.currentBalanceMinor || 0))}</b></span></div><Field label="Actual counted balance" value={counted} onChange={setCounted} />{counted !== '' && <div className={'intelligence-status ' + (variance === 0 ? 'positive' : 'warning')}>{variance === 0 ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{variance === 0 ? 'Balances match' : (variance > 0 ? 'Surplus of ' : 'Shortage of ') + money(Math.abs(variance))}</div>}</> : <div className="intelligence-empty"><Wallet size={18} />Add a wallet to reconcile a balance.</div>}
