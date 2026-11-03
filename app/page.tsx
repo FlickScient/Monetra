@@ -5,10 +5,11 @@ import {
   ArrowDownLeft, ArrowUpRight, BarChart3, Bell, ChevronRight, CreditCard,
   Home, Moon, Plus, Receipt, Search, Sun, WalletCards, X, ArrowRight,
   CircleHelp, Sparkles, TrendingUp, ShieldCheck, Menu, Landmark,
-  HandCoins, BrainCircuit, Settings as SettingsIcon,
+  HandCoins, Settings as SettingsIcon,
 } from 'lucide-react';
 import { useUser, UserButton } from '@clerk/nextjs';
 import { DueDebtView, SettingsView, VaultView } from '@/components/monetra/module-views';
+import { FiscusMark } from '@/components/monetra/fiscus-mark';
 
 type WalletType = 'cash' | 'bkash' | 'nagad' | 'rocket' | 'bank' | 'savings' | 'debit_card' | 'credit_card' | 'custom';
 type TransactionType = 'income' | 'expense' | 'transfer';
@@ -135,7 +136,7 @@ export default function HomePage() {
     { key: 'wallets' as const, label: 'Wallets', icon: WalletCards },
     { key: 'transactions' as const, label: 'Transactions', icon: Receipt },
     { key: 'due-debt' as const, label: 'Due & Debt', icon: HandCoins },
-    { key: 'vault' as const, label: 'VAULT AI', icon: BrainCircuit },
+    { key: 'vault' as const, label: 'Fiscus A.I.', icon: FiscusMark },
     { key: 'settings' as const, label: 'Settings', icon: SettingsIcon },
   ];
 

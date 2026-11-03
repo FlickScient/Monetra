@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { FiscusMark } from '@/components/monetra/fiscus-mark';
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  BrainCircuit,
   CalendarClock,
   CheckCircle2,
   CircleHelp,
@@ -103,13 +103,13 @@ export function VaultView() {
 
   return (
     <div className="page-stack module-page">
-      <ModuleIntro eyebrow="MONETRA INTELLIGENCE" title="VAULT AI" description="A clearer understanding of your money, backed by your actual records." icon={<BrainCircuit size={22} />} />
+      <ModuleIntro eyebrow="MONETRA INTELLIGENCE" title="Fiscus A.I." description="A clearer understanding of your money, backed by your actual records." icon={<FiscusMark size={34} />} />
       <section className="vault-welcome-card">
-        <div className="vault-welcome-orb"><BrainCircuit size={27} /></div>
+        <div className="vault-welcome-orb"><FiscusMark size={42} /></div>
         <div>
           <p className="eyebrow">YOUR FINANCIAL INTELLIGENCE</p>
           <h2>Ask better questions about your money.</h2>
-          <p>VAULT is being designed to analyze your authorized Personal, Family, Business, and Due & Debt records—with workspace-aware answers and transparent calculations.</p>
+          <p>Fiscus A.I. is being designed to analyze your authorized Personal, Family, Business, and Due & Debt records—with workspace-aware answers and transparent calculations.</p>
         </div>
         <div className="vault-security-note"><LockKeyhole size={15} /><span>Private workspace data</span></div>
       </section>
@@ -125,7 +125,7 @@ export function VaultView() {
           ))}
         </div>
         <label className="vault-composer">
-          <span className="sr-only">Your question for VAULT AI</span>
+          <span className="sr-only">Your question for Fiscus A.I.</span>
           <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask about your finances…" rows={3} />
           <button type="button" disabled aria-label="Send question"><Send size={17} /></button>
         </label>
