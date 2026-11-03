@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/db';
 import { wallets, transactions, categories } from '@/db/schema';
-import { eq, sql, and, desc } from 'drizzle-orm';
+import { eq, sql, and, desc, gte } from 'drizzle-orm';
 
 export async function GET() {
   const { userId } = await auth();
@@ -77,8 +77,11 @@ export async function POST(req: Request) {
       }
 
       const isCreditCard = wallet.walletType === 'credit_card';
-      const increasesBalance =
-        transactionType === 'income' || (transactionType === 'expense' && isCreditCard);
+      // Credit-card balances represent liabilities: purchases add debt, refunds reduce it.
+      const increasesBalance = isCreditCard
+        ? transactionType === 'expense'
+        : transactionType === 'income';
+      const decreasesBalance = !increasesBalance;
       const delta = increasesBalance ? amountMinor : -amountMinor;
 
       const [updatedWallet] = await tx
@@ -87,8 +90,16 @@ export async function POST(req: Request) {
           currentBalanceMinor: sql`${wallets.currentBalanceMinor} + ${delta}`,
           updatedAt: new Date(),
         })
-        .where(and(eq(wallets.id, walletId), eq(wallets.userId, userId)))
+        .where(
+          and(
+            eq(wallets.id, walletId),
+            eq(wallets.userId, userId),
+            ...(decreasesBalance ? [gte(wallets.currentBalanceMinor, amountMinor)] : []),
+          ),
+        )
         .returning();
+
+      if (!updatedWallet) throw new Error('INSUFFICIENT_FUNDS');
 
       const [txn] = await tx
         .insert(transactions)
@@ -113,6 +124,9 @@ export async function POST(req: Request) {
     }
     if (error instanceof Error && error.message === 'INVALID_CATEGORY') {
       return NextResponse.json({ error: 'Category not found or does not match transaction type' }, { status: 400 });
+    }
+    if (error instanceof Error && error.message === 'INSUFFICIENT_FUNDS') {
+      return NextResponse.json({ error: 'Insufficient funds' }, { status: 400 });
     }
     return NextResponse.json({ error: 'Unable to create transaction' }, { status: 500 });
   }
