@@ -60,13 +60,23 @@ export async function POST(req: Request) {
           .where(and(eq(invitations.id, invitation.id), isNull(invitations.acceptedAt), gt(invitations.expiresAt, now)))
           .returning({ id: invitations.id });
 
-        if (!claimed) throw new Error('INVITATION_INVALID');
-
-        await tx.insert(organizationMembers).values({
-          organizationId: invitation.organizationId,
-          userId: user.id,
-          role: invitation.role,
-        }).onConflictDoNothing();
+        if (!claimed) {
+          const [existingMembership] = await tx
+            .select({ id: organizationMembers.id })
+            .from(organizationMembers)
+            .where(and(
+              eq(organizationMembers.organizationId, invitation.organizationId),
+              eq(organizationMembers.userId, user.id),
+            ))
+            .limit(1);
+          if (!existingMembership) throw new Error('INVITATION_INVALID');
+        } else {
+          await tx.insert(organizationMembers).values({
+            organizationId: invitation.organizationId,
+            userId: user.id,
+            role: invitation.role,
+          }).onConflictDoNothing();
+        }
       }
 
       const [organization] = await tx
