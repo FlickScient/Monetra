@@ -112,8 +112,8 @@ export async function getOrganizationContext(request?: Request): Promise<Organiz
 
     let databaseDiagnostics: unknown;
     try {
-      const [identity] = await db.execute(sql`select current_database() as database_name, current_schema() as current_schema, current_schemas(true) as search_path, to_regclass('public.organization_members')::text as organization_members_table, to_regclass('public.organizations')::text as organizations_table`);
-      databaseDiagnostics = identity;
+      const diagnosticResult = await db.execute(sql`select current_database() as database_name, current_schema() as current_schema, current_schemas(true) as search_path, to_regclass('public.organization_members')::text as organization_members_table, to_regclass('public.organizations')::text as organizations_table`);
+      databaseDiagnostics = diagnosticResult.rows[0] ?? null;
     } catch (diagnosticError) {
       databaseDiagnostics = {
         message: diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError),
