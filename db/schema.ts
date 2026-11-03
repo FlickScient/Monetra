@@ -24,6 +24,22 @@ export const organizationMembers = pgTable('organization_members', {
   userIdx: index('organization_members_user_idx').on(table.userId),
 }));
 
+
+export const invitations = pgTable('invitations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  role: text('role').notNull(),
+  tokenHash: text('token_hash').notNull(),
+  invitedBy: text('invited_by').notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  acceptedAt: timestamp('accepted_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  tokenHashUnique: uniqueIndex('invitations_token_hash_unique').on(table.tokenHash),
+  organizationIdx: index('invitations_organization_idx').on(table.organizationId),
+}));
+
 export const profiles = pgTable('profiles', {
   id: text('id').primaryKey(), // Clerk user id
   displayName: text('display_name'),
