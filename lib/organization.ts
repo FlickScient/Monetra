@@ -7,7 +7,7 @@ export type OrganizationRole = 'owner' | 'administrator' | 'editor' | 'viewer';
 
 export type OrganizationContext =
   | { ok: true; userId: string; organizationId: string; role: OrganizationRole }
-  | { ok: false; status: 401 | 403; error: string };
+  | { ok: false; status: 401 | 403 | 503; error: string };
 
 const validRoles = new Set<OrganizationRole>(['owner', 'administrator', 'editor', 'viewer']);
 
@@ -133,8 +133,8 @@ export async function getOrganizationContext(request?: Request): Promise<Organiz
 
     return {
       ok: false,
-      status: 403,
-      error: 'Organization access is not available',
+      status: 503,
+      error: 'Finance database is unavailable. Check the DATABASE_URL and apply the pending Drizzle migrations.',
     };
   }
 }
