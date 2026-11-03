@@ -35,7 +35,7 @@ The diagnostic never prints the connection URL. It checks connectivity and the t
 
 ## 4. Apply the existing migration
 
-The current migration is `drizzle/0000_organization_foundation.sql`. It creates the organization tables and backfills existing finance rows into each user's Personal organization. It assumes the pre-existing finance tables (`profiles`, `wallets`, `categories`, `transactions`, `ledger_accounts`, and `ledger_entries`) already exist.
+The migrations are `drizzle/0000_organization_foundation.sql` (workspace ownership foundation) and `drizzle/0001_goals_due_debt.sql` (persistent savings goals and Due & Debt). It creates the organization tables and backfills existing finance rows into each user's Personal organization. It assumes the pre-existing finance tables (`profiles`, `wallets`, `categories`, `transactions`, `ledger_accounts`, and `ledger_entries`) already exist.
 
 After a backup and target confirmation:
 
