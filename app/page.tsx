@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownLeft, ArrowUpRight, BarChart3, Bell, ChevronRight, CreditCard,
   Home, Moon, Plus, Receipt, Search, Sun, WalletCards, X, ArrowRight,
@@ -51,6 +51,7 @@ export default function HomePage() {
   const [dark, setDark] = useState(false);
   const [notice, setNotice] = useState('');
   const [loadError, setLoadError] = useState('');
+  const financeRequestId = useRef(0);
 
   useEffect(() => {
     const stored = localStorage.getItem('monetra-theme');
@@ -85,28 +86,34 @@ export default function HomePage() {
   }
 
   async function loadFinanceData(organizationId = activeOrganizationId) {
+    const requestId = ++financeRequestId.current;
     setLoading(true);
     setLoadError('');
+    setWallets([]);
+    setCategories([]);
+    setTransactions([]);
+    setHasMoreTransactions(false);
+    setSummary({ incomeMinor: 0, expenseMinor: 0, categorySpend: [] });
     try {
       const now = new Date();
       const localMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const localNextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      const summaryUrl = `/api/transactions/summary?from=${encodeURIComponent(localMonthStart.toISOString())}&to=${encodeURIComponent(localNextMonthStart.toISOString())}`;
+      const summaryUrl = '/api/transactions/summary?from=' + encodeURIComponent(localMonthStart.toISOString()) + '&to=' + encodeURIComponent(localNextMonthStart.toISOString());
       const headers: Record<string, string> = {};
       if (organizationId) headers['x-organization-id'] = organizationId;
       const [walletRes, categoryRes, transactionRes, summaryRes] = await Promise.all([
         fetch('/api/wallets', { headers }), fetch('/api/categories', { headers }), fetch('/api/transactions?limit=50&offset=0', { headers }), fetch(summaryUrl, { headers }),
       ]);
       if (!walletRes.ok || !categoryRes.ok || !transactionRes.ok || !summaryRes.ok) throw new Error('Some finance data could not be loaded.');
-      const [walletData, categoryData, transactionData, summaryData] = await Promise.all([
-        walletRes.json(), categoryRes.json(), transactionRes.json(), summaryRes.json(),
-      ]);
+      const [walletData, categoryData, transactionData, summaryData] = await Promise.all([walletRes.json(), categoryRes.json(), transactionRes.json(), summaryRes.json()]);
+      if (requestId !== financeRequestId.current) return;
       setWallets(walletData); setCategories(categoryData); setTransactions(transactionData.slice(0, 50)); setHasMoreTransactions(transactionData.length > 50); setSummary(summaryData);
     } catch {
-      setLoadError('We couldn’t sync your finance data. Check your connection and try again.');
-    } finally { setLoading(false); }
+      if (requestId === financeRequestId.current) setLoadError('We couldn’t sync your finance data. Check your connection and try again.');
+    } finally {
+      if (requestId === financeRequestId.current) setLoading(false);
+    }
   }
-
   async function loadMoreTransactions() {
     try {
       const response = await fetch(`/api/transactions?limit=50&offset=${transactions.length}`, { headers: { 'x-organization-id': activeOrganizationId } });
