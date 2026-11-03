@@ -3,11 +3,8 @@
 import { useState } from 'react';
 import { FiscusMark } from '@/components/monetra/fiscus-mark';
 import {
-  ArrowDownLeft,
-  ArrowUpRight,
   Activity,
   CalendarClock,
-  CheckCircle2,
   CircleHelp,
   HandCoins,
   LockKeyhole,
@@ -15,7 +12,6 @@ import {
   Moon,
   Send,
   ShieldCheck,
-  Sparkles,
   Sun,
   Wallet,
 } from 'lucide-react';
@@ -35,62 +31,6 @@ function ModuleIntro({ eyebrow, title, description, icon }: { eyebrow: string; t
 
 function ModuleStatus({ children }: { children: React.ReactNode }) {
   return <div className="module-status"><span className="module-status-dot" />{children}</div>;
-}
-
-export function DueDebtView() {
-  return (
-    <div className="page-stack module-page">
-      <ModuleIntro eyebrow="YOUR SEPARATE LEDGER" title="Due & Debt" description="Keep track of money lent, money borrowed, and every repayment." icon={<HandCoins size={22} />} />
-      <div className="module-notice">
-        <ShieldCheck size={18} />
-        <p><strong>Independent from your everyday finances.</strong><span>Due & Debt balances will not change wallet balances, total assets, income, or ordinary expenses.</span></p>
-      </div>
-      <section className="module-summary-grid">
-        <article className="module-summary-card">
-          <span className="module-summary-icon receivable"><ArrowDownLeft size={18} /></span>
-          <span className="module-summary-label">MONEY OWED TO YOU</span>
-          <strong>—</strong>
-          <small>Receivables · awaiting records</small>
-        </article>
-        <article className="module-summary-card">
-          <span className="module-summary-icon payable"><ArrowUpRight size={18} /></span>
-          <span className="module-summary-label">MONEY YOU OWE</span>
-          <strong>—</strong>
-          <small>Payables · awaiting records</small>
-        </article>
-        <article className="module-summary-card">
-          <span className="module-summary-icon neutral"><CalendarClock size={18} /></span>
-          <span className="module-summary-label">UPCOMING & OVERDUE</span>
-          <strong>—</strong>
-          <small>Installments · awaiting records</small>
-        </article>
-      </section>
-      <div className="module-two-column">
-        <section className="surface-card module-ledger-card">
-          <div className="section-heading">
-            <div><p className="eyebrow">RECEIVABLES</p><h2>People who owe you</h2><p className="section-subtitle">Track money you have lent or are due to collect.</p></div>
-            <span className="section-icon"><ArrowDownLeft size={18} /></span>
-          </div>
-          <div className="module-empty-state"><span><HandCoins size={20} /></span><strong>Your receivables will live here</strong><p>People, original amounts, collected amounts, and remaining balances will be organized in one place.</p></div>
-        </section>
-        <section className="surface-card module-ledger-card">
-          <div className="section-heading">
-            <div><p className="eyebrow">PAYABLES</p><h2>People you owe</h2><p className="section-subtitle">Keep borrowed money and repayment commitments visible.</p></div>
-            <span className="section-icon"><ArrowUpRight size={18} /></span>
-          </div>
-          <div className="module-empty-state"><span><Wallet size={20} /></span><strong>Your payables will live here</strong><p>Track lenders, outstanding principal, interest, installments, and due dates.</p></div>
-        </section>
-      </div>
-      <section className="surface-card module-history-card">
-        <div className="section-heading">
-          <div><p className="eyebrow">THE PAPER TRAIL</p><h2>Repayment history</h2><p className="section-subtitle">Every partial payment, collection, and settlement in chronological order.</p></div>
-          <span className="section-icon"><CalendarClock size={18} /></span>
-        </div>
-        <div className="module-history-empty"><CheckCircle2 size={17} /><span>Repayment history will appear when the Due & Debt data connection is ready.</span></div>
-      </section>
-      <ModuleStatus>Interface foundation ready · Database and API integration pending</ModuleStatus>
-    </div>
-  );
 }
 
 const suggestedPrompts = [
