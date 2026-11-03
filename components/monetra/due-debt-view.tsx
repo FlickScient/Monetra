@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ArrowDownLeft, ArrowUpRight, CalendarClock, Check, CirclePlus, HandCoins, History, Plus, Search, ShieldCheck, Trash2, Wallet, X } from 'lucide-react';
 
 type Direction = 'receivable' | 'payable';
@@ -11,8 +11,25 @@ const outstanding = (entry: Entry) => Math.max(0, entry.principal - entry.repaym
 const localDate = (date = new Date()) => { const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; };
 const today = () => localDate();
 
-export function DueDebtView() {
+const dueDebtStorageKey = (workspaceId: string) => `monetra-due-debt:${workspaceId}`;
+
+export function DueDebtView({ workspaceId }: { workspaceId: string }) {
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [storageLoaded, setStorageLoaded] = useState(false);
+  useEffect(() => {
+    setStorageLoaded(false);
+    try {
+      const raw = window.localStorage.getItem(dueDebtStorageKey(workspaceId));
+      const parsed = raw ? JSON.parse(raw) : [];
+      setEntries(Array.isArray(parsed) ? parsed : []);
+    } catch { setEntries([]); }
+    setStorageLoaded(true);
+  }, [workspaceId]);
+  useEffect(() => {
+    if (!storageLoaded) return;
+    try { window.localStorage.setItem(dueDebtStorageKey(workspaceId), JSON.stringify(entries)); }
+    catch { setError('Could not save this ledger on your device. Check browser storage.'); }
+  }, [entries, storageLoaded, workspaceId]);
   const [direction, setDirection] = useState<Direction>('receivable');
   const [person, setPerson] = useState('');
   const [note, setNote] = useState('');
@@ -78,7 +95,7 @@ export function DueDebtView() {
       <section className="surface-card due-attention"><div className="section-heading"><div><p className="eyebrow">DATE WATCH</p><h2>Upcoming & overdue</h2></div><span className="section-icon"><CalendarClock size={18}/></span></div>{overdue.length+upcoming.length===0?<p className="due-muted">No due dates need attention in the next seven days.</p>:<div className="due-attention-list">{[...overdue,...upcoming].sort((a,b)=>a.dueDate.localeCompare(b.dueDate)).map(e=><div key={e.id}><span><b>{e.person}</b><small>{e.direction==='receivable'?'Collect':'Repay'} · {e.dueDate}</small></span><strong>{taka(outstanding(e))}</strong></div>)}</div>}</section>
       <section className="surface-card due-history"><div className="section-heading"><div><p className="eyebrow">THE PAPER TRAIL</p><h2>Repayment history</h2></div><span className="section-icon"><History size={18}/></span></div>{history.length?<div className="due-attention-list">{history.slice(0,8).map(p=><div key={p.id}><span><b>{p.person}</b><small>{p.direction==='receivable'?'Collected':'Repaid'} · {p.date}</small></span><strong>{taka(p.amount)}</strong></div>)}</div>:<p className="due-muted">Partial repayments and settlements will appear here.</p>}</section>
     </div>
-    <div className="due-integrity-note"><Wallet size={15}/> This is a frontend-only working prototype. Records are held in page memory and reset on refresh; database persistence, interest accounting and API integration are reserved for the backend handoff.</div>
+    <div className="due-integrity-note"><Wallet size={15}/> This ledger is saved locally on this device and isolated by workspace. Cloud sync, shared access, interest accounting and server-side audit history require backend integration.</div>
 
     {showCreate&&<div className="modal-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setShowCreate(false);}}><section className="modal-card due-modal" role="dialog" aria-modal="true" aria-labelledby="due-create-title"><div className="modal-heading"><div><p className="eyebrow">NEW LEDGER ENTRY</p><h2 id="due-create-title">Add a due or debt</h2></div><button className="icon-btn" onClick={()=>setShowCreate(false)} aria-label="Close"><X size={18}/></button></div><form onSubmit={createEntry} className="due-form"><div className="due-direction-picker"><button type="button" className={direction==='receivable'?'active':''} onClick={()=>setDirection('receivable')}><ArrowDownLeft size={16}/> Someone owes me</button><button type="button" className={direction==='payable'?'active':''} onClick={()=>setDirection('payable')}><ArrowUpRight size={16}/> I owe someone</button></div><label>Person or business<input autoFocus value={person} onChange={e=>setPerson(e.target.value)} placeholder="e.g. Rahim / ABC Traders" /></label><label>Original principal (৳)<input type="number" min="0.01" step="0.01" value={principal} onChange={e=>setPrincipal(e.target.value)} placeholder="0.00"/></label><div className="due-form-row"><label>Annual interest (%) · record only<input type="number" min="0" step="0.01" value={rate} onChange={e=>setRate(e.target.value)} /></label><label>Due date<input type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></label></div><p className="due-muted">Interest is stored as a reference only in this prototype; it is not accrued or included in the outstanding balance.</p><label>Note (optional)<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Purpose or reference"/></label>{error&&<p className="due-form-error">{error}</p>}<div className="due-modal-actions"><button type="button" className="secondary-btn" onClick={()=>setShowCreate(false)}>Cancel</button><button type="submit" className="primary-btn"><Check size={15}/> Add record</button></div></form></section></div>}
     {repayId&&selectedRepayEntry&&<div className="modal-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setRepayId('');}}><section className="modal-card due-modal" role="dialog" aria-modal="true" aria-labelledby="due-repay-title"><div className="modal-heading"><div><p className="eyebrow">{selectedRepayEntry.direction==='receivable'?'RECORD A COLLECTION':'RECORD A REPAYMENT'}</p><h2 id="due-repay-title">{selectedRepayEntry.direction==='receivable'?'Record collection':'Record repayment'}</h2></div><button className="icon-btn" onClick={()=>setRepayId('')} aria-label="Close"><X size={18}/></button></div><form onSubmit={addRepayment} className="due-form"><p className="due-muted">Outstanding principal: <strong>{taka(outstanding(selectedRepayEntry))}</strong></p><label>Amount (৳)<input autoFocus type="number" min="0.01" step="0.01" max={outstanding(selectedRepayEntry)/100} value={repayAmount} onChange={e=>setRepayAmount(e.target.value)} placeholder="0.00"/></label><label>Note (optional)<input value={repayNote} onChange={e=>setRepayNote(e.target.value)} placeholder="Cash / bank / partial settlement"/></label>{error&&<p className="due-form-error">{error}</p>}<div className="due-modal-actions"><button type="button" className="secondary-btn" onClick={()=>setRepayId('')}>Cancel</button><button type="submit" className="primary-btn"><Check size={15}/> Save {selectedRepayEntry.direction==='receivable'?'collection':'repayment'}</button></div></form></section></div>}
