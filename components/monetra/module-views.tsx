@@ -94,44 +94,91 @@ export function DueDebtView() {
 
 const suggestedPrompts = [
   'Where did most of my money go this month?',
+  'How much can I safely spend this month?',
   'Compare my Personal and Business cash flow.',
-  'Who owes me the most, and what is overdue?',
+  'Show me recurring expenses that are quietly adding up.',
+  'Who owes me money, and what is overdue?',
 ];
 
-export function VaultView() {
+const insightAreas = [
+  { icon: Wallet, title: 'Cash-flow clarity', detail: 'Income, spending patterns, and upcoming pressure points.' },
+  { icon: CalendarClock, title: 'Forward-looking signals', detail: 'Forecasts, due dates, and safe-to-spend estimates.' },
+  { icon: HandCoins, title: 'Debt intelligence', detail: 'Receivables, payables, repayment pace, and strategy.' },
+];
+
+export function FiscusView() {
   const [draft, setDraft] = useState('');
+  const [scope, setScope] = useState('current');
+  const scopeLabel = scope === 'all'
+    ? 'All workspaces + Due & Debt'
+    : scope === 'current'
+      ? 'Selected workspace'
+      : scope;
 
   return (
-    <div className="page-stack module-page">
-      <ModuleIntro eyebrow="MONETRA INTELLIGENCE" title="Fiscus A.I." description="A clearer understanding of your money, backed by your actual records." icon={<FiscusMark size={34} />} />
-      <section className="vault-welcome-card">
-        <div className="vault-welcome-orb"><FiscusMark size={42} /></div>
-        <div>
-          <p className="eyebrow">YOUR FINANCIAL INTELLIGENCE</p>
-          <h2>Ask better questions about your money.</h2>
-          <p>Fiscus A.I. is being designed to analyze your authorized Personal, Family, Business, and Due & Debt records—with workspace-aware answers and transparent calculations.</p>
+    <div className="page-stack module-page fiscus-page">
+      <ModuleIntro eyebrow="MONETRA INTELLIGENCE" title="Fiscus A.I." description="Your financial co-pilot. Grounded in your records, clear about its reasoning." icon={<FiscusMark size={34} />} />
+
+      <section className="fiscus-hero">
+        <div className="fiscus-hero-top">
+          <div className="fiscus-identity">
+            <span className="fiscus-hero-mark"><FiscusMark size={43} /></span>
+            <div><span className="fiscus-kicker">FISCUS INTELLIGENCE ENGINE</span><h2>Understand the numbers.<br /><em>Make the next move.</em></h2></div>
+          </div>
+          <span className="fiscus-offline"><i /> Backend connection pending</span>
         </div>
-        <div className="vault-security-note"><LockKeyhole size={15} /><span>Private workspace data</span></div>
+        <p className="fiscus-hero-copy">Ask questions across your money life. Fiscus is being built to explain what happened, what may happen next, and which decisions deserve a closer look.</p>
+        <div className="fiscus-principles">
+          <span><ShieldCheck size={14} /> Record-backed answers</span>
+          <span><Activity size={14} /> Transparent calculations</span>
+          <span><LockKeyhole size={14} /> Permission-aware access</span>
+        </div>
       </section>
-      <section className="surface-card vault-chat-card">
-        <div className="vault-chat-heading">
-          <span className="vault-chat-icon"><Sparkles size={17} /></span>
-          <div><strong>Start with a question</strong><small>Example prompts for the finished assistant</small></div>
-          <ModuleStatus>Not connected</ModuleStatus>
-        </div>
-        <div className="vault-suggestions">
-          {suggestedPrompts.map((prompt) => (
-            <button key={prompt} type="button" onClick={() => setDraft(prompt)}>{prompt}<MessageSquareText size={14} /></button>
-          ))}
-        </div>
-        <label className="vault-composer">
-          <span className="sr-only">Your question for Fiscus A.I.</span>
-          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask about your finances…" rows={3} />
-          <button type="button" disabled aria-label="Send question"><Send size={17} /></button>
+
+      <section className="fiscus-scope-bar surface-card">
+        <div className="fiscus-scope-copy"><span className="eyebrow">ANALYSIS SCOPE</span><strong>{scopeLabel}</strong><small>Choose which financial records a future answer may use.</small></div>
+        <label className="fiscus-scope-select"><span className="sr-only">Choose analysis scope</span>
+          <select value={scope} onChange={(event) => setScope(event.target.value)}>
+            <option value="current">Selected workspace</option>
+            <option value="Personal">Personal workspace</option>
+            <option value="Family">Family workspace</option>
+            <option value="Business">Business workspace</option>
+            <option value="all">All workspaces + Due & Debt</option>
+          </select>
         </label>
-        <p className="vault-connection-note"><CircleHelp size={14} /> The interface is ready for integration. No messages are sent or analyzed yet.</p>
       </section>
-      <ModuleStatus>Interface foundation ready · AI service integration pending</ModuleStatus>
+
+      <div className="fiscus-content-grid">
+        <section className="surface-card fiscus-chat-card">
+          <div className="fiscus-section-heading">
+            <div><span className="eyebrow">ASK FISCUS</span><h2>What would you like to know?</h2><p className="section-subtitle">Start with a question. The assistant is not connected yet.</p></div>
+            <span className="fiscus-chat-mark"><FiscusMark size={25} /></span>
+          </div>
+          <div className="fiscus-prompt-grid">
+            {suggestedPrompts.map((prompt) => <button key={prompt} type="button" onClick={() => setDraft(prompt)}>{prompt}<MessageSquareText size={14} /></button>)}
+          </div>
+          <label className="fiscus-composer">
+            <span className="sr-only">Your question for Fiscus A.I.</span>
+            <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask something about your finances…" rows={3} />
+            <span className="fiscus-composer-bottom"><small>Scope: {scopeLabel}</small><button type="button" disabled aria-label="Send question"><Send size={16} /> Send</button></span>
+          </label>
+          <p className="fiscus-honesty-note"><CircleHelp size={14} /> No message is sent, no records are analyzed, and no AI response is generated until the backend is connected.</p>
+        </section>
+
+        <aside className="fiscus-side-stack">
+          <section className="surface-card fiscus-capabilities">
+            <span className="eyebrow">BUILT TO HELP YOU SEE</span><h2>More than a chatbot.</h2>
+            <div className="fiscus-capability-list">
+              {insightAreas.map(({ icon: Icon, title, detail }) => <div key={title}><span><Icon size={16} /></span><div><strong>{title}</strong><small>{detail}</small></div></div>)}
+            </div>
+          </section>
+          <section className="fiscus-trust-card">
+            <div><LockKeyhole size={17} /><strong>Trust before cleverness.</strong></div>
+            <p>Fiscus must separate actual records from estimates, show the period and workspace behind each answer, and never invent missing numbers.</p>
+          </section>
+        </aside>
+      </div>
+      <ModuleStatus>Interface ready · AI service, record retrieval, and response streaming pending</ModuleStatus>
     </div>
   );
 }

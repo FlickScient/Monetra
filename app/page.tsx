@@ -8,7 +8,7 @@ import {
   HandCoins, Settings as SettingsIcon,
 } from 'lucide-react';
 import { useUser, UserButton } from '@clerk/nextjs';
-import { SettingsView, VaultView } from '@/components/monetra/module-views';
+import { FiscusView, SettingsView } from '@/components/monetra/module-views';
 import { DueDebtView } from '@/components/monetra/due-debt-view';
 import { FiscusMark } from '@/components/monetra/fiscus-mark';
 import { FloatingCalculator } from '@/components/monetra/floating-calculator';
@@ -241,7 +241,7 @@ export default function HomePage() {
           {activeView === 'transactions' && <TransactionsView transactions={transactions} wallets={wallets} categories={categories} onAdd={() => setShowTransactionForm(true)} onLoadMore={loadMoreTransactions} hasMore={hasMoreTransactions} />}
           {activeView === 'intelligence' && <FinancialIntelligenceView wallets={wallets} transactions={transactions} monthlyIncomeMinor={monthlyIncome} monthlyExpenseMinor={monthlyExpense} />}
           {activeView === 'due-debt' && <DueDebtView />}
-          {activeView === 'vault' && <VaultView />}
+          {activeView === 'vault' && <FiscusView />}
           {activeView === 'settings' && <SettingsView dark={dark} onToggleTheme={() => setDark((current) => !current)} />}
         </div>
       </div>
