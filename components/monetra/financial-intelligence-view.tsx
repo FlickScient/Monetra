@@ -9,17 +9,17 @@ const minor = (value: string) => { const n = Number(value); return Number.isFini
 
 type DebtInput = { name: string; balance: number; rate: number };
 function estimatePayoff(order: DebtInput[], monthlyBudget: number): { months: number | null; interest: number; reason?: string } {
-  const balances = order.map(debt => ({ ...debt }));
+  const balances = order.map(debt => ({ ...debt, interestDue: 0 }));
   if (!balances.length || monthlyBudget <= 0) return { months: null, interest: 0, reason: 'Enter balances and a monthly budget.' };
   let interestPaid = 0;
   for (let month = 1; month <= 600; month += 1) {
     let interestDue = 0;
-    balances.forEach(debt => { const charge = Math.round(debt.balance * debt.rate / 1200); debt.balance += charge; interestDue += charge; });
+    balances.forEach(debt => { const charge = Math.round(debt.balance * debt.rate / 1200); debt.balance += charge; debt.interestDue = charge; interestDue += charge; });
     if (monthlyBudget <= interestDue) return { months: null, interest: interestPaid + interestDue, reason: 'Budget does not cover monthly interest.' };
     let remaining = monthlyBudget;
     for (const debt of balances) {
-      const charge = Math.round((debt.balance - debt.balance / (1 + debt.rate / 1200)));
-      const paid = Math.min(remaining, charge);
+      const paid = Math.min(remaining, debt.interestDue);
+      debt.balance -= paid;
       remaining -= paid;
       interestPaid += paid;
     }
