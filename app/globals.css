@@ -179,3 +179,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     transition-duration: .01ms !important;
   }
 }
+
+.load-more-btn { display: flex; width: 100%; align-items: center; justify-content: center; gap: 8px; margin: 14px 0 8px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); padding: 12px; color: var(--green); font-size: 10px; font-weight: 750; cursor: pointer; transition: border-color .2s ease, background .2s ease, transform .2s ease; }
+.load-more-btn:hover:not(:disabled) { border-color: color-mix(in srgb, var(--green) 35%, var(--line)); background: var(--green-soft); transform: translateY(-1px); }
+.load-more-btn:disabled { opacity: .6; cursor: wait; }
