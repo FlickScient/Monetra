@@ -86,7 +86,8 @@ export default function HomePage() {
       const localMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const localNextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
       const summaryUrl = `/api/transactions/summary?from=${encodeURIComponent(localMonthStart.toISOString())}&to=${encodeURIComponent(localNextMonthStart.toISOString())}`;
-      const headers = organizationId ? { 'x-organization-id': organizationId } : {};
+      const headers: Record<string, string> = {};
+      if (organizationId) headers['x-organization-id'] = organizationId;
       const [walletRes, categoryRes, transactionRes, summaryRes] = await Promise.all([
         fetch('/api/wallets', { headers }), fetch('/api/categories', { headers }), fetch('/api/transactions?limit=50&offset=0', { headers }), fetch(summaryUrl, { headers }),
       ]);
