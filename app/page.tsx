@@ -8,7 +8,8 @@ import {
   HandCoins, Settings as SettingsIcon,
 } from 'lucide-react';
 import { useUser, UserButton } from '@clerk/nextjs';
-import { DueDebtView, SettingsView, VaultView } from '@/components/monetra/module-views';
+import { SettingsView, VaultView } from '@/components/monetra/module-views';
+import { DueDebtView } from '@/components/monetra/due-debt-view';
 import { FiscusMark } from '@/components/monetra/fiscus-mark';
 import { FloatingCalculator } from '@/components/monetra/floating-calculator';
 import { FinancialIntelligenceView } from '@/components/monetra/financial-intelligence-view';
