@@ -24,6 +24,22 @@ CREATE TABLE organization_members (
 
 CREATE INDEX organization_members_user_idx ON organization_members(user_id);
 --> statement-breakpoint
+CREATE TABLE invitations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  email text NOT NULL,
+  role text NOT NULL CHECK (role IN ('administrator', 'editor', 'viewer')),
+  token_hash text NOT NULL,
+  invited_by text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  accepted_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX invitations_token_hash_unique ON invitations(token_hash);
+--> statement-breakpoint
+CREATE INDEX invitations_organization_idx ON invitations(organization_id);
+--> statement-breakpoint
 
 -- Build a stable one-to-one mapping from every existing Clerk user to a
 -- Personal organization before adding NOT NULL organization ownership.
