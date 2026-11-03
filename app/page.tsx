@@ -171,7 +171,7 @@ export default function HomePage() {
 
         <div className="content-wrap">
           {notice && <div className="notice-bar"><span className="status-dot" />{notice}<button onClick={() => setNotice('')} aria-label="Dismiss"><X size={15} /></button></div>}
-          {loadError && <div className="error-bar">{loadError}<button onClick={() => void loadFinanceData()}>Retry</button></div>}
+          {loadError && <div className="error-bar">{loadError}<button onClick={() => void (activeOrganizationId ? loadFinanceData() : initializeWorkspace())}>Retry</button></div>}
 
           {activeView === 'overview' && (
             <div className="page-stack">
