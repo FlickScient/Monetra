@@ -52,3 +52,7 @@ export async function getOrganizationContext(request?: Request): Promise<Organiz
     return { ok: false, status: 403, error: 'Organization access is not available' };
   }
 }
+
+export function canWriteOrganization(role: OrganizationRole): boolean {
+  return role === 'owner' || role === 'administrator' || role === 'editor';
+}
