@@ -77,7 +77,13 @@ export function FloatingCalculator() {
 
   function append(value: string) {
     setExpression((current) => {
+      if (value === '.') {
+        const currentNumber = current.split(/[+\-*/()%]/).pop() || '';
+        if (currentNumber.includes('.')) return current;
+        if (!current || /[+\-*/(]$/.test(current)) return current + '0.';
+      }
       if (/[+\-*/]$/.test(current) && /[+\-*/]/.test(value)) return current.slice(0, -1) + value;
+      if (value === '%' && (!current || /[+\-*/.(]$/.test(current))) return current;
       return current + value;
     });
     setCopied(false);
