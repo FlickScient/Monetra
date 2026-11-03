@@ -3,38 +3,82 @@ import { auth } from '@clerk/nextjs/server';
 import { db } from '@/db';
 import { wallets } from '@/db/schema';
 
+const WALLET_TYPES = new Set([
+  'cash',
+  'bkash',
+  'nagad',
+  'rocket',
+  'bank',
+  'savings',
+  'debit_card',
+  'credit_card',
+  'custom',
+]);
+
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { name, walletType, currency, openingBalanceMinor } = await req.json();
-
-  if (!name || !walletType) {
-    return NextResponse.json({ error: 'name and walletType required' }, { status: 400 });
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const [wallet] = await db
-    .insert(wallets)
-    .values({
-      userId,
-      name,
-      walletType,
-      currency: currency ?? 'BDT',
-      openingBalanceMinor: openingBalanceMinor ?? 0,
-      currentBalanceMinor: openingBalanceMinor ?? 0,
-    })
-    .returning();
+  const { name, walletType, currency = 'BDT', openingBalanceMinor = 0 } = body;
 
-  return NextResponse.json(wallet);
+  if (
+    typeof name !== 'string' ||
+    !name.trim() ||
+    name.trim().length > 80 ||
+    typeof walletType !== 'string' ||
+    !WALLET_TYPES.has(walletType)
+  ) {
+    return NextResponse.json({ error: 'Valid name and walletType are required' }, { status: 400 });
+  }
+
+  if (
+    typeof currency !== 'string' ||
+    !/^[A-Z]{3}$/.test(currency) ||
+    typeof openingBalanceMinor !== 'number' ||
+    !Number.isSafeInteger(openingBalanceMinor) ||
+    openingBalanceMinor < 0
+  ) {
+    return NextResponse.json({ error: 'Invalid currency or opening balance' }, { status: 400 });
+  }
+
+  try {
+    const [wallet] = await db
+      .insert(wallets)
+      .values({
+        userId,
+        name: name.trim(),
+        walletType,
+        currency,
+        openingBalanceMinor,
+        currentBalanceMinor: openingBalanceMinor,
+      })
+      .returning();
+
+    return NextResponse.json(wallet, { status: 201 });
+  } catch {
+    return NextResponse.json({ error: 'Unable to create wallet' }, { status: 500 });
+  }
 }
 
 export async function GET() {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const userWallets = await db.query.wallets.findMany({
-    where: (w, { eq }) => eq(w.userId, userId),
-  });
+  try {
+    const userWallets = await db.query.wallets.findMany({
+      where: (w, { eq }) => eq(w.userId, userId),
+      orderBy: (w, { asc }) => asc(w.createdAt),
+    });
 
-  return NextResponse.json(userWallets);
+    return NextResponse.json(userWallets);
+  } catch {
+    return NextResponse.json({ error: 'Unable to load wallets' }, { status: 500 });
+  }
 }
