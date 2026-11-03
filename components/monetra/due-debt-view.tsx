@@ -27,8 +27,8 @@ export function DueDebtView() {
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
 
-  const receivables = entries.filter(e => e.direction === 'receivable');
-  const payables = entries.filter(e => e.direction === 'payable');
+  const receivables = entries.filter(e => e.direction === 'receivable' && outstanding(e) > 0);
+  const payables = entries.filter(e => e.direction === 'payable' && outstanding(e) > 0);
   const totalReceivable = receivables.reduce((sum, e) => sum + outstanding(e), 0);
   const totalPayable = payables.reduce((sum, e) => sum + outstanding(e), 0);
   const overdue = entries.filter(e => outstanding(e) > 0 && e.dueDate && e.dueDate < today());
@@ -44,7 +44,7 @@ export function DueDebtView() {
   function createEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!person.trim() || !toMinor(principal)) { setError('Add a person or business name and a valid amount.'); return; }
-    setEntries(current => [{ id: crypto.randomUUID(), direction, person: person.trim(), note: note.trim(), principal: toMinor(principal), rate: Math.max(0, Number(rate) || 0), dueDate, createdAt: localDate(), repayments: [] }, ...current]);
+    setEntries(current => [{ id: crypto.randomUUID(), direction, person: person.trim(), note: note.trim(), principal: toMinor(principal), rate: Number.isFinite(Number(rate)) ? Math.min(100, Math.max(0, Number(rate))) : 0, dueDate, createdAt: localDate(), repayments: [] }, ...current]);
     setPerson(''); setNote(''); setPrincipal(''); setRate('0'); setDueDate(''); setError(''); setShowCreate(false);
   }
   function deleteEntry(entry: Entry) {
