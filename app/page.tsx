@@ -42,6 +42,17 @@ export default function HomePage() {
   const [showWalletForm, setShowWalletForm] = useState(false);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [dark, setDark] = useState(false);
+
+  useEffect(() => {
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('monetra-theme') : null;
+    const prefersDark = stored ? stored === 'dark' : false;
+    setDark(prefersDark);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark);
+    try { localStorage.setItem('monetra-theme', dark ? 'dark' : 'light'); } catch {}
+  }, [dark]);
   const [notice, setNotice] = useState('');
 
   useEffect(() => {
@@ -74,7 +85,7 @@ export default function HomePage() {
   if (!isLoaded || loading) return <div className="min-h-screen grid place-items-center bg-background text-foreground">Loading your secure workspace...</div>;
 
   return (
-    <main className={dark ? 'dark min-h-screen' : 'min-h-screen'}>
+    <main className="min-h-screen">
       <header className="flex items-center justify-between px-5 pt-6 pb-4 md:px-10">
         <div className="flex items-center gap-3">
           <UserButton afterSignOutUrl="/" />
