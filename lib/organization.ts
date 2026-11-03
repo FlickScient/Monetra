@@ -92,6 +92,24 @@ export async function getOrganizationContext(request?: Request): Promise<Organiz
       role: membership.role as OrganizationRole,
     };
   } catch (error) {
+    const cause =
+      typeof error === 'object' && error !== null && 'cause' in error
+        ? error.cause
+        : undefined;
+
+    const causeDetails =
+      typeof cause === 'object' && cause !== null
+        ? {
+            name: 'name' in cause ? cause.name : undefined,
+            message: 'message' in cause ? cause.message : String(cause),
+            code: 'code' in cause ? cause.code : undefined,
+            detail: 'detail' in cause ? cause.detail : undefined,
+            hint: 'hint' in cause ? cause.hint : undefined,
+          }
+        : cause instanceof Error
+          ? { name: cause.name, message: cause.message }
+          : cause;
+
     console.error('MONETRA_ORG_ERROR:', {
       name: error instanceof Error ? error.name : 'UnknownError',
       message: error instanceof Error ? error.message : String(error),
@@ -99,6 +117,7 @@ export async function getOrganizationContext(request?: Request): Promise<Organiz
         typeof error === 'object' && error !== null && 'code' in error
           ? error.code
           : undefined,
+      cause: causeDetails,
     });
 
     return {
