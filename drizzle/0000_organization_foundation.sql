@@ -137,4 +137,3 @@ CREATE INDEX ledger_accounts_organization_idx ON ledger_accounts(organization_id
 CREATE INDEX ledger_entries_organization_idx ON ledger_entries(organization_id);
 --> statement-breakpoint
 CREATE INDEX ledger_entries_transaction_idx ON ledger_entries(transaction_id);
---> statement-breakpoint
