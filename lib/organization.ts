@@ -27,7 +27,7 @@ export async function getOrganizationContext(request?: Request): Promise<Organiz
   }
 
   try {
-    const [membership] = await db
+    let [membership] = await db
       .select({
         organizationId: organizationMembers.organizationId,
         role: organizationMembers.role,
@@ -37,6 +37,49 @@ export async function getOrganizationContext(request?: Request): Promise<Organiz
       .where(and(...conditions))
       .orderBy(asc(organizations.createdAt))
       .limit(1);
+
+    // New Clerk accounts may sign in after the migration has run. Provision
+    // their Personal space once, without ever falling back from an explicitly
+    // requested organization that they do not belong to.
+    if (!membership && !requestedOrganizationId) {
+      try {
+        await db.transaction(async (tx) => {
+          const [existingPersonal] = await tx
+            .select({ id: organizations.id })
+            .from(organizations)
+            .where(and(eq(organizations.createdBy, userId), eq(organizations.organizationType, 'personal')))
+            .limit(1);
+
+          const [personal] = existingPersonal
+            ? [existingPersonal]
+            : await tx.insert(organizations).values({
+                name: 'Personal',
+                organizationType: 'personal',
+                createdBy: userId,
+              }).returning({ id: organizations.id });
+
+          await tx.insert(organizationMembers).values({
+            organizationId: personal.id,
+            userId,
+            role: 'owner',
+          }).onConflictDoNothing();
+        });
+      } catch {
+        // A concurrent first request may have created the unique Personal
+        // organization already. Re-read membership below.
+      }
+
+      [membership] = await db
+        .select({
+          organizationId: organizationMembers.organizationId,
+          role: organizationMembers.role,
+        })
+        .from(organizationMembers)
+        .innerJoin(organizations, eq(organizations.id, organizationMembers.organizationId))
+        .where(and(eq(organizationMembers.userId, userId), eq(organizations.organizationType, 'personal')))
+        .orderBy(asc(organizations.createdAt))
+        .limit(1);
+    }
 
     if (!membership || !validRoles.has(membership.role as OrganizationRole)) {
       return { ok: false, status: 403, error: 'No access to this organization' };
