@@ -5,8 +5,10 @@ import {
   ArrowDownLeft, ArrowUpRight, BarChart3, Bell, ChevronRight, CreditCard,
   Home, Moon, Plus, Receipt, Search, Sun, WalletCards, X, ArrowRight,
   CircleHelp, Sparkles, TrendingUp, ShieldCheck, Menu, Landmark,
+  HandCoins, BrainCircuit, Settings as SettingsIcon,
 } from 'lucide-react';
 import { useUser, UserButton } from '@clerk/nextjs';
+import { DueDebtView, SettingsView, VaultView } from '@/components/monetra/module-views';
 
 type WalletType = 'cash' | 'bkash' | 'nagad' | 'rocket' | 'bank' | 'savings' | 'debit_card' | 'credit_card' | 'custom';
 type TransactionType = 'income' | 'expense' | 'transfer';
@@ -15,7 +17,7 @@ type Category = { id: string; name: string; categoryType: 'income' | 'expense'; 
 type Transaction = { id: string; transactionType: TransactionType; walletId: string; destinationWalletId: string | null; amountMinor: number; description: string; occurredAt: string; categoryId: string | null };
 type FinanceSummary = { incomeMinor: number; expenseMinor: number; categorySpend: { categoryId: string | null; totalMinor: number }[] };
 type Organization = { id: string; name: string; type: 'personal' | 'family' | 'business'; role: 'owner' | 'administrator' | 'editor' | 'viewer' };
-type View = 'overview' | 'wallets' | 'transactions';
+type View = 'overview' | 'wallets' | 'transactions' | 'due-debt' | 'vault' | 'settings';
 
 const walletLabels: Record<WalletType, string> = {
   cash: 'Cash', bkash: 'bKash', nagad: 'Nagad', rocket: 'Rocket', bank: 'Bank',
@@ -132,6 +134,9 @@ export default function HomePage() {
     { key: 'overview' as const, label: 'Overview', icon: Home },
     { key: 'wallets' as const, label: 'Wallets', icon: WalletCards },
     { key: 'transactions' as const, label: 'Transactions', icon: Receipt },
+    { key: 'due-debt' as const, label: 'Due & Debt', icon: HandCoins },
+    { key: 'vault' as const, label: 'VAULT AI', icon: BrainCircuit },
+    { key: 'settings' as const, label: 'Settings', icon: SettingsIcon },
   ];
 
   return (
@@ -163,7 +168,7 @@ export default function HomePage() {
                 {organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
               </select>
               <button type="button" onClick={() => setShowOrganizationForm(true)}>+ Space</button>
-              {activeOrganization && (activeOrganization.role === 'owner' || activeOrganization.role === 'administrator') && <><button type="button" onClick={() => setShowInvitationForm(true)}>Invite</button><button type="button" onClick={() => setShowMembersForm(true)}>Team</button></>}
+
             </div>
             <button className="icon-btn" onClick={() => setDark((v) => !v)} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
             <button className="icon-btn" aria-label="Help"><CircleHelp size={18} /></button>
@@ -229,6 +234,9 @@ export default function HomePage() {
 
           {activeView === 'wallets' && <WalletsView wallets={wallets} onAdd={() => setShowWalletForm(true)} />}
           {activeView === 'transactions' && <TransactionsView transactions={transactions} wallets={wallets} categories={categories} onAdd={() => setShowTransactionForm(true)} onLoadMore={loadMoreTransactions} hasMore={hasMoreTransactions} />}
+          {activeView === 'due-debt' && <DueDebtView />}
+          {activeView === 'vault' && <VaultView />}
+          {activeView === 'settings' && <SettingsView dark={dark} onToggleTheme={() => setDark((current) => !current)} />}
         </div>
       </div>
 
