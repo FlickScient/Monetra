@@ -54,8 +54,7 @@ try {
      from information_schema.tables
      where table_schema = current_schema()
        and table_name = any($1::text[])`,
-    [['organizations', 'organization_members', 'invitations', 'workspaces',
-      'savings_goals', 'goal_allocations', 'goal_allocation_events', 'due_debts', 'due_debt_payments']],
+    [['workspaces', 'savings_goals', 'goal_allocations', 'goal_allocation_events', 'due_debts', 'due_debt_payments']],
   );
   if (unexpected.rowCount) {
     throw new Error(`Partial target schema already exists (${unexpected.rows.map(r => r.table_name).join(', ')}). Migration was NOT started.`);
@@ -66,6 +65,18 @@ try {
   );
   if (history.rows[0]?.migration_table) {
     throw new Error('Drizzle migration history already exists. This workflow expects a fresh migration baseline and will NOT run.');
+  }
+
+  const nullOwners = await pool.query(
+    `select
+       (select count(*)::int from wallets where user_id is null) as wallets,
+       (select count(*)::int from categories where user_id is null) as categories,
+       (select count(*)::int from transactions where user_id is null) as transactions,
+       (select count(*)::int from ledger_accounts where user_id is null) as ledger_accounts,
+       (select count(*)::int from ledger_entries where user_id is null) as ledger_entries`,
+  );
+  if (Object.values(nullOwners.rows[0]).some(Number)) {
+    throw new Error(`Finance records with missing owners exist: ${JSON.stringify(nullOwners.rows[0])}. Migration was NOT started.`);
   }
 
   const duplicateWalletAccounts = await pool.query(
