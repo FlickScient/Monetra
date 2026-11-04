@@ -35,6 +35,8 @@ export async function POST(req: Request, { params }: Params) {
 
   try {
     const result = await db.transaction(async tx => {
+      // Serialize requests sharing an idempotency key before checking for a prior payment.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${context.workspaceId}), hashtext(${idempotencyKey}))`);
       const [prior] = await tx.select().from(dueDebtPayments)
         .where(and(eq(dueDebtPayments.workspaceId, context.workspaceId), eq(dueDebtPayments.idempotencyKey, idempotencyKey)));
       if (prior) {
