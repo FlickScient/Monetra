@@ -40,8 +40,8 @@ Monetra is the product. The earlier VAULT master prompt is the product requireme
 ## Architecture decisions
 
 1. **Neon + Drizzle + Clerk remain the runtime stack.** The Supabase SQL migrations in `supabase/migrations` depend on Supabase Auth (`auth.uid()`) and Supabase roles/RLS. They are not compatible with the current Clerk + Neon application and must not be applied to the production database as-is.
-2. **Organization is the tenant boundary.** Every finance record will belong to an organization. The server will resolve the active organization only after verifying the Clerk user is a member with the required role; a client-supplied organization ID is never authorization.
-3. **Preserve existing user data.** Phase 1 must create a Personal organization for each existing user and backfill existing wallets, categories, transactions, and ledger records before organization ownership becomes mandatory. This must be delivered as a versioned Drizzle migration with rollback/recovery notes.
+2. **Workspace is the current private tenant boundary.** Every finance record belongs to a Personal, Family, or Business workspace owned by one Clerk user. The server resolves a requested workspace only when its owner matches the signed-in Clerk user. Legacy organization tables remain solely as a migration bridge; shared family membership is not implemented in this private-workspace model.
+3. **Preserve existing user data.** Versioned Drizzle migrations map legacy organization-owned finance rows to the matching owner's workspace before workspace ownership becomes mandatory. The migration fails safely if any row cannot be mapped.
 4. **Journal history is immutable.** Posted financial events will create balanced journal entries and lines inside one database transaction. Corrections use reversal entries; they do not rewrite posted lines.
 5. **Minor units remain integers.** Avoid JavaScript floating-point arithmetic. Database aggregates should remain exact (BIGINT/text or decimal-safe representations) until formatted for display.
 6. **AI is read-only by default.** The LLM receives only scoped aggregates and selected records returned by server-side tools. It never writes financial data or posts journal entries.
@@ -164,3 +164,36 @@ A guarded manual workflow is available at `.github/workflows/staging-migration.y
 7. Review the workflow logs. The verifier is read-only; the migration itself changes the staging database.
 
 This workflow deliberately has no automatic production migration path. Do not create a production secret or run this workflow against production. Before production rollout, separately capture baseline row counts and wallet balances, take a Neon restore point, test on staging, compare post-migration records/balances, and arrange a controlled maintenance window.
+
+
+## Backend stabilization update — 2026-11-04
+
+The active implementation branch is `ui/monetra-foundation`. The following backend changes have been committed on this branch:
+
+- Replaced the legacy organization context helper with a Clerk-authenticated private workspace resolver.
+- Scoped all current finance API routes to the authenticated owner's workspace.
+- Updated the dashboard, Due & Debt, and Savings Goals requests to send the canonical `x-workspace-id` header.
+- Added atomic double-entry posting for wallet opening positions, income, expenses, and transfers. Each posted event writes equal debit and credit lines in the same Neon transaction as the wallet balance and transaction row.
+- Added a deferred PostgreSQL constraint trigger that rejects unbalanced journal transactions at commit.
+- Added a unique wallet-ledger-account index and a unique per-workspace transaction idempotency index.
+- Added idempotency handling to transaction and transfer endpoints, with stable retry keys from the activity form. Debt-payment requests are serialized by idempotency key and the UI reuses the key when retrying the same payment.
+- Added deterministic wallet row-lock ordering for transfers to avoid opposite-direction transfer deadlocks.
+- Serialized goal allocation and archive operations, and prevented allocations from exceeding a goal's target.
+- Added UUID and strict calendar-date validation to finance resource endpoints.
+- Added read-only migration diagnostics, preflight checks, and a workspace/ledger migration verifier.
+
+### Ledger cutover limitation
+
+The app does not fabricate historical ledger lines for old transactions. When the new posting path first touches a legacy wallet that has no journal entries, it creates one clearly labelled opening-position adjustment using the wallet's current balance. This establishes a balanced journal starting point while preserving the live wallet balance; it does not reconstruct historical income/expense detail. Internal opening adjustments are excluded from the normal transaction feed and income/expense summaries.
+
+### Remaining accounting and release work
+
+- Reversals and corrections for posted transactions are not implemented yet; posted journal lines must remain immutable.
+- Debt repayment records remain independent from wallet movement and are not yet linked to a journal posting.
+- Shared Family/Business membership and per-wallet permissions are not implemented; workspaces are private to their Clerk owner.
+- Existing historical transaction rows are not retroactively journalized.
+- Neon migrations have not been applied to any live database by this work.
+- No build, typecheck, workflow, or live-site test has been run during this backend pass. The user will perform the Vercel build and site checks once this branch is ready.
+- Backup restore readiness is unproven until a real restore test is completed.
+
+The migration chain now contains five reviewed files (`0000` through `0004`). Apply them only to a confirmed Neon backup/staging branch first, run the preflight and read-only verifier, compare wallet balances and row counts, and only then plan any Production migration.
