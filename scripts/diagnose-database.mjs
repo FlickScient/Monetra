@@ -56,6 +56,7 @@ try {
   for (const table of required) {
     if (!actual.has(table)) missing.push(table);
     else if (table !== 'workspaces' && !actual.get(table).has('workspace_id')) missing.push(`${table}.workspace_id`);
+    if (table === 'transactions' && actual.has(table) && !actual.get(table).has('idempotency_key')) missing.push('transactions.idempotency_key');
   }
   for (const column of ['id', 'user_id', 'workspace_type', 'name']) {
     if (!actual.get('workspaces')?.has(column)) missing.push(`workspaces.${column}`);
