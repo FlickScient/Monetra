@@ -52,8 +52,8 @@ export async function ensureWalletLedgerAccount(
     ));
 
   const balanceDifference = BigInt(wallet.currentBalanceMinor) - BigInt(ledgerBalanceRow?.balance ?? '0');
-  if (balanceDifference !== 0n) {
-    const absoluteDifference = balanceDifference < 0n ? -balanceDifference : balanceDifference;
+  if (balanceDifference !== BigInt(0)) {
+    const absoluteDifference = balanceDifference < BigInt(0) ? -balanceDifference : balanceDifference;
     if (absoluteDifference > BigInt(Number.MAX_SAFE_INTEGER)) {
       throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
     }
@@ -71,7 +71,7 @@ export async function ensureWalletLedgerAccount(
     }).returning();
 
     // Assets carry a debit-normal balance; liabilities carry a credit-normal balance.
-    const walletDebit = expectedType === 'asset' ? balanceDifference > 0n : balanceDifference < 0n;
+    const walletDebit = expectedType === 'asset' ? balanceDifference > BigInt(0) : balanceDifference < BigInt(0);
     await tx.insert(ledgerEntries).values(walletDebit
       ? [
           { workspaceId: owner.workspaceId, userId: owner.userId, transactionId: openingTransaction.id, ledgerAccountId: account.id, debitMinor: amount, creditMinor: 0 },
