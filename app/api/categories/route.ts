@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getWorkspaceContext } from '@/lib/workspace';
 import { db } from '@/db';
 import { categories } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 const defaults = [
   { name: 'Salary', categoryType: 'income', color: '#0f766e' },
@@ -22,10 +22,29 @@ export async function GET(req: Request) {
   const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
 
-  let rows = await db.select().from(categories).where(eq(categories.workspaceId, context.workspaceId));
-  if (rows.length === 0 && true) {
-    await db.insert(categories).values(defaults.map((category) => ({ ...category, userId: context.userId, workspaceId: context.workspaceId })));
-    rows = await db.select().from(categories).where(eq(categories.workspaceId, context.workspaceId));
+  try {
+    const rows = await db.transaction(async (tx) => {
+      // Serialize first-time category seeding for this workspace.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${context.workspaceId}), hashtext('monetra_default_categories'))`);
+
+      const existing = await tx.select().from(categories)
+        .where(eq(categories.workspaceId, context.workspaceId));
+
+      if (existing.length === 0) {
+        await tx.insert(categories).values(defaults.map((category) => ({
+          ...category,
+          userId: context.userId,
+          workspaceId: context.workspaceId,
+        })));
+      }
+
+      return tx.select().from(categories)
+        .where(eq(categories.workspaceId, context.workspaceId));
+    });
+
+    return NextResponse.json(rows);
+  } catch (error) {
+    console.error('MONETRA_CATEGORIES_ERROR:', error);
+    return NextResponse.json({ error: 'Unable to load categories' }, { status: 500 });
   }
-  return NextResponse.json(rows);
 }
