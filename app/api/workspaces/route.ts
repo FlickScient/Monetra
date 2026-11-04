@@ -11,6 +11,12 @@ const WORKSPACE_NAMES: Record<(typeof WORKSPACE_TYPES)[number], string> = {
   business: 'Business',
 };
 
+const WORKSPACE_ORDER: Record<(typeof WORKSPACE_TYPES)[number], number> = {
+  personal: 0,
+  family: 1,
+  business: 2,
+};
+
 export async function GET() {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,13 +38,16 @@ export async function GET() {
       id: workspaces.id,
       name: workspaces.name,
       type: workspaces.workspaceType,
-      role: 'owner' as const,
       createdAt: workspaces.createdAt,
     }).from(workspaces)
       .where(eq(workspaces.userId, userId))
       .orderBy(asc(workspaces.createdAt));
 
-    return NextResponse.json(rows);
+    const response = rows
+      .map((workspace) => ({ ...workspace, role: 'owner' as const }))
+      .sort((a, b) => WORKSPACE_ORDER[a.type as (typeof WORKSPACE_TYPES)[number]] - WORKSPACE_ORDER[b.type as (typeof WORKSPACE_TYPES)[number]]);
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error('MONETRA_WORKSPACES_ERROR:', error);
     return NextResponse.json({ error: 'Unable to load finance workspaces' }, { status: 503 });
