@@ -40,7 +40,7 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
     setEntries([]);
     setLoading(true);
     setError('');
-    fetch('/api/due-debt', { headers: { 'x-organization-id': workspaceId } })
+    fetch('/api/due-debt', { headers: { 'x-workspace-id': workspaceId } })
       .then(async response => {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || 'Could not load Due & Debt records.');
@@ -73,7 +73,7 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
     try {
       const response = await fetch('/api/due-debt', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-organization-id': workspaceId },
+        headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId },
         body: JSON.stringify({ direction, counterpartyName: person.trim(), note: note.trim() || null, principalMinor: toMinor(principal), annualRateBps: Math.round(Math.min(1000, Math.max(0, Number(rate) || 0) * 100)), dueDate: dueDate || null }),
       });
       const data = await response.json().catch(() => ({}));
@@ -86,7 +86,7 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
   async function deleteEntry(entry: Entry) {
     if (!window.confirm('Archive the record for ' + entry.person + '? Its payment history will be preserved.')) return;
     try {
-      const response = await fetch('/api/due-debt/' + entry.id, { method: 'DELETE', headers: { 'x-organization-id': workspaceId } });
+      const response = await fetch('/api/due-debt/' + entry.id, { method: 'DELETE', headers: { 'x-workspace-id': workspaceId } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not archive this record.');
       setEntries(current => current.filter(item => item.id !== entry.id));
@@ -103,7 +103,7 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
     try {
       const response = await fetch('/api/due-debt/' + repayId + '/payments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-organization-id': workspaceId, 'idempotency-key': crypto.randomUUID() },
+        headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, 'idempotency-key': crypto.randomUUID() },
         body: JSON.stringify({ amountMinor: amount, note: repayNote.trim() || null }),
       });
       const data = await response.json().catch(() => ({}));
