@@ -24,7 +24,7 @@ export async function GET(req: Request) {
         expenseMinor: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.transactionType} = 'expense' THEN ${transactions.amountMinor} ELSE 0 END), 0)::text`,
       })
       .from(transactions)
-      .where(and(eq(transactions.organizationId, context.organizationId), gte(transactions.occurredAt, monthStart), lt(transactions.occurredAt, nextMonthStart)));
+      .where(and(eq(transactions.workspaceId, context.workspaceId), gte(transactions.occurredAt, monthStart), lt(transactions.occurredAt, nextMonthStart)));
 
     const categoryRows = await db
       .select({
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
         totalMinor: sql<string>`COALESCE(SUM(${transactions.amountMinor}), 0)::text`,
       })
       .from(transactions)
-      .where(and(eq(transactions.organizationId, context.organizationId), eq(transactions.transactionType, 'expense'), gte(transactions.occurredAt, monthStart), lt(transactions.occurredAt, nextMonthStart)))
+      .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.transactionType, 'expense'), gte(transactions.occurredAt, monthStart), lt(transactions.occurredAt, nextMonthStart)))
       .groupBy(transactions.categoryId);
 
     return NextResponse.json({
