@@ -12,8 +12,7 @@ if (!connectionString) {
 const pool = new Pool({ connectionString });
 const requiredTables = [
   'profiles', 'wallets', 'categories', 'transactions', 'ledger_accounts',
-  'ledger_entries', 'organizations', 'organization_members', 'invitations',
-  'workspaces', 'savings_goals', 'goal_allocations', 'goal_allocation_events',
+  'ledger_entries', 'workspaces', 'savings_goals', 'goal_allocations', 'goal_allocation_events',
   'due_debts', 'due_debt_payments',
 ];
 
@@ -77,7 +76,7 @@ try {
     throw new Error(`Expected at least five recorded migrations; found ${history.rows[0].count}.`);
   }
 
-  console.log('PASS  All required finance, organization, and workspace tables exist.');
+  console.log('PASS  All required finance and workspace tables exist.');
   console.log('PASS  Every finance table has NOT NULL workspace_id.');
   console.log('PASS  Wallet ledger uniqueness, transaction idempotency, and balanced-journal trigger exist.');
   console.log(`PASS  ${row.profiles} profile(s), ${row.workspaces} workspace(s); every profile owns exactly three workspaces.`);
