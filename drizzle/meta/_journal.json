@@ -29,6 +29,13 @@
       "when": 1793793600000,
       "tag": "0003_finance_workspace_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793880000000,
+      "tag": "0004_ledger_integrity",
+      "breakpoints": true
     }
   ]
 }
