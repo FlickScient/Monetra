@@ -11,7 +11,7 @@ async function lockLedgerKey(tx: DbTransaction, workspaceId: string, key: string
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${workspaceId}), hashtext(${key}))`);
 }
 
-async function getOrCreateWalletAccount(
+export async function ensureWalletLedgerAccount(
   tx: DbTransaction,
   owner: WorkspaceOwner,
   wallet: WalletRow,
@@ -110,7 +110,7 @@ export async function postFinancialJournal(
   sourceWallet: WalletRow,
   destinationWallet?: WalletRow,
 ) {
-  const sourceAccount = await getOrCreateWalletAccount(tx, owner, sourceWallet);
+  const sourceAccount = await ensureWalletLedgerAccount(tx, owner, sourceWallet);
 
   let lines: Array<{
     workspaceId: string;
@@ -123,7 +123,7 @@ export async function postFinancialJournal(
 
   if (transaction.transactionType === 'transfer') {
     if (!destinationWallet) throw new Error('LEDGER_TRANSFER_DESTINATION_REQUIRED');
-    const destinationAccount = await getOrCreateWalletAccount(tx, owner, destinationWallet);
+    const destinationAccount = await ensureWalletLedgerAccount(tx, owner, destinationWallet);
     if (sourceWallet.walletType === 'credit_card') throw new Error('LEDGER_INVALID_TRANSFER_SOURCE');
 
     // Paying a credit card debits its liability; moving between asset wallets
