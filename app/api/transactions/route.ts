@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getWorkspaceContext } from '@/lib/workspace';
 import { db } from '@/db';
 import { wallets, transactions, categories } from '@/db/schema';
-import { eq, sql, and, gte } from 'drizzle-orm';
+import { eq, sql, and, gte, ne, desc } from 'drizzle-orm';
 import { postFinancialJournal } from '@/lib/ledger';
 import { isUuid } from '@/lib/validation';
 
@@ -17,12 +17,23 @@ export async function GET(req: Request) {
   const offset = Number.isInteger(requestedOffset) ? Math.min(Math.max(requestedOffset, 0), 100000) : 0;
 
   try {
-    const rows = await db.query.transactions.findMany({
-      where: (t, { eq, ne }) => and(eq(t.workspaceId, context.workspaceId), ne(t.transactionType, 'adjustment')),
-      orderBy: (t, { desc }) => [desc(t.occurredAt), desc(t.id)],
-      limit: limit + 1,
-      offset,
-    });
+    const rows = await db.select({
+      id: transactions.id,
+      transactionType: transactions.transactionType,
+      walletId: transactions.walletId,
+      destinationWalletId: transactions.destinationWalletId,
+      categoryId: transactions.categoryId,
+      amountMinor: transactions.amountMinor,
+      description: transactions.description,
+      occurredAt: transactions.occurredAt,
+    }).from(transactions)
+      .where(and(
+        eq(transactions.workspaceId, context.workspaceId),
+        ne(transactions.transactionType, 'adjustment'),
+      ))
+      .orderBy(desc(transactions.occurredAt), desc(transactions.id))
+      .limit(limit + 1)
+      .offset(offset);
     return NextResponse.json(rows);
   } catch {
     return NextResponse.json({ error: 'Unable to load transactions' }, { status: 500 });
