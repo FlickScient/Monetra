@@ -83,7 +83,8 @@ export async function POST(req: Request) {
         if (prior) {
           const sameRequest = prior.walletId === walletId && prior.transactionType === transactionType &&
             prior.categoryId === (categoryId || null) && Number(prior.amountMinor) === amountMinor &&
-            prior.description === description.trim();
+            prior.description === description.trim() &&
+            (occurredAt === undefined || prior.occurredAt.getTime() === parsedDate.getTime());
           if (!sameRequest) throw new Error('IDEMPOTENCY_KEY_REUSED');
           const [currentWallet] = await tx.select().from(wallets)
             .where(and(eq(wallets.id, walletId), eq(wallets.workspaceId, context.workspaceId)));
