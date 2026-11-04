@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, bigint, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, bigint, timestamp, index, uniqueIndex, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 /** A private finance workspace owned directly by one Clerk user. */
@@ -101,6 +101,7 @@ export const transactions = pgTable('transactions', {
   walletId: uuid('wallet_id').notNull(),
   destinationWalletId: uuid('destination_wallet_id'),
   categoryId: uuid('category_id'),
+  idempotencyKey: text('idempotency_key'),
   amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
   description: text('description').notNull(),
   occurredAt: timestamp('occurred_at').notNull().defaultNow(),
@@ -119,6 +120,7 @@ export const ledgerAccounts = pgTable('ledger_accounts', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
   workspaceIdx: index('ledger_accounts_workspace_idx').on(table.workspaceId),
+  walletUnique: uniqueIndex('ledger_accounts_workspace_wallet_unique').on(table.workspaceId, table.walletId).where(sql\`${table.walletId} IS NOT NULL\`),
 }));
 
 export const ledgerEntries = pgTable('ledger_entries', {
@@ -133,4 +135,5 @@ export const ledgerEntries = pgTable('ledger_entries', {
 }, (table) => ({
   workspaceIdx: index('ledger_entries_workspace_idx').on(table.workspaceId),
   transactionIdx: index('ledger_entries_transaction_idx').on(table.transactionId),
+  oneSide: check('ledger_entries_one_side_check', sql\`(${table.debitMinor} > 0 AND ${table.creditMinor} = 0) OR (${table.creditMinor} > 0 AND ${table.debitMinor} = 0)\`),
 }));
