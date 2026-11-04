@@ -15,44 +15,7 @@ export const workspaces = pgTable('workspaces', {
 }));
 
 
-export const organizations = pgTable('organizations', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),
-  organizationType: text('organization_type').notNull(),
-  createdBy: text('created_by').notNull(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-}, (table) => ({
-  creatorPersonalIdx: uniqueIndex('organizations_one_personal_per_creator_idx')
-    .on(table.createdBy)
-    .where(sql`${table.organizationType} = 'personal'`),
-}));
 
-export const organizationMembers = pgTable('organization_members', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
-  userId: text('user_id').notNull(),
-  role: text('role').notNull().default('owner'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-}, (table) => ({
-  memberUnique: uniqueIndex('organization_members_org_user_unique').on(table.organizationId, table.userId),
-  userIdx: index('organization_members_user_idx').on(table.userId),
-}));
-
-
-export const invitations = pgTable('invitations', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
-  email: text('email').notNull(),
-  role: text('role').notNull(),
-  tokenHash: text('token_hash').notNull(),
-  invitedBy: text('invited_by').notNull(),
-  expiresAt: timestamp('expires_at').notNull(),
-  acceptedAt: timestamp('accepted_at'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-}, (table) => ({
-  tokenHashUnique: uniqueIndex('invitations_token_hash_unique').on(table.tokenHash),
-  organizationIdx: index('invitations_organization_idx').on(table.organizationId),
-}));
 
 export const profiles = pgTable('profiles', {
   id: text('id').primaryKey(), // Clerk user id
