@@ -89,6 +89,10 @@ export async function GET(req: Request) {
       orderBy: (w, { asc }) => asc(w.createdAt),
     });
 
+    if (userWallets.some((wallet) => !Number.isSafeInteger(wallet.currentBalanceMinor))) {
+      return NextResponse.json({ error: 'A wallet balance exceeds the supported safe integer range and needs reconciliation' }, { status: 409 });
+    }
+
     return NextResponse.json(userWallets);
   } catch {
     return NextResponse.json({ error: 'Unable to load wallets' }, { status: 500 });
