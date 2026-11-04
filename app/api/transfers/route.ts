@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getWorkspaceContext } from '@/lib/workspace';
 import { db } from '@/db';
 import { wallets, transactions } from '@/db/schema';
+import { postFinancialJournal } from '@/lib/ledger';
 import { eq, sql, and, gte, inArray, asc } from 'drizzle-orm';
 
 export async function POST(req: Request) {
@@ -120,6 +121,7 @@ export async function POST(req: Request) {
         })
         .returning();
 
+      await postFinancialJournal(tx, context, txn, fromWallet, toWallet);
       return { transaction: txn };
     });
 
