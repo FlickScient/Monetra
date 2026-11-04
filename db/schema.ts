@@ -7,8 +7,8 @@ export const workspaces = pgTable('workspaces', {
   userId: text('user_id').notNull(),
   workspaceType: text('workspace_type').notNull(),
   name: text('name').notNull(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   ownerTypeUnique: uniqueIndex('workspaces_user_type_unique').on(table.userId, table.workspaceType),
   ownerIdx: index('workspaces_user_idx').on(table.userId),
