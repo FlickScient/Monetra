@@ -12,11 +12,11 @@ if (!connectionString) {
 const pool = new Pool({ connectionString });
 const required = {
   profiles: ['id'],
-  wallets: ['id', 'user_id'],
-  categories: ['id', 'user_id'],
-  transactions: ['id', 'user_id', 'occurred_at'],
-  ledger_accounts: ['id', 'user_id'],
-  ledger_entries: ['id', 'user_id', 'transaction_id'],
+  wallets: ['id', 'user_id', 'wallet_type', 'currency', 'current_balance_minor', 'status'],
+  categories: ['id', 'user_id', 'category_type'],
+  transactions: ['id', 'user_id', 'transaction_type', 'wallet_id', 'destination_wallet_id', 'category_id', 'amount_minor', 'description', 'occurred_at'],
+  ledger_accounts: ['id', 'user_id', 'wallet_id', 'account_type'],
+  ledger_entries: ['id', 'user_id', 'transaction_id', 'ledger_account_id', 'debit_minor', 'credit_minor'],
 };
 
 try {
@@ -79,6 +79,19 @@ try {
     throw new Error(`Finance records with missing owners exist: ${JSON.stringify(nullOwners.rows[0])}. Migration was NOT started.`);
   }
 
+  const invalidReferences = await pool.query(
+    `select
+       (select count(*)::int from transactions t join wallets w on w.id = t.wallet_id where t.user_id <> w.user_id) as source_wallet_owner_mismatches,
+       (select count(*)::int from transactions t join wallets w on w.id = t.destination_wallet_id where t.user_id <> w.user_id) as destination_wallet_owner_mismatches,
+       (select count(*)::int from transactions t join categories c on c.id = t.category_id where t.user_id <> c.user_id) as category_owner_mismatches,
+       (select count(*)::int from ledger_accounts a join wallets w on w.id = a.wallet_id where a.user_id <> w.user_id) as ledger_wallet_owner_mismatches,
+       (select count(*)::int from ledger_entries e join transactions t on t.id = e.transaction_id where e.user_id <> t.user_id) as ledger_transaction_owner_mismatches,
+       (select count(*)::int from ledger_entries e join ledger_accounts a on a.id = e.ledger_account_id where e.user_id <> a.user_id) as ledger_account_owner_mismatches`,
+  );
+  if (Object.values(invalidReferences.rows[0]).some(Number)) {
+    throw new Error(`Existing finance references cross user ownership boundaries: ${JSON.stringify(invalidReferences.rows[0])}. Migration was NOT started.`);
+  }
+
   const duplicateWalletAccounts = await pool.query(
     `select wallet_id, count(*)::int as count
      from ledger_accounts where wallet_id is not null
@@ -98,6 +111,7 @@ try {
 
   console.log('PASS  Starting schema matches the reviewed legacy finance baseline.');
   console.log('PASS  No partial workspace schema or Drizzle migration history exists.');
+  console.log('PASS  Existing transactions, wallets, categories and ledger references share the same owner.');
   console.log('Preflight passed. Safe to proceed with the reviewed migration chain.');
 } catch (error) {
   console.error(`FAIL  ${error instanceof Error ? error.message : 'Unknown preflight error'}`);
