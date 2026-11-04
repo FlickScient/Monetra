@@ -156,6 +156,9 @@ export async function POST(req: Request) {
     if (code === 'IDEMPOTENCY_KEY_REUSED') {
       return NextResponse.json({ error: 'This idempotency key was already used for a different transfer' }, { status: 409 });
     }
+    if (code === 'LEDGER_BALANCE_OUT_OF_RANGE' || code === 'LEDGER_ACCOUNT_TYPE_MISMATCH') {
+      return NextResponse.json({ error: 'Wallet ledger needs reconciliation before this transfer can be posted' }, { status: 409 });
+    }
     if (code === 'WALLET_NOT_AVAILABLE') {
       return NextResponse.json({ error: 'Wallet not found or inactive' }, { status: 404 });
     }
