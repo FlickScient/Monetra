@@ -1,10 +1,10 @@
-name: Monetra staging database migration
+name: Monetra backup database migration
 
 on:
   workflow_dispatch:
     inputs:
-      confirm_staging_target:
-        description: "Type APPLY_TO_STAGING only after confirming MONETRA_STAGING_DATABASE_URL points to a disposable/staging Neon branch."
+      confirm_backup_target:
+        description: "Type APPLY_TO_BACKUP only after confirming MONETRA_BACKUP_DATABASE_URL points to monetra-before-workspace-migration."
         required: true
         type: string
 
@@ -12,16 +12,16 @@ permissions:
   contents: read
 
 concurrency:
-  group: monetra-staging-migration
+  group: monetra-backup-migration
   cancel-in-progress: false
 
 jobs:
   migrate-and-verify:
-    if: github.event.inputs.confirm_staging_target == 'APPLY_TO_STAGING'
+    if: github.event.inputs.confirm_backup_target == 'APPLY_TO_BACKUP'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout
+      - name: Checkout selected feature branch
         uses: actions/checkout@v4
 
       - name: Set up Node.js
@@ -33,21 +33,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Confirm staging secret is configured
+      - name: Preflight backup schema (read-only)
         env:
-          DATABASE_URL: ${{ secrets.MONETRA_STAGING_DATABASE_URL }}
-        run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "::error::Add MONETRA_STAGING_DATABASE_URL in GitHub Actions secrets. Never paste it into chat or commit it."
-            exit 1
-          fi
+          DATABASE_URL: ${{ secrets.MONETRA_BACKUP_DATABASE_URL }}
+        run: node scripts/preflight-workspace-migration.mjs
 
-      - name: Apply Drizzle migrations to the configured staging database
+      - name: Apply reviewed Drizzle migrations to backup branch
         env:
-          DATABASE_URL: ${{ secrets.MONETRA_STAGING_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.MONETRA_BACKUP_DATABASE_URL }}
         run: npm run db:migrate
 
-      - name: Verify organization migration and data ownership
+      - name: Verify complete workspace migration
         env:
-          DATABASE_URL: ${{ secrets.MONETRA_STAGING_DATABASE_URL }}
-        run: npm run db:verify:organization
+          DATABASE_URL: ${{ secrets.MONETRA_BACKUP_DATABASE_URL }}
+        run: node scripts/verify-workspace-migration.mjs
