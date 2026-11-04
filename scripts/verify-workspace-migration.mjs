@@ -46,6 +46,17 @@ try {
   if (transactionColumns.rowCount !== 1) invalid.push('transactions.idempotency_key');
   if (invalid.length) throw new Error(`workspace_id missing or nullable on: ${invalid.join(', ')}`);
 
+  const ledgerIntegrity = await pool.query(
+    `select
+       exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'ledger_accounts_workspace_wallet_unique') as wallet_account_unique,
+       exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'transactions_workspace_idempotency_unique') as transaction_idempotency_unique,
+       exists (select 1 from pg_trigger where tgname = 'ledger_transaction_balanced' and not tgisinternal) as balanced_journal_trigger`,
+  );
+  const integrity = ledgerIntegrity.rows[0];
+  if (!integrity.wallet_account_unique || !integrity.transaction_idempotency_unique || !integrity.balanced_journal_trigger) {
+    throw new Error('Ledger integrity indexes or deferred balanced-journal trigger are missing.');
+  }
+
   const ownership = await pool.query(
     `select count(*)::int as profiles,
             (select count(*)::int from workspaces) as workspaces,
@@ -67,6 +78,7 @@ try {
 
   console.log('PASS  All required finance, organization, and workspace tables exist.');
   console.log('PASS  Every finance table has NOT NULL workspace_id.');
+  console.log('PASS  Wallet ledger uniqueness, transaction idempotency, and balanced-journal trigger exist.');
   console.log(`PASS  ${row.profiles} profile(s), ${row.workspaces} workspace(s); every profile owns exactly three workspaces.`);
   console.log(`PASS  Drizzle recorded ${history.rows[0].count} migrations.`);
 } catch (error) {
