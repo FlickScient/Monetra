@@ -12,6 +12,7 @@ export const workspaces = pgTable('workspaces', {
 }, (table) => ({
   ownerTypeUnique: uniqueIndex('workspaces_user_type_unique').on(table.userId, table.workspaceType),
   ownerIdx: index('workspaces_user_idx').on(table.userId),
+  workspaceTypeValid: check('workspaces_type_check', sql`${table.workspaceType} in ('personal', 'family', 'business')`),
 }));
 
 
