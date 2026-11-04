@@ -3,6 +3,7 @@ import { getWorkspaceContext } from '@/lib/workspace';
 import { db } from '@/db';
 import { wallets, transactions } from '@/db/schema';
 import { postFinancialJournal } from '@/lib/ledger';
+import { isUuid } from '@/lib/validation';
 import { eq, sql, and, gte, inArray, asc } from 'drizzle-orm';
 
 export async function POST(req: Request) {
@@ -19,12 +20,12 @@ export async function POST(req: Request) {
   const { walletId, destinationWalletId, amountMinor, description, occurredAt } = body;
 
   if (
-    typeof walletId !== 'string' ||
-    typeof destinationWalletId !== 'string' ||
+    !isUuid(walletId) ||
+    !isUuid(destinationWalletId) ||
     typeof amountMinor !== 'number' ||
     !Number.isSafeInteger(amountMinor) ||
     amountMinor <= 0 ||
-    (description !== undefined && typeof description !== 'string')
+    (description !== undefined && (typeof description !== 'string' || description.trim().length > 500))
   ) {
     return NextResponse.json({ error: 'Invalid or missing transfer fields' }, { status: 400 });
   }
