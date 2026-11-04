@@ -12,7 +12,7 @@ if (!connectionString) {
 const pool = new Pool({ connectionString });
 const required = {
   profiles: ['id'],
-  wallets: ['id', 'user_id', 'occurred_at'],
+  wallets: ['id', 'user_id'],
   categories: ['id', 'user_id'],
   transactions: ['id', 'user_id', 'occurred_at'],
   ledger_accounts: ['id', 'user_id'],
