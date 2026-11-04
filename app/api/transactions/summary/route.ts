@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getOrganizationContext } from '@/lib/organization';
+import { getWorkspaceContext } from '@/lib/workspace';
 import { db } from '@/db';
 import { transactions } from '@/db/schema';
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
 
 export async function GET(req: Request) {
-  const context = await getOrganizationContext(req);
+  const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
 
   const url = new URL(req.url);
