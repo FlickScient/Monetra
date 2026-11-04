@@ -37,7 +37,7 @@ try {
      from information_schema.columns
      where table_schema = current_schema()
        and table_name = any($1::text[])
-       and (column_name = 'workspace_id' or (table_name = 'transactions' and column_name = 'idempotency_key'))`,
+       and column_name = 'workspace_id'`,
     [financeTables],
   );
   const byTable = new Map(columns.rows.map(row => [row.table_name, row]));
