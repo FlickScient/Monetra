@@ -3,6 +3,7 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { dueDebts, dueDebtPayments } from '@/db/modules-schema';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { isDateOnly } from '@/lib/validation';
 
 export async function GET(req: Request) {
   const context = await getWorkspaceContext(req);
