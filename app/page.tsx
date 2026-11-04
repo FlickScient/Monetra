@@ -322,15 +322,23 @@ function WalletModal({ organizationId, onClose, onSaved }: { organizationId: str
 
 function TransactionModal({ organizationId, wallets, categories, onClose, onSaved }: { organizationId: string; wallets: Wallet[]; categories: Category[]; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
   const [type, setType] = useState<TransactionType>('expense'); const [wallet, setWallet] = useState(wallets[0]?.id || ''); const [destination, setDestination] = useState(wallets[1]?.id || ''); const [category, setCategory] = useState(categories.find((c) => c.categoryType === 'expense')?.id || ''); const [amount, setAmount] = useState(''); const [description, setDescription] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const idempotencyRef = useRef<{ signature: string; key: string } | null>(null);
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
     try {
       const amountMinor = Math.round(Number(amount) * 100);
       const endpoint = type === 'transfer' ? '/api/transfers' : '/api/transactions';
       const body = type === 'transfer' ? { walletId: wallet, destinationWalletId: destination, amountMinor, description } : { walletId: wallet, transactionType: type, categoryId: category || null, amountMinor, description };
-      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': organizationId }, body: JSON.stringify(body) });
+      const signature = JSON.stringify({ endpoint, organizationId, body });
+      if (!idempotencyRef.current || idempotencyRef.current.signature !== signature) {
+        idempotencyRef.current = { signature, key: crypto.randomUUID() };
+      }
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': organizationId, 'idempotency-key': idempotencyRef.current.key }, body: JSON.stringify(body) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not post this activity. Check the details and try again.'); }
-      else await onSaved('Activity posted. Your balances are up to date.');
+      else {
+        idempotencyRef.current = null;
+        await onSaved('Activity posted. Your balances are up to date.');
+      }
     } catch { setError('Connection issue. Please try again.'); }
     finally { setBusy(false); }
   }
