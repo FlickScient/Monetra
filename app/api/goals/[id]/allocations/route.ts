@@ -31,8 +31,11 @@ export async function POST(req: Request, { params }: Params) {
   }
   try {
     const result = await db.transaction(async tx => {
+      // Serialize all changes to this goal so concurrent allocations cannot
+      // exceed its target or race with goal archiving.
       const [goal] = await tx.select().from(savingsGoals)
-        .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.status, 'active')));
+        .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.status, 'active')))
+        .for('update');
       if (!goal) throw new Error('GOAL_NOT_FOUND');
 
       // Serialize allocation changes per wallet to prevent concurrent over-allocation.
@@ -51,6 +54,14 @@ export async function POST(req: Request, { params }: Params) {
           .from(goalAllocations).where(and(eq(goalAllocations.walletId, wallet.id), eq(goalAllocations.workspaceId, context.workspaceId)));
         const available = Number(wallet.currentBalanceMinor) - Number(reserved?.total ?? 0);
         if (amountMinor > available) throw new Error('INSUFFICIENT_AVAILABLE');
+
+        const [goalReserved] = await tx.select({
+          total: sql<string>`coalesce(sum(${goalAllocations.amountMinor}), 0)::text`,
+        }).from(goalAllocations)
+          .where(and(eq(goalAllocations.goalId, goal.id), eq(goalAllocations.workspaceId, context.workspaceId)));
+        const remainingTarget = Number(goal.targetMinor) - Number(goalReserved?.total ?? 0);
+        if (amountMinor > remainingTarget) throw new Error('GOAL_TARGET_EXCEEDED');
+
         const next = current + amountMinor;
         if (existing) {
           await tx.update(goalAllocations).set({ amountMinor: next, updatedAt: new Date() }).where(eq(goalAllocations.id, existing.id));
@@ -77,6 +88,7 @@ export async function POST(req: Request, { params }: Params) {
     if (code === 'WALLET_NOT_FOUND') return NextResponse.json({ error: 'Wallet not found or inactive' }, { status: 404 });
     if (code === 'WALLET_NOT_ELIGIBLE') return NextResponse.json({ error: 'This wallet cannot fund this goal' }, { status: 400 });
     if (code === 'INSUFFICIENT_AVAILABLE') return NextResponse.json({ error: 'Not enough unallocated wallet balance' }, { status: 400 });
+    if (code === 'GOAL_TARGET_EXCEEDED') return NextResponse.json({ error: 'Allocation would exceed this goal target' }, { status: 400 });
     if (code === 'INSUFFICIENT_ALLOCATION') return NextResponse.json({ error: 'Cannot release more than this goal holds in the wallet' }, { status: 400 });
     return NextResponse.json({ error: 'Unable to update goal allocation' }, { status: 500 });
   }
