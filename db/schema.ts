@@ -29,19 +29,19 @@ export const organizations = pgTable('organizations', {
 
 export const organizationMembers = pgTable('organization_members', {
   id: uuid('id').primaryKey().defaultRandom(),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull(),
   role: text('role').notNull().default('owner'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
-  memberUnique: uniqueIndex('organization_members_org_user_unique').on(table.organizationId, table.userId),
+  memberUnique: uniqueIndex('organization_members_org_user_unique').on(table.workspaceId, table.userId),
   userIdx: index('organization_members_user_idx').on(table.userId),
 }));
 
 
 export const invitations = pgTable('invitations', {
   id: uuid('id').primaryKey().defaultRandom(),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   email: text('email').notNull(),
   role: text('role').notNull(),
   tokenHash: text('token_hash').notNull(),
@@ -51,7 +51,7 @@ export const invitations = pgTable('invitations', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
   tokenHashUnique: uniqueIndex('invitations_token_hash_unique').on(table.tokenHash),
-  organizationIdx: index('invitations_organization_idx').on(table.organizationId),
+  workspaceIdx: index('invitations_workspace_idx').on(table.workspaceId),
 }));
 
 export const profiles = pgTable('profiles', {
@@ -64,7 +64,7 @@ export const profiles = pgTable('profiles', {
 
 export const wallets = pgTable('wallets', {
   id: uuid('id').primaryKey().defaultRandom(),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id),
   userId: text('user_id').notNull(),
   name: text('name').notNull(),
   walletType: text('wallet_type').notNull(),
@@ -77,12 +77,12 @@ export const wallets = pgTable('wallets', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (table) => ({
-  organizationIdx: index('wallets_organization_idx').on(table.organizationId),
+  workspaceIdx: index('wallets_workspace_idx').on(table.workspaceId),
 }));
 
 export const categories = pgTable('categories', {
   id: uuid('id').primaryKey().defaultRandom(),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id),
   userId: text('user_id').notNull(),
   name: text('name').notNull(),
   categoryType: text('category_type').notNull(),
@@ -90,12 +90,12 @@ export const categories = pgTable('categories', {
   color: text('color').notNull().default('#0f766e'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
-  organizationIdx: index('categories_organization_idx').on(table.organizationId),
+  workspaceIdx: index('categories_workspace_idx').on(table.workspaceId),
 }));
 
 export const transactions = pgTable('transactions', {
   id: uuid('id').primaryKey().defaultRandom(),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id),
   userId: text('user_id').notNull(),
   transactionType: text('transaction_type').notNull(),
   walletId: uuid('wallet_id').notNull(),
@@ -106,24 +106,24 @@ export const transactions = pgTable('transactions', {
   occurredAt: timestamp('occurred_at').notNull().defaultNow(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
-  organizationDateIdx: index('transactions_organization_date_idx').on(table.organizationId, table.occurredAt),
+  organizationDateIdx: index('transactions_organization_date_idx').on(table.workspaceId, table.occurredAt),
 }));
 
 export const ledgerAccounts = pgTable('ledger_accounts', {
   id: uuid('id').primaryKey().defaultRandom(),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id),
   userId: text('user_id').notNull(),
   walletId: uuid('wallet_id'),
   accountType: text('account_type').notNull(),
   name: text('name').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
-  organizationIdx: index('ledger_accounts_organization_idx').on(table.organizationId),
+  workspaceIdx: index('ledger_accounts_workspace_idx').on(table.workspaceId),
 }));
 
 export const ledgerEntries = pgTable('ledger_entries', {
   id: uuid('id').primaryKey().defaultRandom(),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id),
   userId: text('user_id').notNull(),
   transactionId: uuid('transaction_id').notNull(),
   ledgerAccountId: uuid('ledger_account_id').notNull(),
@@ -131,6 +131,6 @@ export const ledgerEntries = pgTable('ledger_entries', {
   creditMinor: bigint('credit_minor', { mode: 'number' }).notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
-  organizationIdx: index('ledger_entries_organization_idx').on(table.organizationId),
+  workspaceIdx: index('ledger_entries_workspace_idx').on(table.workspaceId),
   transactionIdx: index('ledger_entries_transaction_idx').on(table.transactionId),
 }));
