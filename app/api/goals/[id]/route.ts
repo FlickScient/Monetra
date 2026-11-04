@@ -3,12 +3,14 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { savingsGoals, goalAllocations } from '@/db/modules-schema';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { isUuid, isDateOnly } from '@/lib/validation';
 
 type Params = { params: { id: string } };
 
 export async function PATCH(req: Request, { params }: Params) {
   const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
+  if (!isUuid(params.id)) return NextResponse.json({ error: 'Invalid goal ID' }, { status: 400 });
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
   const values: Partial<typeof savingsGoals.$inferInsert> = { updatedAt: new Date() };
@@ -35,6 +37,7 @@ export async function PATCH(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
   const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
+  if (!isUuid(params.id)) return NextResponse.json({ error: 'Invalid goal ID' }, { status: 400 });
   try {
     await db.transaction(async (tx) => {
       // Match the allocation endpoint's lock order to prevent archive/allocation races.
