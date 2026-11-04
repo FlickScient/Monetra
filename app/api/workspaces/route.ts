@@ -32,6 +32,7 @@ export async function GET() {
       id: workspaces.id,
       name: workspaces.name,
       type: workspaces.workspaceType,
+      role: 'owner' as const,
       createdAt: workspaces.createdAt,
     }).from(workspaces)
       .where(eq(workspaces.userId, userId))
