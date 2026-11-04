@@ -82,6 +82,9 @@ export async function POST(req: Request) {
       ) {
         throw new Error('WALLET_NOT_AVAILABLE');
       }
+      if (!Number.isSafeInteger(fromWallet.currentBalanceMinor) || !Number.isSafeInteger(toWallet.currentBalanceMinor)) {
+        throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
+      }
 
       if (fromWallet.walletType === 'credit_card') {
         throw new Error('INVALID_SOURCE_WALLET');
