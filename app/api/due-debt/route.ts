@@ -9,10 +9,10 @@ export async function GET(req: Request) {
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
   try {
     const debts = await db.select().from(dueDebts)
-      .where(and(eq(dueDebts.organizationId, context.organizationId), sql`${dueDebts.status} <> 'archived'`))
+      .where(and(eq(dueDebts.workspaceId, context.workspaceId), sql`${dueDebts.status} <> 'archived'`))
       .orderBy(asc(dueDebts.createdAt));
     const payments = debts.length ? await db.select().from(dueDebtPayments)
-      .where(eq(dueDebtPayments.organizationId, context.organizationId)) : [];
+      .where(eq(dueDebtPayments.workspaceId, context.workspaceId)) : [];
     return NextResponse.json(debts.map(debt => {
       const paidMinor = payments.filter(payment => payment.dueDebtId === debt.id)
         .reduce((sum, payment) => sum + Number(payment.amountMinor), 0);
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
   }
   try {
     const [debt] = await db.insert(dueDebts).values({
-      organizationId: context.organizationId, userId: context.userId, direction: String(direction),
+      workspaceId: context.workspaceId, userId: context.userId, direction: String(direction),
       counterpartyName: counterpartyName.trim(), principalMinor, currency,
       annualRateBps, dueDate, note,
     }).returning();
