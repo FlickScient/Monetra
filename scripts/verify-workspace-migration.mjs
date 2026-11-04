@@ -50,10 +50,11 @@ try {
     `select
        exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'ledger_accounts_workspace_wallet_unique') as wallet_account_unique,
        exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'transactions_workspace_idempotency_unique') as transaction_idempotency_unique,
+       exists (select 1 from pg_constraint where conname = 'ledger_entries_one_side_check' and conrelid = 'ledger_entries'::regclass) as journal_line_one_side_check,
        exists (select 1 from pg_trigger where tgname = 'ledger_transaction_balanced' and not tgisinternal) as balanced_journal_trigger`,
   );
   const integrity = ledgerIntegrity.rows[0];
-  if (!integrity.wallet_account_unique || !integrity.transaction_idempotency_unique || !integrity.balanced_journal_trigger) {
+  if (!integrity.wallet_account_unique || !integrity.transaction_idempotency_unique || !integrity.journal_line_one_side_check || !integrity.balanced_journal_trigger) {
     throw new Error('Ledger integrity indexes or deferred balanced-journal trigger are missing.');
   }
 
