@@ -33,7 +33,7 @@ export async function POST(req: Request) {
       typeof principalMinor !== 'number' || !Number.isSafeInteger(principalMinor) || principalMinor <= 0 ||
       typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency) ||
       typeof annualRateBps !== 'number' || !Number.isSafeInteger(annualRateBps) || annualRateBps < 0 || annualRateBps > 100000 ||
-      (dueDate !== null && (typeof dueDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate))) ||
+      (dueDate !== null && (typeof dueDate !== 'string' || !isDateOnly(dueDate))) ||
       (note !== null && (typeof note !== 'string' || note.length > 2000))) {
     return NextResponse.json({ error: 'Invalid Due & Debt details' }, { status: 400 });
   }
