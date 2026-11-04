@@ -38,7 +38,10 @@ export async function POST(req: Request, { params }: Params) {
     const result = await db.transaction(async tx => {
       const [prior] = await tx.select().from(dueDebtPayments)
         .where(and(eq(dueDebtPayments.workspaceId, context.workspaceId), eq(dueDebtPayments.idempotencyKey, idempotencyKey)));
-      if (prior) {\n        if (prior.dueDebtId !== params.id) throw new Error('IDEMPOTENCY_KEY_REUSED');\n        return { payment: prior, replayed: true };\n      }
+      if (prior) {
+        if (prior.dueDebtId !== params.id) throw new Error('IDEMPOTENCY_KEY_REUSED');
+        return { payment: prior, replayed: true };
+      }
 
       const [debt] = await tx.select().from(dueDebts)
         .where(and(eq(dueDebts.id, params.id), eq(dueDebts.workspaceId, context.workspaceId)))
@@ -63,7 +66,8 @@ export async function POST(req: Request, { params }: Params) {
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
     if (code === 'DEBT_NOT_FOUND') return NextResponse.json({ error: 'Record not found' }, { status: 404 });
-    if (code === 'PAYMENT_EXCEEDS_OUTSTANDING') return NextResponse.json({ error: 'Payment exceeds the outstanding principal' }, { status: 400 });\n    if (code === 'IDEMPOTENCY_KEY_REUSED') return NextResponse.json({ error: 'This idempotency key was already used for another record' }, { status: 409 });
+    if (code === 'PAYMENT_EXCEEDS_OUTSTANDING') return NextResponse.json({ error: 'Payment exceeds the outstanding principal' }, { status: 400 });
+    if (code === 'IDEMPOTENCY_KEY_REUSED') return NextResponse.json({ error: 'This idempotency key was already used for another record' }, { status: 409 });
     return NextResponse.json({ error: 'Unable to record payment' }, { status: 500 });
   }
 }
