@@ -39,29 +39,39 @@ export async function ensureWalletLedgerAccount(
   }
   if (!account) throw new Error('LEDGER_ACCOUNT_CREATE_FAILED');
 
-  // Existing wallets may predate journal posting. Capture their cutover balance
-  // once as an opening position instead of fabricating historical transactions.
-  const [priorEntry] = await tx.select({ id: ledgerEntries.id }).from(ledgerEntries)
+  // Reconcile the journal to the wallet's persisted balance at cutover.
+  // This preserves the live balance without inventing historical transaction detail.
+  const [ledgerBalanceRow] = await tx.select({
+    balance: expectedType === 'asset'
+      ? sql<string>`COALESCE(SUM(${ledgerEntries.debitMinor} - ${ledgerEntries.creditMinor}), 0)::text`
+      : sql<string>`COALESCE(SUM(${ledgerEntries.creditMinor} - ${ledgerEntries.debitMinor}), 0)::text`,
+  }).from(ledgerEntries)
     .where(and(
       eq(ledgerEntries.workspaceId, owner.workspaceId),
       eq(ledgerEntries.ledgerAccountId, account.id),
-    )).limit(1);
+    ));
 
-  const openingBalance = Number(wallet.currentBalanceMinor);
-  if (!priorEntry && openingBalance !== 0) {
+  const balanceDifference = BigInt(wallet.currentBalanceMinor) - BigInt(ledgerBalanceRow?.balance ?? '0');
+  if (balanceDifference !== 0n) {
+    const absoluteDifference = balanceDifference < 0n ? -balanceDifference : balanceDifference;
+    if (absoluteDifference > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
+    }
+
     const equity = await getOrCreateSystemAccount(tx, owner, 'equity', 'Opening balance equity');
+    const amount = Number(absoluteDifference);
     const [openingTransaction] = await tx.insert(transactions).values({
       workspaceId: owner.workspaceId,
       userId: owner.userId,
       transactionType: 'adjustment',
       walletId: wallet.id,
-      amountMinor: Math.abs(openingBalance),
-      description: 'Opening balance (ledger cutover)',
+      amountMinor: amount,
+      description: 'Opening balance reconciliation',
       occurredAt: new Date(),
     }).returning();
 
-    const walletDebit = expectedType === 'asset' ? openingBalance > 0 : openingBalance < 0;
-    const amount = Math.abs(openingBalance);
+    // Assets carry a debit-normal balance; liabilities carry a credit-normal balance.
+    const walletDebit = expectedType === 'asset' ? balanceDifference > 0n : balanceDifference < 0n;
     await tx.insert(ledgerEntries).values(walletDebit
       ? [
           { workspaceId: owner.workspaceId, userId: owner.userId, transactionId: openingTransaction.id, ledgerAccountId: account.id, debitMinor: amount, creditMinor: 0 },
