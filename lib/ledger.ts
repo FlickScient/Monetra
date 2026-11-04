@@ -51,6 +51,7 @@ export async function ensureWalletLedgerAccount(
       eq(ledgerEntries.ledgerAccountId, account.id),
     ));
 
+  if (!Number.isSafeInteger(wallet.currentBalanceMinor)) throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
   const balanceDifference = BigInt(wallet.currentBalanceMinor) - BigInt(ledgerBalanceRow?.balance ?? '0');
   if (balanceDifference !== BigInt(0)) {
     const absoluteDifference = balanceDifference < BigInt(0) ? -balanceDifference : balanceDifference;
