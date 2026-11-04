@@ -1,6 +1,20 @@
 import { pgTable, uuid, text, bigint, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
+/** A private finance workspace owned directly by one Clerk user. */
+export const workspaces = pgTable('workspaces', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull(),
+  workspaceType: text('workspace_type').notNull(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => ({
+  ownerTypeUnique: uniqueIndex('workspaces_user_type_unique').on(table.userId, table.workspaceType),
+  ownerIdx: index('workspaces_user_idx').on(table.userId),
+}));
+
+
 export const organizations = pgTable('organizations', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
