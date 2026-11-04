@@ -184,7 +184,7 @@ The active implementation branch is `ui/monetra-foundation`. The following backe
 
 ### Ledger cutover limitation
 
-The app does not fabricate historical ledger lines for old transactions. When the new posting path first touches a legacy wallet that has no journal entries, it creates one clearly labelled opening-position adjustment using the wallet's current balance. This establishes a balanced journal starting point while preserving the live wallet balance; it does not reconstruct historical income/expense detail. Internal opening adjustments are excluded from the normal transaction feed and income/expense summaries.
+The app does not fabricate historical ledger lines for old transactions. When the new posting path first touches a legacy wallet, it compares the stored wallet balance with its journal balance and posts a clearly labelled opening-position adjustment for any difference. This establishes a balanced journal starting point while preserving the live wallet balance; it does not reconstruct historical income/expense detail. Internal opening adjustments are excluded from the normal transaction feed and income/expense summaries.
 
 ### Remaining accounting and release work
 
