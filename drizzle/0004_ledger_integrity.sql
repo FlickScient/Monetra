@@ -33,3 +33,32 @@ ALTER TABLE transactions ADD COLUMN idempotency_key text;
 CREATE UNIQUE INDEX transactions_workspace_idempotency_unique
   ON transactions(workspace_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.assert_ledger_transaction_balanced()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_transaction_id uuid;
+  v_debits numeric;
+  v_credits numeric;
+BEGIN
+  v_transaction_id := COALESCE(NEW.transaction_id, OLD.transaction_id);
+  SELECT COALESCE(sum(debit_minor), 0), COALESCE(sum(credit_minor), 0)
+    INTO v_debits, v_credits
+    FROM ledger_entries
+    WHERE transaction_id = v_transaction_id;
+
+  IF v_debits <> v_credits THEN
+    RAISE EXCEPTION 'Unbalanced ledger transaction %: debits %, credits %',
+      v_transaction_id, v_debits, v_credits;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER ledger_transaction_balanced
+AFTER INSERT OR UPDATE OR DELETE ON ledger_entries
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION public.assert_ledger_transaction_balanced();
