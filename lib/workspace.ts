@@ -24,17 +24,19 @@ export async function getWorkspaceContext(request?: Request): Promise<WorkspaceC
   }
 
   try {
-    await db.transaction(async (tx) => {
-      for (const workspaceType of WORKSPACE_TYPES) {
-        await tx.insert(workspaces).values({
-          userId,
-          workspaceType,
-          name: workspaceType[0].toUpperCase() + workspaceType.slice(1),
-        }).onConflictDoNothing({
-          target: [workspaces.userId, workspaces.workspaceType],
-        });
-      }
-    });
+    if (!requestedWorkspaceId) {
+      await db.transaction(async (tx) => {
+        for (const workspaceType of WORKSPACE_TYPES) {
+          await tx.insert(workspaces).values({
+            userId,
+            workspaceType,
+            name: workspaceType[0].toUpperCase() + workspaceType.slice(1),
+          }).onConflictDoNothing({
+            target: [workspaces.userId, workspaces.workspaceType],
+          });
+        }
+      });
+    }
 
     const conditions = [
       eq(workspaces.userId, userId),
