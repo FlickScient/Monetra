@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { getWorkspaceContext } from '@/lib/workspace';
 import { db } from '@/db';
 import { wallets, transactions, categories } from '@/db/schema';
-import { eq, sql, and, desc, gte } from 'drizzle-orm';
+import { eq, sql, and, gte } from 'drizzle-orm';
+import { postFinancialJournal } from '@/lib/ledger';
 
 export async function GET(req: Request) {
   const context = await getWorkspaceContext(req);
@@ -67,9 +68,9 @@ export async function POST(req: Request) {
 
   try {
     const result = await db.transaction(async (tx) => {
-      const wallet = await tx.query.wallets.findFirst({
-        where: and(eq(wallets.id, walletId), eq(wallets.workspaceId, context.workspaceId)),
-      });
+      const [wallet] = await tx.select().from(wallets)
+        .where(and(eq(wallets.id, walletId), eq(wallets.workspaceId, context.workspaceId)))
+        .for('update');
       if (!wallet || wallet.status !== 'active') {
         throw new Error('WALLET_NOT_AVAILABLE');
       }
@@ -101,6 +102,7 @@ export async function POST(req: Request) {
           and(
             eq(wallets.id, walletId),
             eq(wallets.workspaceId, context.workspaceId),
+            eq(wallets.status, 'active'),
             ...(decreasesBalance ? [gte(wallets.currentBalanceMinor, amountMinor)] : []),
           ),
         )
@@ -122,6 +124,7 @@ export async function POST(req: Request) {
         })
         .returning();
 
+      await postFinancialJournal(tx, context, txn, wallet);
       return { transaction: txn, wallet: updatedWallet };
     });
 
