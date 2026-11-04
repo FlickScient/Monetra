@@ -89,6 +89,14 @@ export async function POST(req: Request) {
         throw new Error('CURRENCY_MISMATCH');
       }
 
+      if (toWallet.walletType === 'credit_card' && amountMinor > Number(toWallet.currentBalanceMinor)) {
+        throw new Error('PAYMENT_EXCEEDS_CARD_BALANCE');
+      }
+      const destinationDelta = toWallet.walletType === 'credit_card' ? -amountMinor : amountMinor;
+      if (!Number.isSafeInteger(Number(toWallet.currentBalanceMinor) + destinationDelta)) {
+        throw new Error('BALANCE_LIMIT_EXCEEDED');
+      }
+
       // Keep the balance check inside the UPDATE to prevent concurrent overspending.
       const [updatedSource] = await tx
         .update(wallets)
@@ -106,10 +114,6 @@ export async function POST(req: Request) {
         .returning({ id: wallets.id });
 
       if (!updatedSource) throw new Error('INSUFFICIENT_FUNDS');
-
-      // A payment into a credit card reduces its outstanding balance.
-      const destinationDelta =
-        toWallet.walletType === 'credit_card' ? -amountMinor : amountMinor;
 
       const [updatedDestination] = await tx
         .update(wallets)
@@ -159,6 +163,12 @@ export async function POST(req: Request) {
     }
     if (code === 'CURRENCY_MISMATCH') {
       return NextResponse.json({ error: 'Transfers require wallets with the same currency' }, { status: 400 });
+    }
+    if (code === 'PAYMENT_EXCEEDS_CARD_BALANCE') {
+      return NextResponse.json({ error: 'Payment cannot exceed the card outstanding balance' }, { status: 400 });
+    }
+    if (code === 'BALANCE_LIMIT_EXCEEDED') {
+      return NextResponse.json({ error: 'This balance exceeds the supported safe integer range' }, { status: 400 });
     }
     if (code === 'INSUFFICIENT_FUNDS') {
       return NextResponse.json({ error: 'Insufficient funds' }, { status: 400 });
