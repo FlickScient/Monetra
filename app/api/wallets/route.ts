@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       .insert(wallets)
       .values({
         userId: context.userId,
-        organizationId: context.organizationId,
+        workspaceId: context.workspaceId,
         name: name.trim(),
         walletType,
         currency,
@@ -75,7 +75,7 @@ export async function GET(req: Request) {
 
   try {
     const userWallets = await db.query.wallets.findMany({
-      where: (w, { eq }) => eq(w.organizationId, context.organizationId),
+      where: (w, { eq }) => eq(w.workspaceId, context.workspaceId),
       orderBy: (w, { asc }) => asc(w.createdAt),
     });
 
