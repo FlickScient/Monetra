@@ -27,7 +27,7 @@ export async function PATCH(req: Request, { params }: Params) {
   }
   try {
     const [goal] = await db.update(savingsGoals).set(values)
-      .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.organizationId, context.organizationId), eq(savingsGoals.status, 'active')))
+      .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.status, 'active')))
       .returning();
     return goal ? NextResponse.json(goal) : NextResponse.json({ error: 'Goal not found' }, { status: 404 });
   } catch { return NextResponse.json({ error: 'Unable to update savings goal' }, { status: 500 }); }
@@ -39,12 +39,12 @@ export async function DELETE(req: Request, { params }: Params) {
   if (!canWriteOrganization(context.role)) return NextResponse.json({ error: 'Read-only workspace access' }, { status: 403 });
   try {
     const [goal] = await db.select().from(savingsGoals)
-      .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.organizationId, context.organizationId), eq(savingsGoals.status, 'active')));
+      .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.status, 'active')));
     if (!goal) return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
     const allocations = await db.select().from(goalAllocations).where(eq(goalAllocations.goalId, goal.id));
     if (allocations.length) return NextResponse.json({ error: 'Release all wallet allocations before archiving this goal' }, { status: 409 });
     await db.update(savingsGoals).set({ status: 'archived', updatedAt: new Date() })
-      .where(and(eq(savingsGoals.id, goal.id), eq(savingsGoals.organizationId, context.organizationId)));
+      .where(and(eq(savingsGoals.id, goal.id), eq(savingsGoals.workspaceId, context.workspaceId)));
     return NextResponse.json({ ok: true });
   } catch { return NextResponse.json({ error: 'Unable to archive savings goal' }, { status: 500 }); }
 }
