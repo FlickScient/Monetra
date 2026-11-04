@@ -23,6 +23,7 @@ export async function GET(req: Request, { params }: Params) {
 export async function PATCH(req: Request, { params }: Params) {
   const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
+  if (!isUuid(params.id)) return NextResponse.json({ error: 'Invalid record ID' }, { status: 400 });
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
   const values: Partial<typeof dueDebts.$inferInsert> = { updatedAt: new Date() };
@@ -31,7 +32,7 @@ export async function PATCH(req: Request, { params }: Params) {
     values.counterpartyName = body.counterpartyName.trim();
   }
   if (body.dueDate !== undefined) {
-    if (body.dueDate !== null && (typeof body.dueDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.dueDate))) return NextResponse.json({ error: 'Invalid due date' }, { status: 400 });
+    if (body.dueDate !== null && (typeof body.dueDate !== 'string' || !isDateOnly(body.dueDate))) return NextResponse.json({ error: 'Invalid due date' }, { status: 400 });
     values.dueDate = body.dueDate;
   }
   if (body.note !== undefined) {
@@ -53,6 +54,7 @@ export async function PATCH(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
   const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
+  if (!isUuid(params.id)) return NextResponse.json({ error: 'Invalid record ID' }, { status: 400 });
   try {
     const [debt] = await db.update(dueDebts).set({ status: 'archived', updatedAt: new Date() })
       .where(and(eq(dueDebts.id, params.id), eq(dueDebts.workspaceId, context.workspaceId), sql`${dueDebts.status} <> 'archived'`))
