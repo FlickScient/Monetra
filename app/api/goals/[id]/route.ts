@@ -36,13 +36,32 @@ export async function DELETE(req: Request, { params }: Params) {
   const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
   try {
-    const [goal] = await db.select().from(savingsGoals)
-      .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.status, 'active')));
-    if (!goal) return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
-    const allocations = await db.select().from(goalAllocations).where(eq(goalAllocations.goalId, goal.id));
-    if (allocations.length) return NextResponse.json({ error: 'Release all wallet allocations before archiving this goal' }, { status: 409 });
-    await db.update(savingsGoals).set({ status: 'archived', updatedAt: new Date() })
-      .where(and(eq(savingsGoals.id, goal.id), eq(savingsGoals.workspaceId, context.workspaceId)));
+    await db.transaction(async (tx) => {
+      // Match the allocation endpoint's lock order to prevent archive/allocation races.
+      const [goal] = await tx.select().from(savingsGoals)
+        .where(and(
+          eq(savingsGoals.id, params.id),
+          eq(savingsGoals.workspaceId, context.workspaceId),
+          eq(savingsGoals.status, 'active'),
+        ))
+        .for('update');
+      if (!goal) throw new Error('GOAL_NOT_FOUND');
+
+      const [allocation] = await tx.select({ id: goalAllocations.id }).from(goalAllocations)
+        .where(and(
+          eq(goalAllocations.goalId, goal.id),
+          eq(goalAllocations.workspaceId, context.workspaceId),
+        )).limit(1);
+      if (allocation) throw new Error('GOAL_HAS_ALLOCATIONS');
+
+      await tx.update(savingsGoals).set({ status: 'archived', updatedAt: new Date() })
+        .where(and(eq(savingsGoals.id, goal.id), eq(savingsGoals.workspaceId, context.workspaceId)));
+    });
     return NextResponse.json({ ok: true });
-  } catch { return NextResponse.json({ error: 'Unable to archive savings goal' }, { status: 500 }); }
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    if (code === 'GOAL_NOT_FOUND') return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
+    if (code === 'GOAL_HAS_ALLOCATIONS') return NextResponse.json({ error: 'Release all wallet allocations before archiving this goal' }, { status: 409 });
+    return NextResponse.json({ error: 'Unable to archive savings goal' }, { status: 500 });
+  }
 }
