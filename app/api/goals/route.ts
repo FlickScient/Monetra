@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   const targetDate = body.targetDate;
   if (!name || name.length > 100 || typeof targetMinor !== 'number' || !Number.isSafeInteger(targetMinor) || targetMinor <= 0 ||
       typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency) ||
-      (targetDate !== undefined && targetDate !== null && (typeof targetDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)))) {
+      (targetDate !== undefined && targetDate !== null && (typeof targetDate !== 'string' || !isDateOnly(targetDate)))) {
     return NextResponse.json({ error: 'Provide a valid name, target amount, currency and optional target date' }, { status: 400 });
   }
   try {
