@@ -10,9 +10,9 @@ export async function GET(req: Request, { params }: Params) {
   const context = await getOrganizationContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
   try {
-    const [debt] = await db.select().from(dueDebts).where(and(eq(dueDebts.id, params.id), eq(dueDebts.organizationId, context.organizationId)));
+    const [debt] = await db.select().from(dueDebts).where(and(eq(dueDebts.id, params.id), eq(dueDebts.workspaceId, context.workspaceId)));
     if (!debt) return NextResponse.json({ error: 'Record not found' }, { status: 404 });
-    const payments = await db.select().from(dueDebtPayments).where(and(eq(dueDebtPayments.dueDebtId, debt.id), eq(dueDebtPayments.organizationId, context.organizationId)));
+    const payments = await db.select().from(dueDebtPayments).where(and(eq(dueDebtPayments.dueDebtId, debt.id), eq(dueDebtPayments.workspaceId, context.workspaceId)));
     const paidMinor = payments.reduce((sum, payment) => sum + Number(payment.amountMinor), 0);
     return NextResponse.json({ ...debt, paidMinor, outstandingMinor: Math.max(0, Number(debt.principalMinor) - paidMinor), payments });
   } catch { return NextResponse.json({ error: 'Unable to load Due & Debt record' }, { status: 500 }); }
@@ -43,7 +43,7 @@ export async function PATCH(req: Request, { params }: Params) {
   }
   try {
     const [debt] = await db.update(dueDebts).set(values)
-      .where(and(eq(dueDebts.id, params.id), eq(dueDebts.organizationId, context.organizationId), eq(dueDebts.status, 'open')))
+      .where(and(eq(dueDebts.id, params.id), eq(dueDebts.workspaceId, context.workspaceId), eq(dueDebts.status, 'open')))
       .returning();
     return debt ? NextResponse.json(debt) : NextResponse.json({ error: 'Record not found or no longer editable' }, { status: 404 });
   } catch { return NextResponse.json({ error: 'Unable to update Due & Debt record' }, { status: 500 }); }
@@ -55,7 +55,7 @@ export async function DELETE(req: Request, { params }: Params) {
   if (!canWriteOrganization(context.role)) return NextResponse.json({ error: 'Read-only workspace access' }, { status: 403 });
   try {
     const [debt] = await db.update(dueDebts).set({ status: 'archived', updatedAt: new Date() })
-      .where(and(eq(dueDebts.id, params.id), eq(dueDebts.organizationId, context.organizationId), sql`${dueDebts.status} <> 'archived'`))
+      .where(and(eq(dueDebts.id, params.id), eq(dueDebts.workspaceId, context.workspaceId), sql`${dueDebts.status} <> 'archived'`))
       .returning({ id: dueDebts.id });
     return debt ? NextResponse.json({ ok: true }) : NextResponse.json({ error: 'Record not found' }, { status: 404 });
   } catch { return NextResponse.json({ error: 'Unable to archive Due & Debt record' }, { status: 500 }); }
