@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { wallets, transactions, categories } from '@/db/schema';
 import { eq, sql, and, gte } from 'drizzle-orm';
 import { postFinancialJournal } from '@/lib/ledger';
+import { isUuid } from '@/lib/validation';
 
 export async function GET(req: Request) {
   const context = await getWorkspaceContext(req);
@@ -42,10 +43,11 @@ export async function POST(req: Request) {
   const { walletId, transactionType, amountMinor, categoryId, description, occurredAt } = body;
 
   if (
-    typeof walletId !== 'string' ||
+    !isUuid(walletId) ||
     typeof transactionType !== 'string' ||
     typeof description !== 'string' ||
     !description.trim() ||
+    description.trim().length > 500 ||
     typeof amountMinor !== 'number' ||
     !Number.isSafeInteger(amountMinor) ||
     amountMinor <= 0
@@ -57,7 +59,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid transactionType' }, { status: 400 });
   }
 
-  if (categoryId !== undefined && categoryId !== null && typeof categoryId !== 'string') {
+  if (categoryId !== undefined && categoryId !== null && !isUuid(categoryId)) {
     return NextResponse.json({ error: 'Invalid categoryId' }, { status: 400 });
   }
 
