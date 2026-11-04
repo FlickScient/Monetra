@@ -41,10 +41,10 @@ export async function POST(req: Request) {
   try {
     const result = await db.transaction(async (tx) => {
       const fromWallet = await tx.query.wallets.findFirst({
-        where: and(eq(wallets.id, walletId), eq(wallets.organizationId, context.organizationId)),
+        where: and(eq(wallets.id, walletId), eq(wallets.workspaceId, context.workspaceId)),
       });
       const toWallet = await tx.query.wallets.findFirst({
-        where: and(eq(wallets.id, destinationWalletId), eq(wallets.organizationId, context.organizationId)),
+        where: and(eq(wallets.id, destinationWalletId), eq(wallets.workspaceId, context.workspaceId)),
       });
 
       if (
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
         .where(
           and(
             eq(wallets.id, walletId),
-            eq(wallets.organizationId, context.organizationId),
+            eq(wallets.workspaceId, context.workspaceId),
             gte(wallets.currentBalanceMinor, amountMinor),
           ),
         )
@@ -91,13 +91,13 @@ export async function POST(req: Request) {
           currentBalanceMinor: sql`${wallets.currentBalanceMinor} + ${destinationDelta}`,
           updatedAt: new Date(),
         })
-        .where(and(eq(wallets.id, destinationWalletId), eq(wallets.organizationId, context.organizationId)));
+        .where(and(eq(wallets.id, destinationWalletId), eq(wallets.workspaceId, context.workspaceId)));
 
       const [txn] = await tx
         .insert(transactions)
         .values({
           userId: context.userId,
-          organizationId: context.organizationId,
+          workspaceId: context.workspaceId,
           transactionType: 'transfer',
           walletId,
           destinationWalletId,
