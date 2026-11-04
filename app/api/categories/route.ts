@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getOrganizationContext, canWriteOrganization } from '@/lib/organization';
+import { getWorkspaceContext } from '@/lib/workspace';
 import { db } from '@/db';
 import { categories } from '@/db/schema';
 import { eq } from 'drizzle-orm';
@@ -19,11 +19,11 @@ const defaults = [
 ];
 
 export async function GET(req: Request) {
-  const context = await getOrganizationContext(req);
+  const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
 
   let rows = await db.select().from(categories).where(eq(categories.workspaceId, context.workspaceId));
-  if (rows.length === 0 && canWriteOrganization(context.role)) {
+  if (rows.length === 0 && true) {
     await db.insert(categories).values(defaults.map((category) => ({ ...category, userId: context.userId, workspaceId: context.workspaceId })));
     rows = await db.select().from(categories).where(eq(categories.workspaceId, context.workspaceId));
   }
