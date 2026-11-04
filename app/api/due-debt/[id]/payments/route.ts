@@ -11,7 +11,7 @@ export async function GET(req: Request, { params }: Params) {
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
   try {
     const payments = await db.select().from(dueDebtPayments)
-      .where(and(eq(dueDebtPayments.dueDebtId, params.id), eq(dueDebtPayments.organizationId, context.organizationId)))
+      .where(and(eq(dueDebtPayments.dueDebtId, params.id), eq(dueDebtPayments.workspaceId, context.workspaceId)))
       .orderBy(sql`${dueDebtPayments.paidAt} desc`);
     return NextResponse.json(payments);
   } catch { return NextResponse.json({ error: 'Unable to load payment history' }, { status: 500 }); }
@@ -37,26 +37,26 @@ export async function POST(req: Request, { params }: Params) {
   try {
     const result = await db.transaction(async tx => {
       const [prior] = await tx.select().from(dueDebtPayments)
-        .where(and(eq(dueDebtPayments.organizationId, context.organizationId), eq(dueDebtPayments.idempotencyKey, idempotencyKey)));
+        .where(and(eq(dueDebtPayments.workspaceId, context.workspaceId), eq(dueDebtPayments.idempotencyKey, idempotencyKey)));
       if (prior) {\n        if (prior.dueDebtId !== params.id) throw new Error('IDEMPOTENCY_KEY_REUSED');\n        return { payment: prior, replayed: true };\n      }
 
       const [debt] = await tx.select().from(dueDebts)
-        .where(and(eq(dueDebts.id, params.id), eq(dueDebts.organizationId, context.organizationId)))
+        .where(and(eq(dueDebts.id, params.id), eq(dueDebts.workspaceId, context.workspaceId)))
         .for('update');
       if (!debt || debt.status === 'archived') throw new Error('DEBT_NOT_FOUND');
 
       const [totals] = await tx.select({ paid: sql<string>`coalesce(sum(${dueDebtPayments.amountMinor}),0)::text` })
-        .from(dueDebtPayments).where(and(eq(dueDebtPayments.dueDebtId, debt.id), eq(dueDebtPayments.organizationId, context.organizationId)));
+        .from(dueDebtPayments).where(and(eq(dueDebtPayments.dueDebtId, debt.id), eq(dueDebtPayments.workspaceId, context.workspaceId)));
       const outstanding = Number(debt.principalMinor) - Number(totals?.paid ?? 0);
       if (amountMinor > outstanding) throw new Error('PAYMENT_EXCEEDS_OUTSTANDING');
 
       const [payment] = await tx.insert(dueDebtPayments).values({
-        organizationId: context.organizationId, dueDebtId: debt.id, userId: context.userId,
+        workspaceId: context.workspaceId, dueDebtId: debt.id, userId: context.userId,
         amountMinor, paidAt: date, paymentMethod, note, idempotencyKey,
       }).returning();
       const nextStatus = amountMinor === outstanding ? 'settled' : 'partially_settled';
       await tx.update(dueDebts).set({ status: nextStatus, updatedAt: new Date() })
-        .where(and(eq(dueDebts.id, debt.id), eq(dueDebts.organizationId, context.organizationId)));
+        .where(and(eq(dueDebts.id, debt.id), eq(dueDebts.workspaceId, context.workspaceId)));
       return { payment, replayed: false, outstandingMinor: outstanding - amountMinor };
     });
     return NextResponse.json(result, { status: result.replayed ? 200 : 201 });
