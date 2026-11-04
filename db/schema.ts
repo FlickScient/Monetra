@@ -107,7 +107,8 @@ export const transactions = pgTable('transactions', {
   occurredAt: timestamp('occurred_at').notNull().defaultNow(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
-  organizationDateIdx: index('transactions_organization_date_idx').on(table.workspaceId, table.occurredAt),
+  workspaceDateIdx: index('transactions_workspace_date_idx').on(table.workspaceId, table.occurredAt),
+  idempotencyUnique: uniqueIndex('transactions_workspace_idempotency_unique').on(table.workspaceId, table.idempotencyKey).where(sql\`${table.idempotencyKey} IS NOT NULL\`),
 }));
 
 export const ledgerAccounts = pgTable('ledger_accounts', {
