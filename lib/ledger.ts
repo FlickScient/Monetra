@@ -59,8 +59,7 @@ export async function ensureWalletLedgerAccount(
       occurredAt: new Date(),
     }).returning();
 
-    const positiveNormalBalance = expectedType === 'asset' ? openingBalance > 0 : openingBalance > 0;
-    const walletDebit = expectedType === 'asset' ? positiveNormalBalance : !positiveNormalBalance;
+    const walletDebit = expectedType === 'asset' ? openingBalance > 0 : openingBalance < 0;
     const amount = Math.abs(openingBalance);
     await tx.insert(ledgerEntries).values(walletDebit
       ? [
@@ -140,16 +139,12 @@ export async function postFinancialJournal(
     ];
   } else if (transaction.transactionType === 'income') {
     const incomeAccount = await getOrCreateSystemAccount(tx, owner, 'income', 'Income');
-    const isLiability = sourceWallet.walletType === 'credit_card';
-    lines = isLiability
-      ? [
-          { workspaceId: owner.workspaceId, userId: owner.userId, transactionId: transaction.id, ledgerAccountId: sourceAccount.id, debitMinor: transaction.amountMinor, creditMinor: 0 },
-          { workspaceId: owner.workspaceId, userId: owner.userId, transactionId: transaction.id, ledgerAccountId: incomeAccount.id, debitMinor: 0, creditMinor: transaction.amountMinor },
-        ]
-      : [
-          { workspaceId: owner.workspaceId, userId: owner.userId, transactionId: transaction.id, ledgerAccountId: sourceAccount.id, debitMinor: transaction.amountMinor, creditMinor: 0 },
-          { workspaceId: owner.workspaceId, userId: owner.userId, transactionId: transaction.id, ledgerAccountId: incomeAccount.id, debitMinor: 0, creditMinor: transaction.amountMinor },
-        ];
+    // Debit increases an asset and reduces a liability, so the same journal
+    // shape correctly handles income/refunds posted to either wallet type.
+    lines = [
+      { workspaceId: owner.workspaceId, userId: owner.userId, transactionId: transaction.id, ledgerAccountId: sourceAccount.id, debitMinor: transaction.amountMinor, creditMinor: 0 },
+      { workspaceId: owner.workspaceId, userId: owner.userId, transactionId: transaction.id, ledgerAccountId: incomeAccount.id, debitMinor: 0, creditMinor: transaction.amountMinor },
+    ];
   } else if (transaction.transactionType === 'expense') {
     const expenseAccount = await getOrCreateSystemAccount(tx, owner, 'expense', 'Expenses');
     lines = [
