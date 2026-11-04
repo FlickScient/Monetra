@@ -63,7 +63,7 @@ If migration or verification fails, stop and inspect the exact Neon branch and D
 
 New wallet creation, income, expenses, and transfers now post balanced double-entry journal lines in the same Neon transaction as the wallet balance and transaction record.
 
-For an older wallet with no journal history, its current balance is captured once as a clearly labelled `adjustment` opening position the first time the new posting path touches it. This preserves the current balance without inventing historical transaction detail. These internal cutover adjustments are excluded from the normal transaction feed and income/expense summary.
+For an older wallet with no journal history or a mismatch between its stored balance and journal balance, the difference is captured as a clearly labelled `adjustment` opening-position reconciliation the first time the new posting path touches it. This preserves the current balance without inventing historical transaction detail. These internal cutover adjustments are excluded from the normal transaction feed and income/expense summary.
 
 Transaction and transfer endpoints accept an `Idempotency-Key` header. Replaying the same key and payload returns the original transaction; reusing the key with a different payload returns HTTP 409.
 
