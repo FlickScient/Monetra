@@ -3,12 +3,12 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { goalAllocations, goalAllocationEvents, savingsGoals } from '@/db/modules-schema';
 import { wallets } from '@/db/schema';
-import { getOrganizationContext, canWriteOrganization } from '@/lib/organization';
+import { getWorkspaceContext } from '@/lib/workspace';
 
 type Params = { params: { id: string } };
 
 export async function GET(req: Request, { params }: Params) {
-  const context = await getOrganizationContext(req);
+  const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
   try {
     const goal = await db.query.savingsGoals.findFirst({ where: (g, { and, eq }) => and(eq(g.id, params.id), eq(g.workspaceId, context.workspaceId)) });
@@ -21,9 +21,8 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 export async function POST(req: Request, { params }: Params) {
-  const context = await getOrganizationContext(req);
+  const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
-  if (!canWriteOrganization(context.role)) return NextResponse.json({ error: 'Read-only workspace access' }, { status: 403 });
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
   const { walletId, amountMinor, action } = body;
