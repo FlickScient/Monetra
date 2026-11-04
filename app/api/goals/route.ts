@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server';
 import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { savingsGoals, goalAllocations } from '@/db/modules-schema';
-import { getOrganizationContext, canWriteOrganization } from '@/lib/organization';
+import { getWorkspaceContext } from '@/lib/workspace';
 
 export async function GET(req: Request) {
-  const context = await getOrganizationContext(req);
+  const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
   try {
     const goals = await db.select().from(savingsGoals)
@@ -24,9 +24,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const context = await getOrganizationContext(req);
+  const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
-  if (!canWriteOrganization(context.role)) return NextResponse.json({ error: 'Read-only workspace access' }, { status: 403 });
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
   const name = typeof body.name === 'string' ? body.name.trim() : '';
