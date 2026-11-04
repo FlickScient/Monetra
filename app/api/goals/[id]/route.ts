@@ -2,14 +2,13 @@ import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { savingsGoals, goalAllocations } from '@/db/modules-schema';
-import { getOrganizationContext, canWriteOrganization } from '@/lib/organization';
+import { getWorkspaceContext } from '@/lib/workspace';
 
 type Params = { params: { id: string } };
 
 export async function PATCH(req: Request, { params }: Params) {
-  const context = await getOrganizationContext(req);
+  const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
-  if (!canWriteOrganization(context.role)) return NextResponse.json({ error: 'Read-only workspace access' }, { status: 403 });
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
   const values: Partial<typeof savingsGoals.$inferInsert> = { updatedAt: new Date() };
@@ -34,9 +33,8 @@ export async function PATCH(req: Request, { params }: Params) {
 }
 
 export async function DELETE(req: Request, { params }: Params) {
-  const context = await getOrganizationContext(req);
+  const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
-  if (!canWriteOrganization(context.role)) return NextResponse.json({ error: 'Read-only workspace access' }, { status: 403 });
   try {
     const [goal] = await db.select().from(savingsGoals)
       .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.status, 'active')));
