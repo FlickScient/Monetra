@@ -72,7 +72,7 @@ export default function HomePage() {
     setLoading(true);
     setLoadError('');
     try {
-      const response = await fetch('/api/organizations');
+      const response = await fetch('/api/workspaces');
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         const message = typeof payload?.error === 'string' ? payload.error : 'Could not load organizations';
@@ -105,7 +105,7 @@ export default function HomePage() {
       const localNextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
       const summaryUrl = '/api/transactions/summary?from=' + encodeURIComponent(localMonthStart.toISOString()) + '&to=' + encodeURIComponent(localNextMonthStart.toISOString());
       const headers: Record<string, string> = {};
-      if (organizationId) headers['x-organization-id'] = organizationId;
+      if (organizationId) headers['x-workspace-id'] = organizationId;
       const [walletRes, categoryRes, transactionRes, summaryRes] = await Promise.all([
         fetch('/api/wallets', { headers }), fetch('/api/categories', { headers }), fetch('/api/transactions?limit=50&offset=0', { headers }), fetch(summaryUrl, { headers }),
       ]);
@@ -124,7 +124,7 @@ export default function HomePage() {
     const organizationId = activeOrganizationId;
     const offset = transactions.length;
     try {
-      const response = await fetch(`/api/transactions?limit=50&offset=${offset}`, { headers: { 'x-organization-id': organizationId } });
+      const response = await fetch(`/api/transactions?limit=50&offset=${offset}`, { headers: { 'x-workspace-id': organizationId } });
       if (!response.ok) throw new Error('Unable to load older transactions');
       const rows: Transaction[] = await response.json();
       if (requestId !== financeRequestId.current || organizationId !== activeOrganizationId) return;
@@ -193,7 +193,7 @@ export default function HomePage() {
               <select aria-label="Switch financial space" value={activeOrganizationId} onChange={(event) => { const id = event.target.value; setActiveOrganizationId(id); void loadFinanceData(id); }}>
                 {organizations.map((organization) => <option key={organization.id} value={organization.id}>{workspaceLabel(organization)}</option>)}
               </select>
-              <button type="button" onClick={() => setShowOrganizationForm(true)}>+ Add space</button>
+              
 
             </div>
             <button className="icon-btn" onClick={() => setDark((v) => !v)} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
@@ -311,7 +311,7 @@ function WalletModal({ organizationId, onClose, onSaved }: { organizationId: str
     event.preventDefault(); setBusy(true); setError('');
     try {
       const amount = Math.round(Number(opening || 0) * 100);
-      const res = await fetch('/api/wallets', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-organization-id': organizationId }, body: JSON.stringify({ name, walletType: type, currency: 'BDT', openingBalanceMinor: amount }) });
+      const res = await fetch('/api/wallets', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': organizationId }, body: JSON.stringify({ name, walletType: type, currency: 'BDT', openingBalanceMinor: amount }) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not add this wallet.'); }
       else await onSaved('Wallet added. Your balance is now synced.');
     } catch { setError('Connection issue. Please try again.'); }
@@ -328,7 +328,7 @@ function TransactionModal({ organizationId, wallets, categories, onClose, onSave
       const amountMinor = Math.round(Number(amount) * 100);
       const endpoint = type === 'transfer' ? '/api/transfers' : '/api/transactions';
       const body = type === 'transfer' ? { walletId: wallet, destinationWalletId: destination, amountMinor, description } : { walletId: wallet, transactionType: type, categoryId: category || null, amountMinor, description };
-      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-organization-id': organizationId }, body: JSON.stringify(body) });
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': organizationId }, body: JSON.stringify(body) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not post this activity. Check the details and try again.'); }
       else await onSaved('Activity posted. Your balances are up to date.');
     } catch { setError('Connection issue. Please try again.'); }
@@ -348,7 +348,7 @@ function OrganizationMembersModal({ organizationId, currentRole, onClose }: { or
     setBusy(true);
     setError('');
     try {
-      const response = await fetch('/api/organizations/members', { headers: { 'x-organization-id': organizationId } });
+      const response = await fetch('/api/organizations/members', { headers: { 'x-workspace-id': organizationId } });
       const data = await response.json().catch(() => []);
       if (!response.ok) throw new Error(data.error || 'Could not load members.');
       setMembers(data);
@@ -367,7 +367,7 @@ function OrganizationMembersModal({ organizationId, currentRole, onClose }: { or
     try {
       const response = await fetch(`/api/organizations/members/${member.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-organization-id': organizationId },
+        headers: { 'Content-Type': 'application/json', 'x-workspace-id': organizationId },
         body: JSON.stringify({ role }),
       });
       const data = await response.json().catch(() => ({}));
@@ -387,7 +387,7 @@ function OrganizationMembersModal({ organizationId, currentRole, onClose }: { or
     try {
       const response = await fetch(`/api/organizations/members/${member.id}`, {
         method: 'DELETE',
-        headers: { 'x-organization-id': organizationId },
+        headers: { 'x-workspace-id': organizationId },
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not remove this member.');
@@ -434,7 +434,7 @@ function InvitationModal({ organizationId, canInviteAdministrators, onClose }: {
     try {
       const response = await fetch('/api/organizations/invitations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-organization-id': organizationId },
+        headers: { 'Content-Type': 'application/json', 'x-workspace-id': organizationId },
         body: JSON.stringify({ email, role }),
       });
       const data = await response.json().catch(() => ({}));
