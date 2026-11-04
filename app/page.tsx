@@ -330,10 +330,11 @@ function TransactionModal({ organizationId, wallets, categories, onClose, onSave
       const endpoint = type === 'transfer' ? '/api/transfers' : '/api/transactions';
       const body = type === 'transfer' ? { walletId: wallet, destinationWalletId: destination, amountMinor, description } : { walletId: wallet, transactionType: type, categoryId: category || null, amountMinor, description };
       const signature = JSON.stringify({ endpoint, organizationId, body });
-      if (!idempotencyRef.current || idempotencyRef.current.signature !== signature) {
-        idempotencyRef.current = { signature, key: crypto.randomUUID() };
-      }
-      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': organizationId, 'idempotency-key': idempotencyRef.current.key }, body: JSON.stringify(body) });
+      const idempotencyKey = idempotencyRef.current?.signature === signature
+        ? idempotencyRef.current.key
+        : crypto.randomUUID();
+      idempotencyRef.current = { signature, key: idempotencyKey };
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': organizationId, 'idempotency-key': idempotencyKey }, body: JSON.stringify(body) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not post this activity. Check the details and try again.'); }
       else {
         idempotencyRef.current = null;
