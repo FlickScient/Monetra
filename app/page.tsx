@@ -268,9 +268,6 @@ export default function HomePage() {
       <nav className="mobile-nav">{navItems.map(({ key, label, icon: Icon }) => <button key={key} className={activeView === key ? 'active' : ''} onClick={() => setActiveView(key)}><Icon size={20} /><span>{label}</span></button>)}</nav>
       {showWalletForm && <WalletModal workspaceId={activeWorkspaceId} onClose={() => setShowWalletForm(false)} onSaved={async (message) => { setShowWalletForm(false); setNotice(message); await loadFinanceData(); }} />}
       {showTransactionForm && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={async (message) => { setShowTransactionForm(false); setNotice(message); await loadFinanceData(); }} />}
-      {showWorkspaceForm && <WorkspaceModal onClose={() => setShowWorkspaceForm(false)} onSaved={async (workspace) => { setWorkspaces((current) => [...current, workspace]); setShowWorkspaceForm(false); setActiveWorkspaceId(workspace.id); setNotice(`${workspace.name} space created.`); await loadFinanceData(workspace.id); }} />}
-      {showInvitationForm && activeWorkspace && <InvitationModal workspaceId={activeWorkspace.id} canInviteAdministrators={activeWorkspace.role === 'owner'} onClose={() => setShowInvitationForm(false)} />}
-      {showMembersForm && activeWorkspace && <WorkspaceMembersModal workspaceId={activeWorkspace.id} currentRole={activeWorkspace.role} onClose={() => setShowMembersForm(false)} />}
       <FloatingCalculator />
     </main>
   );
