@@ -16,7 +16,7 @@ export async function GET(req: Request) {
 
   try {
     const rows = await db.query.transactions.findMany({
-      where: (t, { eq }) => eq(t.organizationId, context.organizationId),
+      where: (t, { eq }) => eq(t.workspaceId, context.workspaceId),
       orderBy: (t, { desc }) => [desc(t.occurredAt), desc(t.id)],
       limit: limit + 1,
       offset,
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
   try {
     const result = await db.transaction(async (tx) => {
       const wallet = await tx.query.wallets.findFirst({
-        where: and(eq(wallets.id, walletId), eq(wallets.organizationId, context.organizationId)),
+        where: and(eq(wallets.id, walletId), eq(wallets.workspaceId, context.workspaceId)),
       });
       if (!wallet || wallet.status !== 'active') {
         throw new Error('WALLET_NOT_AVAILABLE');
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
 
       if (categoryId) {
         const category = await tx.query.categories.findFirst({
-          where: and(eq(categories.id, categoryId), eq(categories.organizationId, context.organizationId)),
+          where: and(eq(categories.id, categoryId), eq(categories.workspaceId, context.workspaceId)),
         });
         if (!category || category.categoryType !== transactionType) {
           throw new Error('INVALID_CATEGORY');
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
         .where(
           and(
             eq(wallets.id, walletId),
-            eq(wallets.organizationId, context.organizationId),
+            eq(wallets.workspaceId, context.workspaceId),
             ...(decreasesBalance ? [gte(wallets.currentBalanceMinor, amountMinor)] : []),
           ),
         )
@@ -113,7 +113,7 @@ export async function POST(req: Request) {
         .insert(transactions)
         .values({
           userId: context.userId,
-          organizationId: context.organizationId,
+          workspaceId: context.workspaceId,
           transactionType,
           walletId,
           categoryId: categoryId ? categoryId : null,
