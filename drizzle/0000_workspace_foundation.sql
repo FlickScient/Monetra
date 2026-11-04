@@ -83,4 +83,4 @@ CREATE INDEX categories_workspace_idx ON categories(workspace_id);
 CREATE INDEX transactions_workspace_date_idx ON transactions(workspace_id, occurred_at);
 CREATE INDEX ledger_accounts_workspace_idx ON ledger_accounts(workspace_id);
 CREATE INDEX ledger_entries_workspace_idx ON ledger_entries(workspace_id);
-CREATE INDEX ledger_entries_transaction_idx ON ledger_entries(transaction_id);
+CREATE INDEX IF NOT EXISTS ledger_entries_transaction_idx ON ledger_entries(transaction_id);
