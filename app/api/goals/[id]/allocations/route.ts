@@ -4,12 +4,14 @@ import { db } from '@/db';
 import { goalAllocations, goalAllocationEvents, savingsGoals } from '@/db/modules-schema';
 import { wallets } from '@/db/schema';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { isUuid } from '@/lib/validation';
 
 type Params = { params: { id: string } };
 
 export async function GET(req: Request, { params }: Params) {
   const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
+  if (!isUuid(params.id)) return NextResponse.json({ error: 'Invalid goal ID' }, { status: 400 });
   try {
     const goal = await db.query.savingsGoals.findFirst({ where: (g, { and, eq }) => and(eq(g.id, params.id), eq(g.workspaceId, context.workspaceId)) });
     if (!goal) return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
@@ -26,7 +28,7 @@ export async function POST(req: Request, { params }: Params) {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
   const { walletId, amountMinor, action } = body;
-  if (typeof walletId !== 'string' || typeof amountMinor !== 'number' || !Number.isSafeInteger(amountMinor) || amountMinor <= 0 || !['allocate', 'release'].includes(String(action))) {
+  if (!isUuid(walletId) || typeof amountMinor !== 'number' || !Number.isSafeInteger(amountMinor) || amountMinor <= 0 || !['allocate', 'release'].includes(String(action))) {
     return NextResponse.json({ error: 'Provide a wallet, positive amount and allocate/release action' }, { status: 400 });
   }
   try {
