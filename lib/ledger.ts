@@ -37,6 +37,7 @@ export async function ensureWalletLedgerAccount(
       name: `Wallet: ${wallet.name}`,
     }).returning();
   }
+  if (!account) throw new Error('LEDGER_ACCOUNT_CREATE_FAILED');
 
   // Existing wallets may predate journal posting. Capture their cutover balance
   // once as an opening position instead of fabricating historical transactions.
@@ -98,6 +99,7 @@ async function getOrCreateSystemAccount(
       name,
     }).returning();
   }
+  if (!account) throw new Error('LEDGER_SYSTEM_ACCOUNT_CREATE_FAILED');
   return account;
 }
 
