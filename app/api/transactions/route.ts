@@ -108,12 +108,20 @@ export async function POST(req: Request) {
       }
 
       const isCreditCard = wallet.walletType === 'credit_card';
+      if (isCreditCard && transactionType === 'expense' && Number(wallet.creditLimitMinor) > 0 &&
+          Number(wallet.currentBalanceMinor) + amountMinor > Number(wallet.creditLimitMinor)) {
+        throw new Error('CREDIT_LIMIT_EXCEEDED');
+      }
+
       // Credit-card balances represent liabilities: purchases add debt, refunds reduce it.
       const increasesBalance = isCreditCard
         ? transactionType === 'expense'
         : transactionType === 'income';
       const decreasesBalance = !increasesBalance;
       const delta = increasesBalance ? amountMinor : -amountMinor;
+      if (!Number.isSafeInteger(Number(wallet.currentBalanceMinor) + delta)) {
+        throw new Error('BALANCE_LIMIT_EXCEEDED');
+      }
 
       const [updatedWallet] = await tx
         .update(wallets)
@@ -162,6 +170,12 @@ export async function POST(req: Request) {
     }
     if (error instanceof Error && error.message === 'INVALID_CATEGORY') {
       return NextResponse.json({ error: 'Category not found or does not match transaction type' }, { status: 400 });
+    }
+    if (error instanceof Error && error.message === 'CREDIT_LIMIT_EXCEEDED') {
+      return NextResponse.json({ error: 'This transaction would exceed the wallet credit limit' }, { status: 400 });
+    }
+    if (error instanceof Error && error.message === 'BALANCE_LIMIT_EXCEEDED') {
+      return NextResponse.json({ error: 'This balance exceeds the supported safe integer range' }, { status: 400 });
     }
     if (error instanceof Error && error.message === 'INSUFFICIENT_FUNDS') {
       return NextResponse.json({ error: 'Insufficient funds' }, { status: 400 });
