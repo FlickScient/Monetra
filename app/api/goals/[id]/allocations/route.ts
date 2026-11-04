@@ -25,6 +25,7 @@ export async function GET(req: Request, { params }: Params) {
 export async function POST(req: Request, { params }: Params) {
   const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
+  if (!isUuid(params.id)) return NextResponse.json({ error: 'Invalid goal ID' }, { status: 400 });
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
   const { walletId, amountMinor, action } = body;
