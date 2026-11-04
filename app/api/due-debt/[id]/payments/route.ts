@@ -43,7 +43,9 @@ export async function POST(req: Request, { params }: Params) {
       const [prior] = await tx.select().from(dueDebtPayments)
         .where(and(eq(dueDebtPayments.workspaceId, context.workspaceId), eq(dueDebtPayments.idempotencyKey, idempotencyKey)));
       if (prior) {
-        if (prior.dueDebtId !== params.id || Number(prior.amountMinor) !== amountMinor) {
+        if (prior.dueDebtId !== params.id || Number(prior.amountMinor) !== amountMinor ||
+            prior.paymentMethod !== paymentMethod || prior.note !== note ||
+            (paidAt !== undefined && prior.paidAt.getTime() !== date.getTime())) {
           throw new Error('IDEMPOTENCY_KEY_REUSED');
         }
         return { payment: prior, replayed: true };
