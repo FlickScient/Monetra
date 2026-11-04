@@ -43,8 +43,8 @@ export async function ensureWalletLedgerAccount(
   // This preserves the live balance without inventing historical transaction detail.
   const [ledgerBalanceRow] = await tx.select({
     balance: expectedType === 'asset'
-      ? sql<string>`COALESCE(SUM(${ledgerEntries.debitMinor} - ${ledgerEntries.creditMinor}), 0)::text`
-      : sql<string>`COALESCE(SUM(${ledgerEntries.creditMinor} - ${ledgerEntries.debitMinor}), 0)::text`,
+      ? sql<string>`(COALESCE(SUM(${ledgerEntries.debitMinor}), 0) - COALESCE(SUM(${ledgerEntries.creditMinor}), 0))::text`
+      : sql<string>`(COALESCE(SUM(${ledgerEntries.creditMinor}), 0) - COALESCE(SUM(${ledgerEntries.debitMinor}), 0))::text`,
   }).from(ledgerEntries)
     .where(and(
       eq(ledgerEntries.workspaceId, owner.workspaceId),
