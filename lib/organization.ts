@@ -1,144 +1,64 @@
 import { auth } from '@clerk/nextjs/server';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { organizationMembers, organizations } from '@/db/schema';
+import { workspaces } from '@/db/schema';
 
-export type OrganizationRole = 'owner' | 'administrator' | 'editor' | 'viewer';
-
-export type OrganizationContext =
-  | { ok: true; userId: string; organizationId: string; role: OrganizationRole }
+export type WorkspaceContext =
+  | { ok: true; userId: string; workspaceId: string; organizationId: string; role: 'owner' }
   | { ok: false; status: 401 | 403 | 503; error: string };
 
-const validRoles = new Set<OrganizationRole>(['owner', 'administrator', 'editor', 'viewer']);
+const workspaceTypes = ['personal', 'family', 'business'] as const;
 
 /**
- * Resolves the requested organization only after verifying the signed-in
- * Clerk user has an active membership. With no header, the oldest membership
- * is selected to preserve the existing single-person workspace experience.
+ * Resolve a workspace only when it belongs to the authenticated Clerk user.
+ * The legacy organizationId alias is temporary compatibility for API handlers
+ * while their query fields are switched to workspaceId.
  */
-export async function getOrganizationContext(request?: Request): Promise<OrganizationContext> {
+export async function getOrganizationContext(request?: Request): Promise<WorkspaceContext> {
   const { userId } = await auth();
   if (!userId) return { ok: false, status: 401, error: 'Unauthorized' };
 
-  const requestedOrganizationId = request?.headers.get('x-organization-id')?.trim();
-  const conditions = [eq(organizationMembers.userId, userId)];
-  if (requestedOrganizationId) {
-    conditions.push(eq(organizationMembers.organizationId, requestedOrganizationId));
-  }
+  const requestedWorkspaceId = request?.headers.get('x-workspace-id')?.trim()
+    || request?.headers.get('x-organization-id')?.trim();
 
   try {
-    let [membership] = await db
-      .select({
-        organizationId: organizationMembers.organizationId,
-        role: organizationMembers.role,
-      })
-      .from(organizationMembers)
-      .innerJoin(organizations, eq(organizations.id, organizationMembers.organizationId))
-      .where(and(...conditions))
-      .orderBy(asc(organizations.createdAt))
-      .limit(1);
-
-    // New Clerk accounts may sign in after the migration has run. Provision
-    // their Personal space once, without ever falling back from an explicitly
-    // requested organization that they do not belong to.
-    if (!membership && !requestedOrganizationId) {
-      try {
-        await db.transaction(async (tx) => {
-          const [existingPersonal] = await tx
-            .select({ id: organizations.id })
-            .from(organizations)
-            .where(and(eq(organizations.createdBy, userId), eq(organizations.organizationType, 'personal')))
-            .limit(1);
-
-          const [personal] = existingPersonal
-            ? [existingPersonal]
-            : await tx.insert(organizations).values({
-                name: 'Personal',
-                organizationType: 'personal',
-                createdBy: userId,
-              }).returning({ id: organizations.id });
-
-          await tx.insert(organizationMembers).values({
-            organizationId: personal.id,
+    if (!requestedWorkspaceId) {
+      await db.transaction(async (tx) => {
+        for (const workspaceType of workspaceTypes) {
+          await tx.insert(workspaces).values({
             userId,
-            role: 'owner',
-          }).onConflictDoNothing();
-        });
-      } catch {
-        // A concurrent first request may have created the unique Personal
-        // organization already. Re-read membership below.
-      }
-
-      [membership] = await db
-        .select({
-          organizationId: organizationMembers.organizationId,
-          role: organizationMembers.role,
-        })
-        .from(organizationMembers)
-        .innerJoin(organizations, eq(organizations.id, organizationMembers.organizationId))
-        .where(and(eq(organizationMembers.userId, userId), eq(organizations.organizationType, 'personal')))
-        .orderBy(asc(organizations.createdAt))
-        .limit(1);
+            workspaceType,
+            name: workspaceType[0].toUpperCase() + workspaceType.slice(1),
+          }).onConflictDoNothing({
+            target: [workspaces.userId, workspaces.workspaceType],
+          });
+        }
+      });
     }
 
-    if (!membership || !validRoles.has(membership.role as OrganizationRole)) {
-      return { ok: false, status: 403, error: 'No access to this organization' };
-    }
+    const conditions = [eq(workspaces.userId, userId)];
+    if (requestedWorkspaceId) conditions.push(eq(workspaces.id, requestedWorkspaceId));
+
+    const [workspace] = await db.select({ id: workspaces.id })
+      .from(workspaces).where(and(...conditions)).limit(1);
+
+    if (!workspace) return { ok: false, status: 403, error: 'You do not own this workspace' };
 
     return {
       ok: true,
       userId,
-      organizationId: membership.organizationId,
-      role: membership.role as OrganizationRole,
+      workspaceId: workspace.id,
+      organizationId: workspace.id,
+      role: 'owner',
     };
   } catch (error) {
-    const cause =
-      typeof error === 'object' && error !== null && 'cause' in error
-        ? error.cause
-        : undefined;
-
-    const causeDetails =
-      typeof cause === 'object' && cause !== null
-        ? {
-            name: 'name' in cause ? cause.name : undefined,
-            message: 'message' in cause ? cause.message : String(cause),
-            code: 'code' in cause ? cause.code : undefined,
-            detail: 'detail' in cause ? cause.detail : undefined,
-            hint: 'hint' in cause ? cause.hint : undefined,
-          }
-        : cause instanceof Error
-          ? { name: cause.name, message: cause.message }
-          : cause;
-
-    let databaseDiagnostics: unknown;
-    try {
-      const diagnosticResult = await db.execute(sql`select current_database() as database_name, current_schema() as current_schema, current_schemas(true) as search_path, to_regclass('public.organization_members')::text as organization_members_table, to_regclass('public.organizations')::text as organizations_table`);
-      databaseDiagnostics = diagnosticResult.rows[0] ?? null;
-    } catch (diagnosticError) {
-      databaseDiagnostics = {
-        message: diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError),
-      };
-    }
-
-    console.error('MONETRA_ORG_ERROR:', {
-      databaseDiagnostics,
-      name: error instanceof Error ? error.name : 'UnknownError',
-      message: error instanceof Error ? error.message : String(error),
-      code:
-        typeof error === 'object' && error !== null && 'code' in error
-          ? error.code
-          : undefined,
-      cause: causeDetails,
-    });
-
+    console.error('MONETRA_WORKSPACE_ERROR:', error);
     return {
       ok: false,
       status: 503,
-      error: 'Finance database is unavailable. Check the DATABASE_URL and apply the pending Drizzle migrations.',
+      error: 'Finance database is unavailable. Verify DATABASE_URL and apply the pending Drizzle migrations.',
     };
   }
 }
 
-export function canWriteOrganization(role: OrganizationRole): boolean {
-  return role === 'owner' || role === 'administrator' || role === 'editor';
-}
+export const canWriteOrganization = (_role: 'owner'): boolean => true;
