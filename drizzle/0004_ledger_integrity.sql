@@ -112,7 +112,11 @@ DECLARE
   v_debits numeric;
   v_credits numeric;
 BEGIN
-  v_transaction_id := COALESCE(NEW.transaction_id, OLD.transaction_id);
+  IF TG_OP = 'DELETE' THEN
+    v_transaction_id := OLD.transaction_id;
+  ELSE
+    v_transaction_id := NEW.transaction_id;
+  END IF;
   SELECT COALESCE(sum(debit_minor), 0), COALESCE(sum(credit_minor), 0)
     INTO v_debits, v_credits
     FROM ledger_entries
