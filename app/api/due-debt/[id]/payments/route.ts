@@ -3,12 +3,14 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { dueDebts, dueDebtPayments } from '@/db/modules-schema';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { isUuid } from '@/lib/validation';
 
 type Params = { params: { id: string } };
 
 export async function GET(req: Request, { params }: Params) {
   const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
+  if (!isUuid(params.id)) return NextResponse.json({ error: 'Invalid record ID' }, { status: 400 });
   try {
     const payments = await db.select().from(dueDebtPayments)
       .where(and(eq(dueDebtPayments.dueDebtId, params.id), eq(dueDebtPayments.workspaceId, context.workspaceId)))
