@@ -34,6 +34,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Cannot transfer to same wallet' }, { status: 400 });
   }
 
+  const idempotencyKey = req.headers.get('idempotency-key')?.trim() || (typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '');
+  if (idempotencyKey && (idempotencyKey.length < 8 || idempotencyKey.length > 128)) {
+    return NextResponse.json({ error: 'Invalid idempotency key' }, { status: 400 });
+  }
+
+  const normalizedDescription = typeof description === 'string' && description.trim() ? description.trim() : 'Transfer';
   const parsedDate = occurredAt === undefined ? new Date() : new Date(String(occurredAt));
   if (Number.isNaN(parsedDate.getTime())) {
     return NextResponse.json({ error: 'Invalid occurredAt date' }, { status: 400 });
@@ -41,6 +47,20 @@ export async function POST(req: Request) {
 
   try {
     const result = await db.transaction(async (tx) => {
+      if (idempotencyKey) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${context.workspaceId}), hashtext(${idempotencyKey}))`);
+        const [prior] = await tx.select().from(transactions)
+          .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.idempotencyKey, idempotencyKey)))
+          .limit(1);
+        if (prior) {
+          const sameRequest = prior.transactionType === 'transfer' && prior.walletId === walletId &&
+            prior.destinationWalletId === destinationWalletId && Number(prior.amountMinor) === amountMinor &&
+            prior.description === normalizedDescription;
+          if (!sameRequest) throw new Error('IDEMPOTENCY_KEY_REUSED');
+          return { transaction: prior, replayed: true };
+        }
+      }
+
       // Lock both wallets in a deterministic order. Opposite-direction transfers
       // therefore cannot deadlock by each locking its source before its destination.
       const lockedWallets = await tx.select().from(wallets)
@@ -115,20 +135,22 @@ export async function POST(req: Request) {
           walletId,
           destinationWalletId,
           amountMinor,
-          description: typeof description === 'string' && description.trim()
-            ? description.trim()
-            : 'Transfer',
+          idempotencyKey: idempotencyKey || null,
+          description: normalizedDescription,
           occurredAt: parsedDate,
         })
         .returning();
 
       await postFinancialJournal(tx, context, txn, fromWallet, toWallet);
-      return { transaction: txn };
+      return { transaction: txn, replayed: false };
     });
 
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json(result, { status: result.replayed ? 200 : 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
+    if (code === 'IDEMPOTENCY_KEY_REUSED') {
+      return NextResponse.json({ error: 'This idempotency key was already used for a different transfer' }, { status: 409 });
+    }
     if (code === 'WALLET_NOT_AVAILABLE') {
       return NextResponse.json({ error: 'Wallet not found or inactive' }, { status: 404 });
     }
