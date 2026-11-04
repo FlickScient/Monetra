@@ -42,7 +42,7 @@ try {
   );
   const byTable = new Map(columns.rows.map(row => [row.table_name, row]));
   const invalid = financeTables.filter(name => !byTable.has(name) || byTable.get(name).is_nullable !== 'NO');
-  const transactionColumns = await pool.query(\`select column_name from information_schema.columns where table_schema = current_schema() and table_name = 'transactions' and column_name = 'idempotency_key'\`);
+  const transactionColumns = await pool.query("select column_name from information_schema.columns where table_schema = current_schema() and table_name = 'transactions' and column_name = 'idempotency_key'");
   if (transactionColumns.rowCount !== 1) invalid.push('transactions.idempotency_key');
   if (invalid.length) throw new Error(`workspace_id missing or nullable on: ${invalid.join(', ')}`);
 
