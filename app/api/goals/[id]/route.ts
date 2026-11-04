@@ -23,7 +23,7 @@ export async function PATCH(req: Request, { params }: Params) {
     values.targetMinor = body.targetMinor;
   }
   if (body.targetDate !== undefined) {
-    if (body.targetDate !== null && (typeof body.targetDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.targetDate))) return NextResponse.json({ error: 'Invalid target date' }, { status: 400 });
+    if (body.targetDate !== null && (typeof body.targetDate !== 'string' || !isDateOnly(body.targetDate))) return NextResponse.json({ error: 'Invalid target date' }, { status: 400 });
     values.targetDate = body.targetDate;
   }
   try {
