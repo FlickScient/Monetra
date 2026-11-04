@@ -63,6 +63,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid categoryId' }, { status: 400 });
   }
 
+  const idempotencyKey = req.headers.get('idempotency-key')?.trim() || (typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '');
+  if (idempotencyKey && (idempotencyKey.length < 8 || idempotencyKey.length > 128)) {
+    return NextResponse.json({ error: 'Invalid idempotency key' }, { status: 400 });
+  }
+
   const parsedDate = occurredAt === undefined ? new Date() : new Date(String(occurredAt));
   if (Number.isNaN(parsedDate.getTime())) {
     return NextResponse.json({ error: 'Invalid occurredAt date' }, { status: 400 });
@@ -70,6 +75,22 @@ export async function POST(req: Request) {
 
   try {
     const result = await db.transaction(async (tx) => {
+      if (idempotencyKey) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${context.workspaceId}), hashtext(${idempotencyKey}))`);
+        const [prior] = await tx.select().from(transactions)
+          .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.idempotencyKey, idempotencyKey)))
+          .limit(1);
+        if (prior) {
+          const sameRequest = prior.walletId === walletId && prior.transactionType === transactionType &&
+            prior.categoryId === (categoryId || null) && Number(prior.amountMinor) === amountMinor &&
+            prior.description === description.trim();
+          if (!sameRequest) throw new Error('IDEMPOTENCY_KEY_REUSED');
+          const [currentWallet] = await tx.select().from(wallets)
+            .where(and(eq(wallets.id, walletId), eq(wallets.workspaceId, context.workspaceId)));
+          return { transaction: prior, wallet: currentWallet, replayed: true };
+        }
+      }
+
       const [wallet] = await tx.select().from(wallets)
         .where(and(eq(wallets.id, walletId), eq(wallets.workspaceId, context.workspaceId)))
         .for('update');
@@ -120,6 +141,7 @@ export async function POST(req: Request) {
           transactionType,
           walletId,
           categoryId: categoryId ? categoryId : null,
+          idempotencyKey: idempotencyKey || null,
           amountMinor,
           description: description.trim(),
           occurredAt: parsedDate,
@@ -127,11 +149,14 @@ export async function POST(req: Request) {
         .returning();
 
       await postFinancialJournal(tx, context, txn, wallet);
-      return { transaction: txn, wallet: updatedWallet };
+      return { transaction: txn, wallet: updatedWallet, replayed: false };
     });
 
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json(result, { status: result.replayed ? 200 : 201 });
   } catch (error) {
+    if (error instanceof Error && error.message === 'IDEMPOTENCY_KEY_REUSED') {
+      return NextResponse.json({ error: 'This idempotency key was already used for a different transaction' }, { status: 409 });
+    }
     if (error instanceof Error && error.message === 'WALLET_NOT_AVAILABLE') {
       return NextResponse.json({ error: 'Wallet not found or inactive' }, { status: 404 });
     }
