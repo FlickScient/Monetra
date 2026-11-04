@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowDownLeft, ArrowUpRight, CalendarClock, CirclePlus, HandCoins, History, Plus, Search, ShieldCheck, Trash2, Wallet, X } from 'lucide-react';
 
 type Direction = 'receivable' | 'payable';
@@ -34,6 +34,7 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
   const [filter, setFilter] = useState<'all' | Direction | 'overdue' | 'settled'>('all');
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
+  const paymentKeyRef = useRef<{ signature: string; key: string } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -100,10 +101,14 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
     const entry = entries.find(e => e.id === repayId);
     if (!entry || !amount || amount > outstanding(entry)) { setError('Enter a payment greater than zero and no more than the outstanding principal.'); return; }
     setError('');
+    const signature = JSON.stringify({ workspaceId, repayId, amount, note: repayNote.trim() || null });
+    if (!paymentKeyRef.current || paymentKeyRef.current.signature !== signature) {
+      paymentKeyRef.current = { signature, key: crypto.randomUUID() };
+    }
     try {
       const response = await fetch('/api/due-debt/' + repayId + '/payments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, 'idempotency-key': crypto.randomUUID() },
+        headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, 'idempotency-key': paymentKeyRef.current.key },
         body: JSON.stringify({ amountMinor: amount, note: repayNote.trim() || null }),
       });
       const data = await response.json().catch(() => ({}));
@@ -112,6 +117,7 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
       setEntries(current => current.map(item => item.id === repayId ? {
         ...item, repayments: [...item.repayments, { id: payment.id, amount: Number(payment.amountMinor), date: String(payment.paidAt).slice(0, 10), note: payment.note || '' }],
       } : item));
+      paymentKeyRef.current = null;
       setRepayAmount(''); setRepayNote(''); setRepayId('');
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not record this payment.'); }
   }
