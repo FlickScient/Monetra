@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getWorkspaceContext } from '@/lib/workspace';
 import { db } from '@/db';
 import { wallets } from '@/db/schema';
+import { ensureWalletLedgerAccount } from '@/lib/ledger';
 
 const WALLET_TYPES = new Set([
   'cash',
@@ -49,18 +50,23 @@ export async function POST(req: Request) {
   }
 
   try {
-    const [wallet] = await db
-      .insert(wallets)
-      .values({
-        userId: context.userId,
-        workspaceId: context.workspaceId,
-        name: name.trim(),
-        walletType,
-        currency,
-        openingBalanceMinor,
-        currentBalanceMinor: openingBalanceMinor,
-      })
-      .returning();
+    const wallet = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(wallets)
+        .values({
+          userId: context.userId,
+          workspaceId: context.workspaceId,
+          name: name.trim(),
+          walletType,
+          currency,
+          openingBalanceMinor,
+          currentBalanceMinor: openingBalanceMinor,
+        })
+        .returning();
+
+      await ensureWalletLedgerAccount(tx, context, created);
+      return created;
+    });
 
     return NextResponse.json(wallet, { status: 201 });
   } catch {
