@@ -21,7 +21,7 @@ type Wallet = { id: string; name: string; walletType: WalletType; currentBalance
 type Category = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
 type Transaction = { id: string; transactionType: TransactionType; walletId: string; destinationWalletId: string | null; amountMinor: number; description: string; occurredAt: string; categoryId: string | null };
 type FinanceSummary = { incomeMinor: number; expenseMinor: number; categorySpend: { categoryId: string | null; totalMinor: number }[] };
-type Organization = { id: string; name: string; type: 'personal' | 'family' | 'business'; role: 'owner' | 'administrator' | 'editor' | 'viewer' };
+type Workspace = { id: string; name: string; type: 'personal' | 'family' | 'business'; role: 'owner' | 'administrator' | 'editor' | 'viewer' };
 type View = 'overview' | 'wallets' | 'transactions' | 'intelligence' | 'due-debt' | 'savings' | 'vault' | 'settings';
 
 const walletLabels: Record<WalletType, string> = {
@@ -35,11 +35,8 @@ const dateLabel = (value: string) =>
 
 export default function HomePage() {
   const { user, isLoaded } = useUser();
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [activeOrganizationId, setActiveOrganizationId] = useState('');
-  const [showOrganizationForm, setShowOrganizationForm] = useState(false);
-  const [showInvitationForm, setShowInvitationForm] = useState(false);
-  const [showMembersForm, setShowMembersForm] = useState(false);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState('');
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -75,14 +72,14 @@ export default function HomePage() {
       const response = await fetch('/api/workspaces');
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        const message = typeof payload?.error === 'string' ? payload.error : 'Could not load organizations';
+        const message = typeof payload?.error === 'string' ? payload.error : 'Could not load workspaces';
         throw new Error(message);
       }
-      const rows: Organization[] = Array.isArray(payload) ? payload : [];
-      setOrganizations(rows);
+      const rows: Workspace[] = Array.isArray(payload) ? payload : [];
+      setWorkspaces(rows);
       const selected = rows.find((row) => row.type === 'personal') || rows[0];
-      if (!selected) throw new Error('No personal organization is available');
-      setActiveOrganizationId(selected.id);
+      if (!selected) throw new Error('No personal workspace is available');
+      setActiveWorkspaceId(selected.id);
       await loadFinanceData(selected.id);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'We couldn’t open your finance workspace. Please retry in a moment.');
@@ -90,7 +87,7 @@ export default function HomePage() {
     }
   }
 
-  async function loadFinanceData(organizationId = activeOrganizationId) {
+  async function loadFinanceData(workspaceId = activeWorkspaceId) {
     const requestId = ++financeRequestId.current;
     setLoading(true);
     setLoadError('');
@@ -105,7 +102,7 @@ export default function HomePage() {
       const localNextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
       const summaryUrl = '/api/transactions/summary?from=' + encodeURIComponent(localMonthStart.toISOString()) + '&to=' + encodeURIComponent(localNextMonthStart.toISOString());
       const headers: Record<string, string> = {};
-      if (organizationId) headers['x-workspace-id'] = organizationId;
+      if (workspaceId) headers['x-workspace-id'] = workspaceId;
       const [walletRes, categoryRes, transactionRes, summaryRes] = await Promise.all([
         fetch('/api/wallets', { headers }), fetch('/api/categories', { headers }), fetch('/api/transactions?limit=50&offset=0', { headers }), fetch(summaryUrl, { headers }),
       ]);
@@ -121,17 +118,17 @@ export default function HomePage() {
   }
   async function loadMoreTransactions() {
     const requestId = financeRequestId.current;
-    const organizationId = activeOrganizationId;
+    const workspaceId = activeWorkspaceId;
     const offset = transactions.length;
     try {
-      const response = await fetch(`/api/transactions?limit=50&offset=${offset}`, { headers: { 'x-workspace-id': organizationId } });
+      const response = await fetch(`/api/transactions?limit=50&offset=${offset}`, { headers: { 'x-workspace-id': workspaceId } });
       if (!response.ok) throw new Error('Unable to load older transactions');
       const rows: Transaction[] = await response.json();
-      if (requestId !== financeRequestId.current || organizationId !== activeOrganizationId) return;
+      if (requestId !== financeRequestId.current || workspaceId !== activeWorkspaceId) return;
       setTransactions((current) => [...current, ...rows.slice(0, 50)]);
       setHasMoreTransactions(rows.length > 50);
     } catch {
-      if (requestId === financeRequestId.current && organizationId === activeOrganizationId) {
+      if (requestId === financeRequestId.current && workspaceId === activeWorkspaceId) {
         setNotice('Could not load older transactions. Please try again.');
       }
     }
@@ -148,8 +145,8 @@ export default function HomePage() {
   }).filter((item) => item.total > 0).sort((a, b) => b.total - a.total), [categories, summary]);
   const donutTotal = categorySpend.reduce((sum, c) => sum + c.total, 0);
   const firstName = user?.firstName || 'there';
-  const activeOrganization = organizations.find((organization) => organization.id === activeOrganizationId);
-  const workspaceLabel = (organization: Organization) => organization.type === 'personal' ? 'Personal' : organization.type === 'family' ? 'Family' : 'Business';
+  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
+  const workspaceLabel = (workspace: Workspace) => workspace.type === 'personal' ? 'Personal' : workspace.type === 'family' ? 'Family' : 'Business';
 
   if (!isLoaded || loading) return <div className="loading-screen"><div className="loading-mark">M</div><p>Preparing your money space</p><span className="loading-line" /></div>;
 
@@ -181,7 +178,7 @@ export default function HomePage() {
         </nav>
         <div className="sidebar-bottom">
           <div className="vault-note"><div className="vault-note-icon"><ShieldCheck size={17} /></div><div><b>Your data, protected.</b><span>Private financial workspace</span></div></div>
-          <div className="sidebar-user"><UserButton afterSignOutUrl="/" /><div className="min-w-0"><b className="truncate">{user?.fullName || firstName}</b><span>{activeOrganization ? workspaceLabel(activeOrganization) : 'Personal'}</span></div></div>
+          <div className="sidebar-user"><UserButton afterSignOutUrl="/" /><div className="min-w-0"><b className="truncate">{user?.fullName || firstName}</b><span>{activeWorkspace ? workspaceLabel(activeWorkspace) : 'Personal'}</span></div></div>
         </div>
       </aside>
 
@@ -189,9 +186,9 @@ export default function HomePage() {
         <header className="topbar">
           <div className="topbar-context"><span className="status-dot" /> YOUR FINANCIAL OVERVIEW <span className="topbar-divider">/</span> <span>{navItems.find((item) => item.key === activeView)?.label || activeView}</span></div>
           <div className="topbar-actions">
-            <div className="organization-switcher">
-              <select aria-label="Switch financial space" value={activeOrganizationId} onChange={(event) => { const id = event.target.value; setActiveOrganizationId(id); void loadFinanceData(id); }}>
-                {organizations.map((organization) => <option key={organization.id} value={organization.id}>{workspaceLabel(organization)}</option>)}
+            <div className="workspace-switcher">
+              <select aria-label="Switch financial space" value={activeWorkspaceId} onChange={(event) => { const id = event.target.value; setActiveWorkspaceId(id); void loadFinanceData(id); }}>
+                {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspaceLabel(workspace)}</option>)}
               </select>
               
 
@@ -204,7 +201,7 @@ export default function HomePage() {
 
         <div className="content-wrap">
           {notice && <div className="notice-bar"><span className="status-dot" />{notice}<button onClick={() => setNotice('')} aria-label="Dismiss"><X size={15} /></button></div>}
-          {loadError && <div className="error-bar">{loadError}<button onClick={() => void (activeOrganizationId ? loadFinanceData() : initializeWorkspace())}>Retry</button></div>}
+          {loadError && <div className="error-bar">{loadError}<button onClick={() => void (activeWorkspaceId ? loadFinanceData() : initializeWorkspace())}>Retry</button></div>}
 
           {activeView === 'overview' && (
             <div className="page-stack">
@@ -261,19 +258,19 @@ export default function HomePage() {
           {activeView === 'wallets' && <WalletsView wallets={wallets} onAdd={() => setShowWalletForm(true)} />}
           {activeView === 'transactions' && <TransactionsView transactions={transactions} wallets={wallets} categories={categories} onAdd={() => setShowTransactionForm(true)} onLoadMore={loadMoreTransactions} hasMore={hasMoreTransactions} />}
           {activeView === 'intelligence' && <FinancialIntelligenceView wallets={wallets} transactions={transactions} monthlyIncomeMinor={monthlyIncome} monthlyExpenseMinor={monthlyExpense} />}
-          {activeView === 'due-debt' && <DueDebtView workspaceId={activeOrganizationId} />}
-          {activeView === 'savings' && <SavingsGoalsView workspaceId={activeOrganizationId} wallets={wallets} />}
-          {activeView === 'vault' && <FiscusView workspaces={organizations.map(({ id, type }) => ({ id, type }))} activeWorkspaceId={activeOrganizationId} />}
+          {activeView === 'due-debt' && <DueDebtView workspaceId={activeWorkspaceId} />}
+          {activeView === 'savings' && <SavingsGoalsView workspaceId={activeWorkspaceId} wallets={wallets} />}
+          {activeView === 'vault' && <FiscusView workspaces={workspaces.map(({ id, type }) => ({ id, type }))} activeWorkspaceId={activeWorkspaceId} />}
           {activeView === 'settings' && <SettingsView dark={dark} onToggleTheme={() => setDark((current) => !current)} />}
         </div>
       </div>
 
       <nav className="mobile-nav">{navItems.map(({ key, label, icon: Icon }) => <button key={key} className={activeView === key ? 'active' : ''} onClick={() => setActiveView(key)}><Icon size={20} /><span>{label}</span></button>)}</nav>
-      {showWalletForm && <WalletModal organizationId={activeOrganizationId} onClose={() => setShowWalletForm(false)} onSaved={async (message) => { setShowWalletForm(false); setNotice(message); await loadFinanceData(); }} />}
-      {showTransactionForm && <TransactionModal organizationId={activeOrganizationId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={async (message) => { setShowTransactionForm(false); setNotice(message); await loadFinanceData(); }} />}
-      {showOrganizationForm && <OrganizationModal onClose={() => setShowOrganizationForm(false)} onSaved={async (organization) => { setOrganizations((current) => [...current, organization]); setShowOrganizationForm(false); setActiveOrganizationId(organization.id); setNotice(`${organization.name} space created.`); await loadFinanceData(organization.id); }} />}
-      {showInvitationForm && activeOrganization && <InvitationModal organizationId={activeOrganization.id} canInviteAdministrators={activeOrganization.role === 'owner'} onClose={() => setShowInvitationForm(false)} />}
-      {showMembersForm && activeOrganization && <OrganizationMembersModal organizationId={activeOrganization.id} currentRole={activeOrganization.role} onClose={() => setShowMembersForm(false)} />}
+      {showWalletForm && <WalletModal workspaceId={activeWorkspaceId} onClose={() => setShowWalletForm(false)} onSaved={async (message) => { setShowWalletForm(false); setNotice(message); await loadFinanceData(); }} />}
+      {showTransactionForm && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={async (message) => { setShowTransactionForm(false); setNotice(message); await loadFinanceData(); }} />}
+      {showWorkspaceForm && <WorkspaceModal onClose={() => setShowWorkspaceForm(false)} onSaved={async (workspace) => { setWorkspaces((current) => [...current, workspace]); setShowWorkspaceForm(false); setActiveWorkspaceId(workspace.id); setNotice(`${workspace.name} space created.`); await loadFinanceData(workspace.id); }} />}
+      {showInvitationForm && activeWorkspace && <InvitationModal workspaceId={activeWorkspace.id} canInviteAdministrators={activeWorkspace.role === 'owner'} onClose={() => setShowInvitationForm(false)} />}
+      {showMembersForm && activeWorkspace && <WorkspaceMembersModal workspaceId={activeWorkspace.id} currentRole={activeWorkspace.role} onClose={() => setShowMembersForm(false)} />}
       <FloatingCalculator />
     </main>
   );
@@ -305,13 +302,13 @@ function TransactionsView({ transactions, wallets, categories, onAdd, onLoadMore
   return <div className="page-stack"><section className="page-intro"><div><p className="eyebrow">YOUR FINANCIAL HISTORY</p><h1>Transactions<span>.</span></h1><p className="intro-copy">Every movement, accounted for.</p></div><button className="primary-btn intro-action" onClick={onAdd}><Plus size={17} /> New transaction</button></section><section className="surface-card ledger-card"><div className="ledger-toolbar"><div className="search-wrap"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search transactions..." /></div><div className="filter-tabs">{(['all', 'income', 'expense', 'transfer'] as const).map((item) => <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div></div>{filtered.length === 0 ? <EmptyState icon={<Search size={22} />} title="Nothing matches" text="Try a different search or filter." /> : <div className="transaction-list">{filtered.map((t) => <TransactionRow key={t.id} transaction={t} wallets={wallets} categories={categories} />)}</div>}{hasMore && query.trim() === '' && filter === 'all' && <button className="load-more-btn" disabled={loadingMore} onClick={async () => { setLoadingMore(true); await onLoadMore(); setLoadingMore(false); }}>{loadingMore ? 'Loading older activity…' : 'Load older transactions'} <ChevronRight size={15} /></button>}</section></div>;
 }
 
-function WalletModal({ organizationId, onClose, onSaved }: { organizationId: string; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
+function WalletModal({ workspaceId, onClose, onSaved }: { workspaceId: string; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
   const [name, setName] = useState(''); const [type, setType] = useState<WalletType>('cash'); const [opening, setOpening] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
     try {
       const amount = Math.round(Number(opening || 0) * 100);
-      const res = await fetch('/api/wallets', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': organizationId }, body: JSON.stringify({ name, walletType: type, currency: 'BDT', openingBalanceMinor: amount }) });
+      const res = await fetch('/api/wallets', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ name, walletType: type, currency: 'BDT', openingBalanceMinor: amount }) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not add this wallet.'); }
       else await onSaved('Wallet added. Your balance is now synced.');
     } catch { setError('Connection issue. Please try again.'); }
@@ -320,7 +317,7 @@ function WalletModal({ organizationId, onClose, onSaved }: { organizationId: str
   return <Modal title="Add a wallet" subtitle="Bring another account into your overview." onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Wallet name<input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Everyday cash" required /></label><label className="field-label">Wallet type<select className="field" value={type} onChange={(e) => setType(e.target.value as WalletType)}>{Object.entries(walletLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="field-label">Opening balance<input className="field" type="number" min="0" step="0.01" value={opening} onChange={(e) => setOpening(e.target.value)} placeholder="0.00" /></label>{type === 'credit_card' && <p className="form-hint">Credit cards are liabilities. Their balance reduces net worth and is not counted as available money.</p>}{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy}>{busy ? 'Saving...' : 'Create wallet'}</button></form></Modal>;
 }
 
-function TransactionModal({ organizationId, wallets, categories, onClose, onSaved }: { organizationId: string; wallets: Wallet[]; categories: Category[]; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
+function TransactionModal({ workspaceId, wallets, categories, onClose, onSaved }: { workspaceId: string; wallets: Wallet[]; categories: Category[]; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
   const [type, setType] = useState<TransactionType>('expense'); const [wallet, setWallet] = useState(wallets[0]?.id || ''); const [destination, setDestination] = useState(wallets[1]?.id || ''); const [category, setCategory] = useState(categories.find((c) => c.categoryType === 'expense')?.id || ''); const [amount, setAmount] = useState(''); const [description, setDescription] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const idempotencyRef = useRef<{ signature: string; key: string } | null>(null);
   async function submit(event: FormEvent) {
@@ -329,12 +326,12 @@ function TransactionModal({ organizationId, wallets, categories, onClose, onSave
       const amountMinor = Math.round(Number(amount) * 100);
       const endpoint = type === 'transfer' ? '/api/transfers' : '/api/transactions';
       const body = type === 'transfer' ? { walletId: wallet, destinationWalletId: destination, amountMinor, description } : { walletId: wallet, transactionType: type, categoryId: category || null, amountMinor, description };
-      const signature = JSON.stringify({ endpoint, organizationId, body });
+      const signature = JSON.stringify({ endpoint, workspaceId, body });
       const idempotencyKey = idempotencyRef.current?.signature === signature
         ? idempotencyRef.current.key
         : crypto.randomUUID();
       idempotencyRef.current = { signature, key: idempotencyKey };
-      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': organizationId, 'idempotency-key': idempotencyKey }, body: JSON.stringify(body) });
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, 'idempotency-key': idempotencyKey }, body: JSON.stringify(body) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not post this activity. Check the details and try again.'); }
       else {
         idempotencyRef.current = null;
@@ -344,176 +341,6 @@ function TransactionModal({ organizationId, wallets, categories, onClose, onSave
     finally { setBusy(false); }
   }
   return <Modal title="Record activity" subtitle="Keep your money movement up to date." onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Activity type<select className="field" value={type} onChange={(e) => setType(e.target.value as TransactionType)}>{(['income', 'expense', 'transfer'] as TransactionType[]).map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label><label className="field-label">{type === 'transfer' ? 'From wallet' : 'Wallet'}<select className="field" value={wallet} onChange={(e) => setWallet(e.target.value)} required>{wallets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{type === 'transfer' && <label className="field-label">To wallet<select className="field" value={destination} onChange={(e) => setDestination(e.target.value)} required>{wallets.filter((item) => item.id !== wallet).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{type !== 'transfer' && <label className="field-label">Category<select className="field" value={category} onChange={(e) => setCategory(e.target.value)}><option value="">Uncategorized</option>{categories.filter((item) => item.categoryType === (type === 'income' ? 'income' : 'expense')).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<label className="field-label">Amount<input className="field" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required /></label><label className="field-label">Description<input className="field" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What was this for?" required /></label>{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy || wallets.length === 0}>{busy ? 'Posting...' : 'Post activity'}</button></form></Modal>;
-}
-
-function OrganizationMembersModal({ organizationId, currentRole, onClose }: { organizationId: string; currentRole: Organization['role']; onClose: () => void }) {
-  type Member = { id: string; userId: string; role: Organization['role']; joinedAt: string };
-  const [members, setMembers] = useState<Member[]>([]);
-  const [busy, setBusy] = useState(true);
-  const [error, setError] = useState('');
-  const [workingId, setWorkingId] = useState('');
-
-  async function loadMembers() {
-    setBusy(true);
-    setError('');
-    try {
-      const response = await fetch('/api/organizations/members', { headers: { 'x-workspace-id': organizationId } });
-      const data = await response.json().catch(() => []);
-      if (!response.ok) throw new Error(data.error || 'Could not load members.');
-      setMembers(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load members.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  useEffect(() => { void loadMembers(); }, [organizationId]);
-
-  async function updateMember(member: Member, role: Organization['role']) {
-    setWorkingId(member.id);
-    setError('');
-    try {
-      const response = await fetch(`/api/organizations/members/${member.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-workspace-id': organizationId },
-        body: JSON.stringify({ role }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Could not update this member.');
-      await loadMembers();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update this member.');
-    } finally {
-      setWorkingId('');
-    }
-  }
-
-  async function removeMember(member: Member) {
-    if (!window.confirm('Remove this member from the organization? They will lose access to its financial data.')) return;
-    setWorkingId(member.id);
-    setError('');
-    try {
-      const response = await fetch(`/api/organizations/members/${member.id}`, {
-        method: 'DELETE',
-        headers: { 'x-workspace-id': organizationId },
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Could not remove this member.');
-      await loadMembers();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not remove this member.');
-    } finally {
-      setWorkingId('');
-    }
-  }
-
-  return <Modal title="Workspace team" subtitle="Control who can see and manage this space." onClose={onClose}>
-    <div className="modal-form">
-      {busy ? <p className="form-hint">Loading members…</p> : members.map((member) => {
-        const canManage = member.role !== 'owner' && (currentRole === 'owner' || member.role !== 'administrator');
-        return <div className="member-row" key={member.id}>
-          <div className="member-identity"><b>{member.userId.slice(0, 15)}{member.userId.length > 15 ? '…' : ''}</b><small>{member.role}</small></div>
-          {member.role === 'owner' ? <span className="member-role-label">Owner</span> : <select className="field member-role-select" aria-label="Member role" value={member.role} disabled={!canManage || workingId === member.id} onChange={(event) => void updateMember(member, event.target.value as Organization['role'])}>
-            {currentRole === 'owner' && <option value="administrator">Administrator</option>}
-            <option value="editor">Editor</option><option value="viewer">Viewer</option>
-          </select>}
-          {canManage && <button className="member-remove" type="button" disabled={workingId === member.id} onClick={() => void removeMember(member)}>Remove</button>}
-        </div>;
-      })}
-      {error && <p className="form-error">{error}</p>}
-      <button className="text-action" type="button" onClick={onClose}>Done</button>
-    </div>
-  </Modal>;
-}
-
-function InvitationModal({ organizationId, canInviteAdministrators, onClose }: { organizationId: string; canInviteAdministrators: boolean; onClose: () => void }) {
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'administrator' | 'editor' | 'viewer'>('editor');
-  const [inviteUrl, setInviteUrl] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    setInviteUrl('');
-    try {
-      const response = await fetch('/api/organizations/invitations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-workspace-id': organizationId },
-        body: JSON.stringify({ email, role }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setError(data.error || 'Could not create invitation.');
-        return;
-      }
-      setInviteUrl(data.inviteUrl);
-    } catch {
-      setError('Connection issue. Please try again.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function copyInvite() {
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      setCopied(true);
-    } catch {
-      setError('Could not copy automatically. Select and copy the invitation link.');
-    }
-  }
-
-  return <Modal title="Invite a member" subtitle="Share access without mixing private financial spaces." onClose={onClose}>
-    {!inviteUrl ? <form className="modal-form" onSubmit={submit}>
-      <label className="field-label">Email address<input className="field" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="person@example.com" required /></label>
-      <label className="field-label">Access role<select className="field" value={role} onChange={(event) => setRole(event.target.value as 'administrator' | 'editor' | 'viewer')}><option value="editor">Editor — can manage finances</option><option value="viewer">Viewer — read only</option>{canInviteAdministrators && <option value="administrator">Administrator — manage workspace</option>}</select></label>
-      <p className="form-hint">The invitation link is valid for 7 days. The invited person must sign in with this exact verified email. No email is sent automatically yet.</p>
-      {error && <p className="form-error">{error}</p>}
-      <button className="primary-btn w-full" disabled={busy}>{busy ? 'Creating link…' : 'Generate invitation link'}</button>
-    </form> : <div className="modal-form">
-      <p className="form-hint">Invitation created for <b>{email}</b>. Share this link with them; it expires in 7 days.</p>
-      <input className="field" value={inviteUrl} readOnly onFocus={(event) => event.currentTarget.select()} />
-      <button className="primary-btn w-full" type="button" onClick={copyInvite}>{copied ? 'Copied' : 'Copy invitation link'}</button>
-      <button className="text-action" type="button" onClick={onClose}>Done</button>
-    </div>}
-  </Modal>;
-}
-
-function OrganizationModal({ onClose, onSaved }: { onClose: () => void; onSaved: (organization: Organization) => Promise<void> }) {
-  const [name, setName] = useState('');
-  const [type, setType] = useState<'family' | 'business'>('family');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      const response = await fetch('/api/organizations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, type }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setError(data.error || 'Could not create this space.');
-        return;
-      }
-      await onSaved(data as Organization);
-    } catch {
-      setError('Connection issue. Please try again.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return <Modal title="Create a space" subtitle="Keep personal, family, and business money separate." onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Space name<input className="field" value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Family finances" maxLength={80} required /></label><label className="field-label">Space type<select className="field" value={type} onChange={(event) => setType(event.target.value as 'family' | 'business')}><option value="family">Family</option><option value="business">Business</option></select></label>{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy}>{busy ? 'Creating…' : 'Create space'}</button></form></Modal>;
 }
 
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode }) {
