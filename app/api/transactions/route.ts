@@ -109,6 +109,7 @@ export async function POST(req: Request) {
       if (!wallet || wallet.status !== 'active') {
         throw new Error('WALLET_NOT_AVAILABLE');
       }
+      if (!Number.isSafeInteger(wallet.currentBalanceMinor)) throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
 
       if (categoryId) {
         const category = await tx.query.categories.findFirst({
