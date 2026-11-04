@@ -35,6 +35,16 @@ export async function GET(req: Request) {
       .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.transactionType, 'expense'), gte(transactions.occurredAt, monthStart), lt(transactions.occurredAt, nextMonthStart)))
       .groupBy(transactions.categoryId);
 
+    const safeMaximum = BigInt(Number.MAX_SAFE_INTEGER);
+    const aggregateValues = [
+      BigInt(totals?.incomeMinor ?? '0'),
+      BigInt(totals?.expenseMinor ?? '0'),
+      ...categoryRows.map((row) => BigInt(row.totalMinor)),
+    ];
+    if (aggregateValues.some((value) => value > safeMaximum)) {
+      return NextResponse.json({ error: 'This summary exceeds the supported safe integer range' }, { status: 409 });
+    }
+
     return NextResponse.json({
       monthStart: monthStart.toISOString(),
       incomeMinor: Number(totals?.incomeMinor ?? 0),
