@@ -25,7 +25,7 @@ export function SavingsGoalsView({ workspaceId, wallets }: { workspaceId: string
     setGoals([]);
     setLoading(true);
     setError('');
-    fetch('/api/goals', { headers: { 'x-organization-id': workspaceId } })
+    fetch('/api/goals', { headers: { 'x-workspace-id': workspaceId } })
       .then(async response => {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || 'Could not load savings goals.');
@@ -56,7 +56,7 @@ export function SavingsGoalsView({ workspaceId, wallets }: { workspaceId: string
     try {
       const response = await fetch('/api/goals', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-organization-id': workspaceId },
+        headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId },
         body: JSON.stringify({ name: name.trim(), targetMinor, currency: 'BDT', targetDate: targetDate || null }),
       });
       const data = await response.json().catch(() => ({}));
@@ -78,7 +78,7 @@ export function SavingsGoalsView({ workspaceId, wallets }: { workspaceId: string
     try {
       const response = await fetch('/api/goals/' + activeGoal + '/allocations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-organization-id': workspaceId },
+        headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId },
         body: JSON.stringify({ walletId: sourceWallet, amountMinor: value, action: mode }),
       });
       const data = await response.json().catch(() => ({}));
@@ -103,13 +103,13 @@ export function SavingsGoalsView({ workspaceId, wallets }: { workspaceId: string
       for (const allocation of goal.allocations) {
         const response = await fetch('/api/goals/' + goal.id + '/allocations', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-organization-id': workspaceId },
+          headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId },
           body: JSON.stringify({ walletId: allocation.walletId, amountMinor: Number(allocation.amountMinor), action: 'release' }),
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || 'Could not release a goal allocation.');
       }
-      const response = await fetch('/api/goals/' + goal.id, { method: 'DELETE', headers: { 'x-organization-id': workspaceId } });
+      const response = await fetch('/api/goals/' + goal.id, { method: 'DELETE', headers: { 'x-workspace-id': workspaceId } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not archive this goal.');
       setGoals(current => current.filter(item => item.id !== goal.id));
