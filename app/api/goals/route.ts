@@ -9,10 +9,10 @@ export async function GET(req: Request) {
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
   try {
     const goals = await db.select().from(savingsGoals)
-      .where(and(eq(savingsGoals.organizationId, context.organizationId), eq(savingsGoals.status, 'active')))
+      .where(and(eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.status, 'active')))
       .orderBy(asc(savingsGoals.createdAt));
     const allocations = goals.length
-      ? await db.select().from(goalAllocations).where(eq(goalAllocations.organizationId, context.organizationId))
+      ? await db.select().from(goalAllocations).where(eq(goalAllocations.workspaceId, context.workspaceId))
       : [];
     return NextResponse.json(goals.map(goal => ({
       ...goal,
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
   }
   try {
     const [goal] = await db.insert(savingsGoals).values({
-      organizationId: context.organizationId, userId: context.userId, name,
+      workspaceId: context.workspaceId, userId: context.userId, name,
       targetMinor, currency, targetDate: targetDate || null,
     }).returning();
     return NextResponse.json({ ...goal, allocations: [] }, { status: 201 });
