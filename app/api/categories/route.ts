@@ -22,10 +22,10 @@ export async function GET(req: Request) {
   const context = await getOrganizationContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
 
-  let rows = await db.select().from(categories).where(eq(categories.organizationId, context.organizationId));
+  let rows = await db.select().from(categories).where(eq(categories.workspaceId, context.workspaceId));
   if (rows.length === 0 && canWriteOrganization(context.role)) {
-    await db.insert(categories).values(defaults.map((category) => ({ ...category, userId: context.userId, organizationId: context.organizationId })));
-    rows = await db.select().from(categories).where(eq(categories.organizationId, context.organizationId));
+    await db.insert(categories).values(defaults.map((category) => ({ ...category, userId: context.userId, workspaceId: context.workspaceId })));
+    rows = await db.select().from(categories).where(eq(categories.workspaceId, context.workspaceId));
   }
   return NextResponse.json(rows);
 }
