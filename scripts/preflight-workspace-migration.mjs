@@ -68,6 +68,15 @@ try {
     throw new Error('Drizzle migration history already exists. This workflow expects a fresh migration baseline and will NOT run.');
   }
 
+  const duplicateWalletAccounts = await pool.query(
+    `select workspace_id, wallet_id, count(*)::int as count
+     from ledger_accounts where wallet_id is not null
+     group by workspace_id, wallet_id having count(*) > 1 limit 5`,
+  );
+  if (duplicateWalletAccounts.rowCount) {
+    throw new Error(`Duplicate wallet ledger accounts exist (${duplicateWalletAccounts.rows.length} sample group(s)). Migration was NOT started.`);
+  }
+
   console.log('PASS  Starting schema matches the reviewed legacy finance baseline.');
   console.log('PASS  No partial workspace schema or Drizzle migration history exists.');
   console.log('Preflight passed. Safe to proceed with the reviewed migration chain.');
