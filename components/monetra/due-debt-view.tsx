@@ -102,13 +102,14 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
     if (!entry || !amount || amount > outstanding(entry)) { setError('Enter a payment greater than zero and no more than the outstanding principal.'); return; }
     setError('');
     const signature = JSON.stringify({ workspaceId, repayId, amount, note: repayNote.trim() || null });
-    if (!paymentKeyRef.current || paymentKeyRef.current.signature !== signature) {
-      paymentKeyRef.current = { signature, key: crypto.randomUUID() };
-    }
+    const idempotencyKey = paymentKeyRef.current?.signature === signature
+      ? paymentKeyRef.current.key
+      : crypto.randomUUID();
+    paymentKeyRef.current = { signature, key: idempotencyKey };
     try {
       const response = await fetch('/api/due-debt/' + repayId + '/payments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, 'idempotency-key': paymentKeyRef.current.key },
+        headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, 'idempotency-key': idempotencyKey },
         body: JSON.stringify({ amountMinor: amount, note: repayNote.trim() || null }),
       });
       const data = await response.json().catch(() => ({}));
