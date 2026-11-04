@@ -9,7 +9,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "db:migrate": "drizzle-kit migrate",
-    "db:verify:organization": "node scripts/verify-organization-migration.mjs",
+    "db:verify:workspace": "node scripts/verify-workspace-migration.mjs",
     "db:diagnose": "node scripts/diagnose-database.mjs"
   },
   "dependencies": {
