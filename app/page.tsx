@@ -80,7 +80,7 @@ export default function HomePage() {
       }
       const rows: Organization[] = Array.isArray(payload) ? payload : [];
       setOrganizations(rows);
-      const selected = rows[0];
+      const selected = rows.find((row) => row.type === 'personal') || rows[0];
       if (!selected) throw new Error('No personal organization is available');
       setActiveOrganizationId(selected.id);
       await loadFinanceData(selected.id);
