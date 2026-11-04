@@ -7,7 +7,6 @@ import { eq, sql, and, gte } from 'drizzle-orm';
 export async function POST(req: Request) {
   const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
-  if (!true) return NextResponse.json({ error: 'Read-only organization access' }, { status: 403 });
 
   let body: Record<string, unknown>;
   try {
