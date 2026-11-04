@@ -1,61 +1,81 @@
-# Monetra database recovery runbook
+# Monetra Neon database runbook
 
-The workspace API requires the organization foundation migration. A deployment can build successfully while the connected Neon database is still missing that schema.
+The application now uses Clerk-authenticated, user-owned workspaces. Every finance API resolves the active workspace against the signed-in Clerk user; a supplied workspace ID is never accepted without an ownership match.
 
-## 1. Check the Vercel environment
+## 1. Confirm the Vercel database target
 
-In Vercel → Project → Settings → Environment Variables, confirm `DATABASE_URL` exists for the environment serving the failing deployment (Preview or Production). It must point to the intended Neon project/branch and database. Do not paste the value into chat, issues, screenshots, or logs.
+In Vercel → Project → Settings → Environment Variables, confirm `DATABASE_URL` exists for the environment being deployed (Preview or Production). It must point to the intended Neon project and branch.
 
-If Preview and Production use different Neon branches, treat them as separate databases and verify each independently.
+If Preview and Production use different Neon branches, treat them as separate databases. Never paste the connection string into chat, source code, screenshots, issues, or logs.
 
 ## 2. Pull the intended environment locally
-
-Install/use the Vercel CLI and authenticate to the correct Vercel project. Then pull the environment you intend to diagnose:
-
-```bash
-vercel link
-vercel env pull .env.local --environment=preview
-```
-
-Use `--environment=production` only when preparing to verify Production. Keep `.env.local` private; it must never be committed.
-
-## 3. Run the read-only diagnostic
 
 From the repository root:
 
 ```bash
+vercel link
+vercel env pull .env.local --environment=preview
 npm ci
-npm run db:diagnose
 ```
 
-The diagnostic never prints the connection URL. It checks connectivity and the tables/columns required by the current organization-backed workspace API.
+Use `--environment=production` only when preparing a separately approved production maintenance window. Keep `.env.local` private and uncommitted.
 
-- If connection fails, fix the Vercel `DATABASE_URL` value/target first.
-- If the database is reachable but required tables/columns are missing, continue only after confirming the target database and taking a Neon backup/restore point.
+## 3. Run read-only diagnostics and preflight
 
-## 4. Apply the existing migration
+```bash
+npm run db:diagnose
+node scripts/preflight-workspace-migration.mjs
+```
 
-The migrations are `drizzle/0000_organization_foundation.sql` (workspace ownership foundation) and `drizzle/0001_goals_due_debt.sql` (persistent savings goals and Due & Debt). It creates the organization tables and backfills existing finance rows into each user's Personal organization. It assumes the pre-existing finance tables (`profiles`, `wallets`, `categories`, `transactions`, `ledger_accounts`, and `ledger_entries`) already exist.
+The diagnostic checks the current workspace schema. The preflight checks that the target is the expected legacy Neon finance schema, has no partial migration state, and has no duplicate wallet ledger accounts that would prevent the ledger-integrity index from being created. Neither command mutates data.
 
-After a backup and target confirmation:
+Stop if either command reports an unexpected schema. Do not reset the database or manually edit Drizzle migration history.
+
+## 4. Back up before migration
+
+Create a Neon restore point/branch from the exact database being migrated. The guarded GitHub Actions workflow is configured to target a separate backup branch using the `MONETRA_BACKUP_DATABASE_URL` secret and the explicit `APPLY_TO_BACKUP` confirmation.
+
+Do not point that secret at Production. The workflow is a manual backup-branch migration path, not an automatic production migration.
+
+## 5. Apply and verify the migration chain
+
+The reviewed Drizzle chain is:
+
+- `0000_organization_foundation.sql` — preserves the legacy tenant foundation and ownership records.
+- `0001_goals_due_debt.sql` — creates savings-goal and Due & Debt tables.
+- `0002_private_workspaces.sql` — provisions Personal, Family, and Business workspaces.
+- `0003_finance_workspace_scope.sql` — backfills every finance table to its owner workspace and enforces NOT NULL ownership.
+- `0004_ledger_integrity.sql` — enforces one wallet ledger account per wallet, one-sided journal lines, and transaction idempotency keys.
+
+After confirming the backup target:
 
 ```bash
 npm run db:migrate
-npm run db:verify:organization
+npm run db:verify:workspace
 npm run db:diagnose
 ```
 
-Do not run this against a database that lacks the base finance tables. Do not manually mark a migration as applied. If the migration partially failed or the verification reports missing ownership, stop and inspect the database before attempting any retry; do not drop tables or reset the Neon branch.
+The migration chain assumes the existing base tables `profiles`, `wallets`, `categories`, `transactions`, `ledger_accounts`, and `ledger_entries` already exist. It is a data migration, not a disposable development reset.
 
-Repeat the process separately for Preview and Production only if both environments are intended to use this schema.
+If migration or verification fails, stop and inspect the exact Neon branch and Drizzle history before retrying. Never drop finance tables or mark migrations as applied manually.
 
-## 5. Verify the deployed app
+## 6. Ledger cutover behavior
 
-Redeploy the branch/environment after the migration, then reload the app. If it still fails, inspect the Vercel runtime logs for the `MONETRA_ORG_ERROR` entry and share only the sanitized error message and SQLSTATE/code. Never share environment variable values.
+New wallet creation, income, expenses, and transfers now post balanced double-entry journal lines in the same Neon transaction as the wallet balance and transaction record.
+
+For an older wallet with no journal history, its current balance is captured once as a clearly labelled `adjustment` opening position the first time the new posting path touches it. This preserves the current balance without inventing historical transaction detail. These internal cutover adjustments are excluded from the normal transaction feed and income/expense summary.
+
+Transaction and transfer endpoints accept an `Idempotency-Key` header. Replaying the same key and payload returns the original transaction; reusing the key with a different payload returns HTTP 409.
+
+## 7. Deployment and app verification
+
+Only after the intended database has the complete migration chain should the matching Vercel environment deploy/use this code. Preview and Production must be checked separately if they use separate Neon branches.
+
+The application build and live-site behavior are separate checks from database migration verification. The user will perform those checks on Vercel after the backend changes are ready.
 
 ## Safety notes
 
-- The migration is a data migration, not a disposable development reset.
-- Do not run it against an unconfirmed Neon branch.
-- Do not remove the legacy organization tables or finance ownership columns until a separate, verified workspace migration preserves all IDs, balances, and ledger history.
-- The diagnostic is read-only. The migration command is not.
+- Never run the backup workflow against the Production connection string.
+- Do not run the historical Supabase SQL migrations against Neon; they depend on Supabase Auth and RLS.
+- Do not claim backup readiness until a restore has actually been tested.
+- Do not claim the migration is applied until the read-only verifier passes against the intended Neon branch.
