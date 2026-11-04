@@ -108,7 +108,7 @@ export const transactions = pgTable('transactions', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
   workspaceDateIdx: index('transactions_workspace_date_idx').on(table.workspaceId, table.occurredAt),
-  idempotencyUnique: uniqueIndex('transactions_workspace_idempotency_unique').on(table.workspaceId, table.idempotencyKey).where(sql\`${table.idempotencyKey} IS NOT NULL\`),
+  idempotencyUnique: uniqueIndex('transactions_workspace_idempotency_unique').on(table.workspaceId, table.idempotencyKey).where(sql`${table.idempotencyKey} IS NOT NULL`),
 }));
 
 export const ledgerAccounts = pgTable('ledger_accounts', {
@@ -121,7 +121,7 @@ export const ledgerAccounts = pgTable('ledger_accounts', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
   workspaceIdx: index('ledger_accounts_workspace_idx').on(table.workspaceId),
-  walletUnique: uniqueIndex('ledger_accounts_workspace_wallet_unique').on(table.workspaceId, table.walletId).where(sql\`${table.walletId} IS NOT NULL\`),
+  walletUnique: uniqueIndex('ledger_accounts_workspace_wallet_unique').on(table.workspaceId, table.walletId).where(sql`${table.walletId} IS NOT NULL`),
 }));
 
 export const ledgerEntries = pgTable('ledger_entries', {
@@ -136,5 +136,5 @@ export const ledgerEntries = pgTable('ledger_entries', {
 }, (table) => ({
   workspaceIdx: index('ledger_entries_workspace_idx').on(table.workspaceId),
   transactionIdx: index('ledger_entries_transaction_idx').on(table.transactionId),
-  oneSide: check('ledger_entries_one_side_check', sql\`(${table.debitMinor} > 0 AND ${table.creditMinor} = 0) OR (${table.creditMinor} > 0 AND ${table.debitMinor} = 0)\`),
+  oneSide: check('ledger_entries_one_side_check', sql`(${table.debitMinor} > 0 AND ${table.creditMinor} = 0) OR (${table.creditMinor} > 0 AND ${table.debitMinor} = 0)`),
 }));
