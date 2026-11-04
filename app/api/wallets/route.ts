@@ -69,7 +69,12 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(wallet, { status: 201 });
-  } catch {
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    if (code === 'LEDGER_BALANCE_OUT_OF_RANGE' || code === 'LEDGER_ACCOUNT_TYPE_MISMATCH') {
+      return NextResponse.json({ error: 'Wallet ledger needs reconciliation before this wallet can be created' }, { status: 409 });
+    }
+    console.error('MONETRA_WALLET_CREATE_ERROR:', error);
     return NextResponse.json({ error: 'Unable to create wallet' }, { status: 500 });
   }
 }
