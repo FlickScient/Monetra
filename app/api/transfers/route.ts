@@ -55,7 +55,8 @@ export async function POST(req: Request) {
         if (prior) {
           const sameRequest = prior.transactionType === 'transfer' && prior.walletId === walletId &&
             prior.destinationWalletId === destinationWalletId && Number(prior.amountMinor) === amountMinor &&
-            prior.description === normalizedDescription;
+            prior.description === normalizedDescription &&
+            (occurredAt === undefined || prior.occurredAt.getTime() === parsedDate.getTime());
           if (!sameRequest) throw new Error('IDEMPOTENCY_KEY_REUSED');
           return { transaction: prior, replayed: true };
         }
