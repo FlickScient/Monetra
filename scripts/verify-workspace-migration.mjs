@@ -58,15 +58,26 @@ try {
   }
 
   const ownership = await pool.query(
-    `select count(*)::int as profiles,
-            (select count(*)::int from workspaces) as workspaces,
-            (select count(*)::int from profiles p
-              where (select count(*) from workspaces w where w.user_id = p.id) <> 3) as incomplete_users
-     from profiles`,
+    `with owners as (
+       select id::text as user_id from profiles
+       union select user_id::text from wallets
+       union select user_id::text from categories
+       union select user_id::text from transactions
+       union select user_id::text from ledger_accounts
+       union select user_id::text from ledger_entries
+     )
+     select
+       (select count(*)::int from owners) as owners,
+       (select count(*)::int from workspaces) as workspaces,
+       (select count(*)::int from owners o
+         where (select count(*) from workspaces w where w.user_id = o.user_id) <> 3) as incomplete_users,
+       (select count(*)::int from workspaces w
+         where not exists (select 1 from owners o where o.user_id = w.user_id)) as workspaces_without_finance_owner
+     from (select 1) seed`,
   );
   const row = ownership.rows[0];
-  if (row.incomplete_users !== 0) {
-    throw new Error(`${row.incomplete_users} profile(s) do not have exactly three workspaces.`);
+  if (row.incomplete_users !== 0 || row.workspaces_without_finance_owner !== 0 || row.workspaces !== row.owners * 3) {
+    throw new Error(`Workspace ownership mismatch: ${JSON.stringify(row)}. Each existing owner must have exactly three private workspaces.`);
   }
 
   const history = await pool.query(
@@ -79,7 +90,7 @@ try {
   console.log('PASS  All required finance and workspace tables exist.');
   console.log('PASS  Every finance table has NOT NULL workspace_id.');
   console.log('PASS  Wallet ledger uniqueness, transaction idempotency, and balanced-journal trigger exist.');
-  console.log(`PASS  ${row.profiles} profile(s), ${row.workspaces} workspace(s); every profile owns exactly three workspaces.`);
+  console.log(`PASS  ${row.owners} existing finance owner(s), ${row.workspaces} workspace(s); every owner has exactly three private workspaces.`);
   console.log(`PASS  Drizzle recorded ${history.rows[0].count} migrations.`);
 } catch (error) {
   console.error(`FAIL  ${error instanceof Error ? error.message : 'Unknown verification error'}`);
