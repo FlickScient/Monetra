@@ -37,11 +37,13 @@ try {
      from information_schema.columns
      where table_schema = current_schema()
        and table_name = any($1::text[])
-       and column_name = 'workspace_id'`,
+       and (column_name = 'workspace_id' or (table_name = 'transactions' and column_name = 'idempotency_key'))`,
     [financeTables],
   );
   const byTable = new Map(columns.rows.map(row => [row.table_name, row]));
   const invalid = financeTables.filter(name => !byTable.has(name) || byTable.get(name).is_nullable !== 'NO');
+  const transactionColumns = await pool.query(\`select column_name from information_schema.columns where table_schema = current_schema() and table_name = 'transactions' and column_name = 'idempotency_key'\`);
+  if (transactionColumns.rowCount !== 1) invalid.push('transactions.idempotency_key');
   if (invalid.length) throw new Error(`workspace_id missing or nullable on: ${invalid.join(', ')}`);
 
   const ownership = await pool.query(
@@ -59,8 +61,8 @@ try {
   const history = await pool.query(
     "select count(*)::int as count from drizzle.__drizzle_migrations",
   );
-  if (history.rows[0].count < 4) {
-    throw new Error(`Expected at least four recorded migrations; found ${history.rows[0].count}.`);
+  if (history.rows[0].count < 5) {
+    throw new Error(`Expected at least five recorded migrations; found ${history.rows[0].count}.`);
   }
 
   console.log('PASS  All required finance, organization, and workspace tables exist.');
