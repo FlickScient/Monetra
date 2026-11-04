@@ -69,12 +69,20 @@ try {
   }
 
   const duplicateWalletAccounts = await pool.query(
-    `select workspace_id, wallet_id, count(*)::int as count
+    `select wallet_id, count(*)::int as count
      from ledger_accounts where wallet_id is not null
-     group by workspace_id, wallet_id having count(*) > 1 limit 5`,
+     group by wallet_id having count(*) > 1 limit 5`,
   );
   if (duplicateWalletAccounts.rowCount) {
     throw new Error(`Duplicate wallet ledger accounts exist (${duplicateWalletAccounts.rows.length} sample group(s)). Migration was NOT started.`);
+  }
+
+  const invalidJournalLines = await pool.query(
+    `select count(*)::int as count from ledger_entries
+     where NOT ((debit_minor > 0 and credit_minor = 0) OR (credit_minor > 0 and debit_minor = 0))`,
+  );
+  if (invalidJournalLines.rows[0].count > 0) {
+    throw new Error(`${invalidJournalLines.rows[0].count} existing ledger line(s) are not one-sided positive entries. Migration was NOT started.`);
   }
 
   console.log('PASS  Starting schema matches the reviewed legacy finance baseline.');
