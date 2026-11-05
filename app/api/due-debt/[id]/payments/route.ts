@@ -13,7 +13,7 @@ export async function GET(req: Request, { params }: Params) {
   if (!isUuid(params.id)) return NextResponse.json({ error: 'Invalid record ID' }, { status: 400 });
   try {
     const payments = await db.select().from(dueDebtPayments)
-      .where(and(eq(dueDebtPayments.dueDebtId, params.id), eq(dueDebtPayments.workspaceId, context.workspaceId)))
+      .where(and(eq(dueDebtPayments.dueDebtId, params.id), eq(dueDebtPayments.workspaceId, context.workspaceId), eq(dueDebtPayments.userId, context.userId)))
       .orderBy(sql`${dueDebtPayments.paidAt} desc`);
     return NextResponse.json(payments);
   } catch { return NextResponse.json({ error: 'Unable to load payment history' }, { status: 500 }); }
@@ -52,7 +52,7 @@ export async function POST(req: Request, { params }: Params) {
       }
 
       const [debt] = await tx.select().from(dueDebts)
-        .where(and(eq(dueDebts.id, params.id), eq(dueDebts.workspaceId, context.workspaceId)))
+        .where(and(eq(dueDebts.id, params.id), eq(dueDebts.workspaceId, context.workspaceId), eq(dueDebts.userId, context.userId)))
         .for('update');
       if (!debt || debt.status === 'archived') throw new Error('DEBT_NOT_FOUND');
 
