@@ -129,7 +129,7 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
   }
 
   return <div className="page-stack module-page due-debt-page">
-    <section className="page-intro"><div><p className="eyebrow">YOUR SEPARATE LEDGER</p><h1>Due & Debt<span>.</span></h1><p className="intro-copy">Know what should come back, what must go out, and when.</p></div><button className="primary-btn" onClick={() => { setDirection('receivable'); setShowCreate(true); }}><Plus size={16} /> Add record</button></section>
+    <section className="page-intro"><div><p className="eyebrow">YOUR SEPARATE LEDGER</p><h1>Due & Debt<span>.</span></h1><p className="intro-copy">Know what should come back, what must go out, and when.</p></div><button className="primary-btn" onClick={() => { setEditingId(''); setDirection('receivable'); setPerson(''); setNote(''); setPrincipal(''); setRate('0'); setDueDate(''); setShowCreate(true); }}><Plus size={16} /> Add record</button></section>
     <div className="module-notice"><ShieldCheck size={18} /><p><strong>Independent from everyday finances.</strong><span>Entries and repayments here do not change wallets, assets, income or ordinary expenses.</span></p></div>
     <section className="due-summary-grid">
       <article className="module-summary-card"><span className="module-summary-icon receivable"><ArrowDownLeft size={18}/></span><span className="module-summary-label">OWED TO YOU</span><strong>{taka(totalReceivable)}</strong><small>{receivables.length} active record{receivables.length===1?'':'s'}</small></article>
