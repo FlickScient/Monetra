@@ -106,7 +106,7 @@ export async function POST(req: Request) {
       }
 
       const [wallet] = await tx.select().from(wallets)
-        .where(and(eq(wallets.id, walletId), eq(wallets.workspaceId, context.workspaceId)))
+        .where(and(eq(wallets.id, walletId), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId)))
         .for('update');
       if (!wallet || wallet.status !== 'active') {
         throw new Error('WALLET_NOT_AVAILABLE');
@@ -147,6 +147,7 @@ export async function POST(req: Request) {
           and(
             eq(wallets.id, walletId),
             eq(wallets.workspaceId, context.workspaceId),
+            eq(wallets.userId, context.userId),
             eq(wallets.status, 'active'),
             // Asset wallets may go negative: the full expense is recorded and
             // the shortfall carries forward as a negative wallet balance.
