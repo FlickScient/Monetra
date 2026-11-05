@@ -34,7 +34,7 @@ export async function GET(req: Request) {
       .orderBy(desc(transactions.occurredAt), desc(transactions.id))
       .limit(limit + 1)
       .offset(offset);
-    return NextResponse.json(rows);
+      return NextResponse.json(rows.slice(0, limit));
   } catch {
     return NextResponse.json({ error: 'Unable to load transactions' }, { status: 500 });
   }
