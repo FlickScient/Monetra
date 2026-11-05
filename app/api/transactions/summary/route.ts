@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getWorkspaceContext } from '@/lib/workspace';
 import { db } from '@/db';
 import { transactions } from '@/db/schema';
-import { and, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, isNull, sql } from 'drizzle-orm';
 
 export async function GET(req: Request) {
   const context = await getWorkspaceContext(req);
@@ -24,7 +24,7 @@ export async function GET(req: Request) {
         expenseMinor: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.transactionType} = 'expense' THEN ${transactions.amountMinor} ELSE 0 END), 0)::text`,
       })
       .from(transactions)
-      .where(and(eq(transactions.workspaceId, context.workspaceId), gte(transactions.occurredAt, monthStart), lt(transactions.occurredAt, nextMonthStart)));
+      .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), isNull(transactions.voidedAt), gte(transactions.occurredAt, monthStart), lt(transactions.occurredAt, nextMonthStart)));
 
     const categoryRows = await db
       .select({
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
         totalMinor: sql<string>`COALESCE(SUM(${transactions.amountMinor}), 0)::text`,
       })
       .from(transactions)
-      .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.transactionType, 'expense'), gte(transactions.occurredAt, monthStart), lt(transactions.occurredAt, nextMonthStart)))
+      .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), isNull(transactions.voidedAt), eq(transactions.transactionType, 'expense'), gte(transactions.occurredAt, monthStart), lt(transactions.occurredAt, nextMonthStart)))
       .groupBy(transactions.categoryId);
 
     const safeMaximum = BigInt(Number.MAX_SAFE_INTEGER);
