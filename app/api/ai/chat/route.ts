@@ -21,9 +21,9 @@ function isRateLimited(userId: string) {
   recent.push(now);
   requestBuckets.set(userId, recent);
   if (requestBuckets.size > 1500) {
-    for (const [id, times] of requestBuckets) {
+    requestBuckets.forEach((times, id) => {
       if (!times.length || now - times[times.length - 1] >= 10 * 60 * 1000) requestBuckets.delete(id);
-    }
+    });
   }
   return false;
 }
