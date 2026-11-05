@@ -16,7 +16,7 @@ export async function GET(req: Request, { params }: Params) {
     const goal = await db.query.savingsGoals.findFirst({ where: (g, { and, eq }) => and(eq(g.id, params.id), eq(g.workspaceId, context.workspaceId), eq(g.userId, context.userId)) });
     if (!goal) return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
     const history = await db.select().from(goalAllocationEvents)
-      .where(and(eq(goalAllocationEvents.goalId, params.id), eq(goalAllocationEvents.workspaceId, context.workspaceId)))
+      .where(and(eq(goalAllocationEvents.goalId, params.id), eq(goalAllocationEvents.workspaceId, context.workspaceId), eq(goalAllocationEvents.userId, context.userId)))
       .orderBy(sql`${goalAllocationEvents.createdAt} desc`);
     return NextResponse.json(history);
   } catch { return NextResponse.json({ error: 'Unable to load allocation history' }, { status: 500 }); }
