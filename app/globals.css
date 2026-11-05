@@ -462,3 +462,7 @@ input, select, textarea { min-width: 0; }
 .category-item button{width:30px;height:30px;border:1px solid var(--border,#e5e7eb);border-radius:8px;background:transparent;color:var(--muted,#64748b);display:grid;place-items:center}
 .category-notice{color:#16845d;font-size:13px}
 @media(max-width:600px){.category-create-form{grid-template-columns:1fr 1fr}.category-create-form input[type=color]{width:100%}.category-item{flex-wrap:wrap}.category-item input:not([type=color]){flex:1 1 100%}.category-item strong{min-width:80px}}
+
+.wallet-card-actions{display:flex;align-items:center;gap:8px;margin-top:14px}
+.wallet-card-actions button{display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;background:transparent;color:var(--muted,#64748b);font-size:12px;cursor:pointer}
+.wallet-card-actions button:hover{color:var(--foreground,#172b27);background:var(--surface-soft,#f3f6f5)}
