@@ -257,7 +257,7 @@ export default function HomePage() {
 
           {activeView === 'wallets' && <WalletsView wallets={wallets} onAdd={() => setShowWalletForm(true)} />}
           {activeView === 'transactions' && <TransactionsView transactions={transactions} wallets={wallets} categories={categories} onAdd={() => setShowTransactionForm(true)} onLoadMore={loadMoreTransactions} hasMore={hasMoreTransactions} />}
-          {activeView === 'intelligence' && <FinancialIntelligenceView wallets={wallets} transactions={transactions} monthlyIncomeMinor={monthlyIncome} monthlyExpenseMinor={monthlyExpense} />}
+          {activeView === 'intelligence' && <FinancialIntelligenceView wallets={wallets} transactions={transactions} monthlyIncomeMinor={monthlyIncome} monthlyExpenseMinor={monthlyExpense} workspaceId={activeWorkspaceId} />}
           {activeView === 'due-debt' && <DueDebtView workspaceId={activeWorkspaceId} />}
           {activeView === 'savings' && <SavingsGoalsView workspaceId={activeWorkspaceId} wallets={wallets} />}
           {activeView === 'vault' && <FiscusView workspaces={workspaces.map(({ id, type }) => ({ id, type }))} activeWorkspaceId={activeWorkspaceId} />}
