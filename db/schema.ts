@@ -15,9 +15,6 @@ export const workspaces = pgTable('workspaces', {
   workspaceTypeValid: check('workspaces_workspace_type_check', sql`${table.workspaceType} in ('personal', 'family', 'business')`),
 }));
 
-
-
-
 export const profiles = pgTable('profiles', {
   id: text('id').primaryKey(), // Clerk user id
   displayName: text('display_name'),
