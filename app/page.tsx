@@ -379,7 +379,7 @@ function TransactionsView({ workspaceId, transactions, wallets, categories, onAd
   const visibleIds = filtered.map(transaction => transaction.id);
   const selectedVisibleCount = visibleIds.filter(id => selectedIds.has(id)).length;
   function toggleSelected(id: string) { setSelectedIds(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
-  function selectAllVisible() { setSelectedIds(current => new Set([...current, ...visibleIds])); }
+  function selectAllVisible() { setSelectedIds(current => new Set([...Array.from(current), ...visibleIds])); }
   function invertVisible() { setSelectedIds(current => { const next = new Set(current); visibleIds.forEach(id => next.has(id) ? next.delete(id) : next.add(id)); return next; }); }
   async function deleteSelected() {
     if (!selectedIds.size || bulkBusy) return;
