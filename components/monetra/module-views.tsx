@@ -142,12 +142,6 @@ function CategoryManager({ workspaceId }: { workspaceId: string }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  async function load() {
-    const response = await fetch('/api/categories', { headers: { 'x-workspace-id': workspaceId } });
-    const data = await response.json().catch(() => []);
-    if (!response.ok) throw new Error(data.error || 'Could not load categories.');
-    setItems(Array.isArray(data) ? data : []);
-  }
   useEffect(() => {
     let active = true;
     fetch('/api/categories', { headers: { 'x-workspace-id': workspaceId } })
