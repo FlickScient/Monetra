@@ -414,7 +414,7 @@ function TransactionModal({ workspaceId, wallets, categories, initialTransaction
     try {
       const amountMinor = Math.round(Number(amount) * 100);
       const endpoint = initialTransaction ? '/api/transactions/' + initialTransaction.id : (type === 'transfer' ? '/api/transfers' : '/api/transactions');
-      const body = type === 'transfer' ? { walletId: wallet, destinationWalletId: destination, amountMinor, description, occurredAt: new Date(date).toISOString() } : { walletId: wallet, transactionType: type, categoryId: category || null, amountMinor, description, occurredAt: new Date(date).toISOString() };
+      const body = type === 'transfer' ? { walletId: wallet, destinationWalletId: destination, transactionType: 'transfer', amountMinor, description, occurredAt: new Date(date).toISOString() } : { walletId: wallet, transactionType: type, categoryId: category || null, amountMinor, description, occurredAt: new Date(date).toISOString() };
       const signature = JSON.stringify({ endpoint, workspaceId, body });
       const idempotencyKey = idempotencyRef.current?.signature === signature
         ? idempotencyRef.current.key
