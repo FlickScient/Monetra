@@ -37,9 +37,9 @@ function reverseEntries(rows: Array<typeof ledgerEntries.$inferSelect>, workspac
   }));
 }
 
-async function lockRelatedWallets(tx: DbTx, workspaceId: string, ids: string[]) {
+async function lockRelatedWallets(tx: DbTx, workspaceId: string, userId: string, ids: string[]) {
   return tx.select().from(wallets)
-    .where(and(eq(wallets.workspaceId, workspaceId), inArray(wallets.id, Array.from(new Set(ids)))))
+    .where(and(eq(wallets.workspaceId, workspaceId), eq(wallets.userId, userId), inArray(wallets.id, Array.from(new Set(ids)))))
     .orderBy(asc(wallets.id)).for('update');
 }
 
@@ -81,7 +81,7 @@ export async function PATCH(req: Request, { params }: Params) {
       }
 
       const relatedIds = [current.walletId, ...(current.destinationWalletId ? [current.destinationWalletId] : []), String(walletId), ...(type === 'transfer' ? [String(destinationWalletId)] : [])];
-      const locked = await lockRelatedWallets(tx, context.workspaceId, relatedIds);
+      const locked = await lockRelatedWallets(tx, context.workspaceId, context.userId, relatedIds);
       const walletMap = new Map(locked.map(wallet => [wallet.id, wallet] as const));
       if (relatedIds.some(id => !walletMap.has(id)) || locked.some(wallet => wallet.status !== 'active')) throw new Error('WALLET_NOT_AVAILABLE');
       if (locked.some(wallet => !Number.isSafeInteger(wallet.currentBalanceMinor))) throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
@@ -183,7 +183,7 @@ export async function DELETE(req: Request, { params }: Params) {
         .for('update');
       if (!current || current.transactionType === 'adjustment') throw new Error('TRANSACTION_NOT_FOUND');
       const ids = [current.walletId, ...(current.destinationWalletId ? [current.destinationWalletId] : [])];
-      const locked = await lockRelatedWallets(tx, context.workspaceId, ids);
+      const locked = await lockRelatedWallets(tx, context.workspaceId, context.userId, ids);
       if (ids.some(id => !locked.some(wallet => wallet.id === id))) throw new Error('WALLET_NOT_AVAILABLE');
       if (locked.some(wallet => !Number.isSafeInteger(wallet.currentBalanceMinor))) throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
       const walletTypes = new Map(locked.map(wallet => [wallet.id, wallet.walletType]));
