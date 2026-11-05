@@ -82,11 +82,11 @@ export async function PATCH(req: Request, { params }: Params) {
 
       const relatedIds = [current.walletId, ...(current.destinationWalletId ? [current.destinationWalletId] : []), String(walletId), ...(type === 'transfer' ? [String(destinationWalletId)] : [])];
       const locked = await lockRelatedWallets(tx, context.workspaceId, relatedIds);
-      const walletMap = new Map(locked.map(wallet => [wallet.id, wallet]));
+      const walletMap = new Map(locked.map(wallet => [wallet.id, wallet] as const));
       if (relatedIds.some(id => !walletMap.has(id)) || locked.some(wallet => wallet.status !== 'active')) throw new Error('WALLET_NOT_AVAILABLE');
       if (locked.some(wallet => !Number.isSafeInteger(wallet.currentBalanceMinor))) throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
 
-      const walletTypes = new Map(locked.map(wallet => [wallet.id, wallet.walletType]));
+      const walletTypes = new Map(locked.map(wallet => [wallet.id, wallet.walletType] as const));
       const oldEffects = effectsFor(current, walletTypes);
       const newDraft = { transactionType: type, walletId: String(walletId), destinationWalletId: type === 'transfer' ? String(destinationWalletId) : null, amountMinor };
       const newEffects = effectsFor(newDraft, walletTypes);
@@ -131,6 +131,7 @@ export async function PATCH(req: Request, { params }: Params) {
         amountMinor, description: description.trim(), occurredAt,
       }).where(and(eq(transactions.id, current.id), eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), isNull(transactions.voidedAt))).returning();
 
+      if (!saved) throw new Error('TRANSACTION_NOT_FOUND');
       const sourceSnapshot = { ...source, currentBalanceMinor: intermediate[source.id] };
       const destinationSnapshot = type === 'transfer'
         ? { ...walletMap.get(String(destinationWalletId))!, currentBalanceMinor: intermediate[String(destinationWalletId)] }
