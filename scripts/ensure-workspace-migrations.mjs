@@ -34,14 +34,12 @@ try {
   const { workspaces_table, migration_table } = state.rows[0];
 
   if (workspaces_table && migration_table) {
-    const history = await pool.query('select count(*)::int as count from drizzle.__drizzle_migrations');
-    if (history.rows[0].count >= 5) {
-      console.log('WORKSPACE_MIGRATION: migration history exists; verifying the deployed database.');
-      await pool.end();
-      runNpmScript('db:verify:workspace');
-      console.log('WORKSPACE_MIGRATION: database is already migrated and verified.');
-      process.exit(0);
-    }
+    console.log('WORKSPACE_MIGRATION: migration history exists; applying any pending migrations before verification.');
+    await pool.end();
+    runNpmScript('db:migrate');
+    runNpmScript('db:verify:workspace');
+    console.log('WORKSPACE_MIGRATION: database migrations are current and verified.');
+    process.exit(0);
   }
 
   console.log('WORKSPACE_MIGRATION: legacy baseline detected; running read-only preflight before applying migrations.');
