@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { name, walletType, currency = 'BDT', openingBalanceMinor = 0 } = body;
+  const { name, walletType, currency = 'BDT', openingBalanceMinor = 0, notes = null, creditLimitMinor = 0 } = body;
 
   if (
     typeof name !== 'string' ||
@@ -44,7 +44,11 @@ export async function POST(req: Request) {
     !/^[A-Z]{3}$/.test(currency) ||
     typeof openingBalanceMinor !== 'number' ||
     !Number.isSafeInteger(openingBalanceMinor) ||
-    openingBalanceMinor < 0
+    openingBalanceMinor < 0 ||
+    typeof notes !== 'string' && notes !== null ||
+    typeof notes === 'string' && notes.length > 1000 ||
+    typeof creditLimitMinor !== 'number' || !Number.isSafeInteger(creditLimitMinor) || creditLimitMinor < 0 ||
+    walletType !== 'credit_card' && creditLimitMinor !== 0
   ) {
     return NextResponse.json({ error: 'Invalid currency or opening balance' }, { status: 400 });
   }
@@ -61,6 +65,8 @@ export async function POST(req: Request) {
           currency,
           openingBalanceMinor,
           currentBalanceMinor: openingBalanceMinor,
+          notes,
+          creditLimitMinor,
         })
         .returning();
 
