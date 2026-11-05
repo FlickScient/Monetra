@@ -69,6 +69,7 @@ export const transactions = pgTable('transactions', {
   amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
   description: text('description').notNull(),
   occurredAt: timestamp('occurred_at').notNull().defaultNow(),
+  voidedAt: timestamp('voided_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
   workspaceDateIdx: index('transactions_workspace_date_idx').on(table.workspaceId, table.occurredAt),
