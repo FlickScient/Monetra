@@ -1,9 +1,9 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MonetraAIChat } from './monetra-ai-chat';
 import { Activity, AlertTriangle, Calculator, CheckCircle2, ClipboardCheck, Lightbulb, PiggyBank, ShieldAlert, Target, TrendingUp, Wallet } from 'lucide-react';
 
-type WalletRecord = { id: string; name: string; walletType: string; currentBalanceMinor: number; currency: string };
+type WalletRecord = { id: string; name: string; walletType: string; currentBalanceMinor: number; currency: string; status: string };
 type TransactionRecord = { id: string; transactionType: 'income' | 'expense' | 'transfer'; walletId: string; amountMinor: number; description: string; occurredAt: string };
 const localDateInput = (date: Date) => { const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; };
 const money = (minor: number) => new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(Math.round(minor / 100));
@@ -71,7 +71,10 @@ export function FinancialIntelligenceView({ wallets, transactions, monthlyIncome
   const months = goalDateValid ? Math.max(1, Math.ceil((targetTimestamp - now.getTime()) / 2629800000)) : 0;
   const goalGap = Math.max(0, minor(target) - minor(saved));
 
-  const [walletId, setWalletId] = useState(wallets[0]?.id || '');
+  const [walletId, setWalletId] = useState(wallets.find(wallet => wallet.status === 'active')?.id || wallets[0]?.id || '');
+  useEffect(() => {
+    if (!wallets.some(wallet => wallet.id === walletId && wallet.status === 'active')) setWalletId(wallets.find(wallet => wallet.status === 'active')?.id || '');
+  }, [wallets, walletId]);
   const [counted, setCounted] = useState('');
   const wallet = wallets.find(w => w.id === walletId);
   const variance = wallet ? minor(counted) - Number(wallet.currentBalanceMinor) : 0;
@@ -125,7 +128,7 @@ export function FinancialIntelligenceView({ wallets, transactions, monthlyIncome
         <div className="scenario-result"><span>{goalName || 'Your goal'} · {goalDateValid ? `${months} months` : 'Choose a future date'}</span><strong>{goalDateValid ? `${money(Math.ceil(goalGap / months))} / month` : '—'}</strong></div><p className="intelligence-disclaimer">{!goalDateValid ? 'Choose a valid future target date to calculate your monthly pace.' : goalGap ? 'Planning calculation only; goal is not saved to your account yet.' : 'The amount entered already covers this target.'}</p>
       </Card>
       <Card icon={<ClipboardCheck size={19} />} eyebrow="CASH CONTROL" title="Cash Reconciliation" description="Compare the recorded wallet balance with the amount counted.">
-        {wallets.length ? <><label className="intelligence-field"><span>Wallet to reconcile</span><select value={walletId} onChange={e => { setWalletId(e.target.value); setCounted(''); }}>{wallets.map(w => <option key={w.id} value={w.id}>{w.name} · {w.currency}</option>)}</select></label><div className="intelligence-mini-stats"><span>Recorded balance <b>{money(Number(wallet?.currentBalanceMinor || 0))}</b></span></div><Field label="Actual counted balance" value={counted} onChange={setCounted} />{counted !== '' && <div className={'intelligence-status ' + (variance === 0 ? 'positive' : 'warning')}>{variance === 0 ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{variance === 0 ? 'Balances match' : (variance > 0 ? 'Surplus of ' : 'Shortage of ') + money(Math.abs(variance))}</div>}</> : <div className="intelligence-empty"><Wallet size={18} />Add a wallet to reconcile a balance.</div>}
+        {wallets.some(wallet => wallet.status === 'active') ? <><label className="intelligence-field"><span>Wallet to reconcile</span><select value={walletId} onChange={e => { setWalletId(e.target.value); setCounted(''); }}>{wallets.filter(wallet => wallet.status === 'active').map(w => <option key={w.id} value={w.id}>{w.name} · {w.currency}</option>)}</select></label><div className="intelligence-mini-stats"><span>Recorded balance <b>{money(Number(wallet?.currentBalanceMinor || 0))}</b></span></div><Field label="Actual counted balance" value={counted} onChange={setCounted} />{counted !== '' && <div className={'intelligence-status ' + (variance === 0 ? 'positive' : 'warning')}>{variance === 0 ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{variance === 0 ? 'Balances match' : (variance > 0 ? 'Surplus of ' : 'Shortage of ') + money(Math.abs(variance))}</div>}</> : <div className="intelligence-empty"><Wallet size={18} />Add a wallet to reconcile a balance.</div>}
         <p className="intelligence-disclaimer">Local comparison only. Does not adjust wallet balance or create a transaction.</p>
       </Card>
       <Card icon={<PiggyBank size={19} />} eyebrow="REPAYMENT PLANNER" title="Debt Strategy Engine" description="Compare Snowball and Avalanche payoff priorities.">
