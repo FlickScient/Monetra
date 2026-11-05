@@ -43,6 +43,13 @@
       "when": 1793966400000,
       "tag": "0005_transaction_voiding",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794052800000,
+      "tag": "0006_finance_operations",
+      "breakpoints": true
     }
   ]
 }

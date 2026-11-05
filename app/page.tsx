@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDownLeft, ArrowUpRight, BarChart3, Bell, ChevronRight, CreditCard,
+  CalendarDays, ArrowDownLeft, ArrowUpRight, BarChart3, Bell, ChevronRight, CreditCard,
   Home, Moon, Plus, Receipt, Search, Sun, WalletCards, X, ArrowRight,
   CircleHelp, Sparkles, TrendingUp, ShieldCheck, Menu, Landmark, Activity,
   HandCoins, PiggyBank, Settings as SettingsIcon, Pencil, Trash2, Download,
@@ -14,6 +14,7 @@ import { FiscusMark } from '@/components/monetra/fiscus-mark';
 import { FloatingCalculator } from '@/components/monetra/floating-calculator';
 import { FinancialIntelligenceView } from '@/components/monetra/financial-intelligence-view';
 import { SavingsGoalsView } from '@/components/monetra/savings-goals-view';
+import { FinanceOperationsView } from '@/components/monetra/finance-operations-view';
 
 type WalletType = 'cash' | 'bkash' | 'nagad' | 'rocket' | 'bank' | 'savings' | 'debit_card' | 'credit_card' | 'custom';
 type TransactionType = 'income' | 'expense' | 'transfer';
@@ -22,7 +23,7 @@ type Category = { id: string; name: string; categoryType: 'income' | 'expense'; 
 type Transaction = { id: string; transactionType: TransactionType; walletId: string; destinationWalletId: string | null; amountMinor: number; description: string; occurredAt: string; categoryId: string | null };
 type FinanceSummary = { incomeMinor: number; expenseMinor: number; categorySpend: { categoryId: string | null; totalMinor: number }[] };
 type Workspace = { id: string; name: string; type: 'personal' | 'family' | 'business'; role: 'owner' | 'administrator' | 'editor' | 'viewer' };
-type View = 'overview' | 'wallets' | 'transactions' | 'intelligence' | 'due-debt' | 'savings' | 'vault' | 'settings';
+type View = 'overview' | 'wallets' | 'transactions' | 'intelligence' | 'due-debt' | 'savings' | 'tools' | 'vault' | 'settings';
 
 const walletLabels: Record<WalletType, string> = {
   cash: 'Cash', bkash: 'bKash', nagad: 'Nagad', rocket: 'Rocket', bank: 'Bank',
@@ -218,6 +219,7 @@ export default function HomePage() {
     { key: 'intelligence' as const, label: 'Financial Radar', icon: Activity },
     { key: 'due-debt' as const, label: 'Due & Debt', icon: HandCoins },
     { key: 'savings' as const, label: 'Savings Goals', icon: PiggyBank },
+    { key: 'tools' as const, label: 'Money Tools', icon: CalendarDays },
 
     { key: 'vault' as const, label: 'Fiscus A.I.', icon: FiscusMark },
     { key: 'settings' as const, label: 'Settings', icon: SettingsIcon },
@@ -321,6 +323,7 @@ export default function HomePage() {
           {activeView === 'intelligence' && <FinancialIntelligenceView wallets={wallets} transactions={transactions} monthlyIncomeMinor={monthlyIncome} monthlyExpenseMinor={monthlyExpense} workspaceId={activeWorkspaceId} />}
           {activeView === 'due-debt' && <DueDebtView workspaceId={activeWorkspaceId} />}
           {activeView === 'savings' && <SavingsGoalsView workspaceId={activeWorkspaceId} wallets={wallets} />}
+          {activeView === 'tools' && <FinanceOperationsView key={activeWorkspaceId} workspaceId={activeWorkspaceId} categories={categories} />}
           {activeView === 'vault' && <FiscusView workspaces={workspaces.map(({ id, type }) => ({ id, type }))} activeWorkspaceId={activeWorkspaceId} />}
           {activeView === 'settings' && <SettingsView dark={dark} workspaceId={activeWorkspaceId} onCategoriesChanged={() => void loadFinanceData()} onToggleTheme={() => setDark((current) => !current)} />}
         </div>

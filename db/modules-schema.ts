@@ -1,8 +1,8 @@
 import {
-  pgTable, uuid, text, bigint, timestamp, date, integer, index, uniqueIndex, check,
+  pgTable, uuid, text, bigint, timestamp, date, integer, boolean, index, uniqueIndex, check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { workspaces, wallets } from './schema';
+import { workspaces, wallets, categories } from './schema';
 
 export const savingsGoals = pgTable('savings_goals', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -88,4 +88,70 @@ export const dueDebtPayments = pgTable('due_debt_payments', {
   debtIdx: index('due_debt_payments_debt_idx').on(table.dueDebtId, table.paidAt),
   idempotencyUnique: uniqueIndex('due_debt_payments_idempotency_unique').on(table.workspaceId, table.idempotencyKey),
   amountPositive: check('due_debt_payments_amount_positive', sql`${table.amountMinor} > 0`),
+}));
+
+
+export const monthlyBudgets = pgTable('monthly_budgets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull(),
+  categoryId: uuid('category_id').notNull().references(() => categories.id, { onDelete: 'cascade' }),
+  monthStart: date('month_start').notNull(),
+  limitMinor: bigint('limit_minor', { mode: 'number' }).notNull(),
+  carryForward: boolean('carry_forward').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => ({
+  workspaceMonthIdx: index('monthly_budgets_workspace_month_idx').on(table.workspaceId, table.monthStart),
+  categoryMonthUnique: uniqueIndex('monthly_budgets_category_month_unique').on(table.workspaceId, table.categoryId, table.monthStart),
+  limitPositive: check('monthly_budgets_limit_positive', sql`${table.limitMinor} > 0`),
+}));
+
+export const recurringTransactions = pgTable('recurring_transactions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull(),
+  transactionType: text('transaction_type').notNull(),
+  walletId: uuid('wallet_id').notNull().references(() => wallets.id, { onDelete: 'restrict' }),
+  categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
+  description: text('description').notNull(),
+  amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
+  frequency: text('frequency').notNull(),
+  nextRun: date('next_run').notNull(),
+  lastGeneratedFor: date('last_generated_for'),
+  enabled: boolean('enabled').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => ({
+  workspaceNextRunIdx: index('recurring_transactions_workspace_next_run_idx').on(table.workspaceId, table.nextRun),
+  typeValid: check('recurring_transactions_type_valid', sql`${table.transactionType} in ('income', 'expense')`),
+  frequencyValid: check('recurring_transactions_frequency_valid', sql`${table.frequency} in ('weekly', 'monthly', 'yearly')`),
+  amountPositive: check('recurring_transactions_amount_positive', sql`${table.amountMinor} > 0`),
+}));
+
+export const walletReconciliations = pgTable('wallet_reconciliations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull(),
+  walletId: uuid('wallet_id').notNull().references(() => wallets.id, { onDelete: 'restrict' }),
+  recordedMinor: bigint('recorded_minor', { mode: 'number' }).notNull(),
+  actualMinor: bigint('actual_minor', { mode: 'number' }).notNull(),
+  varianceMinor: bigint('variance_minor', { mode: 'number' }).notNull(),
+  note: text('note'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  workspaceCreatedIdx: index('wallet_reconciliations_workspace_created_idx').on(table.workspaceId, table.createdAt),
+}));
+
+export const financeAuditEvents = pgTable('finance_audit_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull(),
+  entityType: text('entity_type').notNull(),
+  entityId: uuid('entity_id'),
+  action: text('action').notNull(),
+  summary: text('summary').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  workspaceCreatedIdx: index('finance_audit_events_workspace_created_idx').on(table.workspaceId, table.createdAt),
 }));

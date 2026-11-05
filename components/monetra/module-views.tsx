@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { FiscusMark } from '@/components/monetra/fiscus-mark';
+import { MonetraAIChat } from '@/components/monetra/monetra-ai-chat';
 import {
   Activity,
   CalendarClock,
@@ -72,9 +73,9 @@ export function FiscusView({ workspaces, activeWorkspaceId }: { workspaces: Fisc
             <span className="fiscus-hero-mark"><FiscusMark size={43} /></span>
             <div><span className="fiscus-kicker">FISCUS INTELLIGENCE ENGINE</span><h2>Understand the numbers.<br /><em>Make the next move.</em></h2></div>
           </div>
-          <span className="fiscus-offline"><i /> Research workspace preview</span>
+          <span className="fiscus-offline"><i /> LIVE WORKSPACE AI</span>
         </div>
-        <p className="fiscus-hero-copy">Fiscus is the research workspace for deeper financial analysis. For live questions about your selected workspace, open Financial Radar and use Ask Monetra AI.</p>
+        <p className="fiscus-hero-copy">Ask Fiscus about spending, income, budgets, debts and savings. Answers are grounded in the currently selected workspace and do not modify your records.</p>
         <div className="fiscus-principles">
           <span><ShieldCheck size={14} /> Record-backed answers</span>
           <span><Activity size={14} /> Transparent calculations</span>
@@ -82,48 +83,8 @@ export function FiscusView({ workspaces, activeWorkspaceId }: { workspaces: Fisc
         </div>
       </section>
 
-      <section className="fiscus-scope-bar surface-card">
-        <div className="fiscus-scope-copy"><span className="eyebrow">ANALYSIS SCOPE</span><strong>{scopeLabel}</strong><small>Choose which financial records a future answer may use.</small></div>
-        <label className="fiscus-scope-select"><span className="sr-only">Choose analysis scope</span>
-          <select value={scope} onChange={(event) => setScope(event.target.value)}>
-            <option value="current">Selected workspace</option>
-            {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspaceName(workspace)}</option>)}
-            <option value="all">All workspaces + Due & Debt</option>
-          </select>
-        </label>
-      </section>
-
-      <div className="fiscus-content-grid">
-        <section className="surface-card fiscus-chat-card">
-          <div className="fiscus-section-heading">
-            <div><span className="eyebrow">ASK FISCUS</span><h2>What would you like to know?</h2><p className="section-subtitle">This is a concept preview. Live workspace chat is available in Financial Radar.</p></div>
-            <span className="fiscus-chat-mark"><FiscusMark size={25} /></span>
-          </div>
-          <div className="fiscus-prompt-grid">
-            {suggestedPrompts.map((prompt) => <button key={prompt} type="button" onClick={() => setDraft(prompt)}>{prompt}<MessageSquareText size={14} /></button>)}
-          </div>
-          <label className="fiscus-composer">
-            <span className="sr-only">Your question for Fiscus A.I.</span>
-            <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask something about your finances…" rows={3} />
-            <span className="fiscus-composer-bottom"><small>Scope: {scopeLabel}</small><button type="button" disabled aria-label="Send question"><Send size={16} /> Send</button></span>
-          </label>
-          <p className="fiscus-honesty-note"><CircleHelp size={14} /> This preview does not send messages. Use Financial Radar → Ask Monetra AI for live analysis.</p>
-        </section>
-
-        <aside className="fiscus-side-stack">
-          <section className="surface-card fiscus-capabilities">
-            <span className="eyebrow">BUILT TO HELP YOU SEE</span><h2>More than a chatbot.</h2>
-            <div className="fiscus-capability-list">
-              {insightAreas.map(({ icon: Icon, title, detail }) => <div key={title}><span><Icon size={16} /></span><div><strong>{title}</strong><small>{detail}</small></div></div>)}
-            </div>
-          </section>
-          <section className="fiscus-trust-card">
-            <div><LockKeyhole size={17} /><strong>Trust before cleverness.</strong></div>
-            <p>Fiscus must separate actual records from estimates, show the period and workspace behind each answer, and never invent missing numbers.</p>
-          </section>
-        </aside>
-      </div>
-      <ModuleStatus>Concept preview · Live Monetra AI chat is available in Financial Radar</ModuleStatus>
+      <MonetraAIChat key={activeWorkspaceId} workspaceId={activeWorkspaceId} />
+      <ModuleStatus>Live workspace intelligence · Read-only financial analysis</ModuleStatus>
     </div>
   );
 }

@@ -75,6 +75,16 @@ export function FinancialIntelligenceView({ wallets, transactions, monthlyIncome
   useEffect(() => {
     if (!wallets.some(wallet => wallet.id === walletId && wallet.status === 'active')) setWalletId(wallets.find(wallet => wallet.status === 'active')?.id || '');
   }, [wallets, walletId]);
+  const [trendData, setTrendData] = useState<{ trends: { month: string; incomeMinor: number; expenseMinor: number }[]; categoryBreakdown: { categoryId: string | null; name: string; color: string; totalMinor: number }[] }>({ trends: [], categoryBreakdown: [] });
+  useEffect(() => {
+    let active = true;
+    fetch('/api/finance-tools', { headers: { 'x-workspace-id': workspaceId } })
+      .then(async response => { const payload = await response.json(); if (!response.ok) throw new Error(payload.error || 'Unable to load radar trends'); return payload; })
+      .then(payload => { if (active) setTrendData({ trends: Array.isArray(payload.trends) ? payload.trends : [], categoryBreakdown: Array.isArray(payload.categoryBreakdown) ? payload.categoryBreakdown : [] }); })
+      .catch(() => { if (active) setTrendData({ trends: [], categoryBreakdown: [] }); });
+    return () => { active = false; };
+  }, [workspaceId]);
+
   const [counted, setCounted] = useState('');
   const wallet = wallets.find(w => w.id === walletId);
   const variance = wallet ? minor(counted) - Number(wallet.currentBalanceMinor) : 0;
@@ -104,6 +114,11 @@ export function FinancialIntelligenceView({ wallets, transactions, monthlyIncome
     <section className="page-intro"><div><p className="eyebrow">MONETRA INTELLIGENCE SUITE</p><h1>Financial Radar<span>.</span></h1><p className="intro-copy">See patterns, test decisions and keep your next move in view.</p></div><span className="module-intro-icon"><Activity size={22} /></span></section>
     <MonetraAIChat key={workspaceId} workspaceId={workspaceId} />
     <section className="radar-overview"><div className="radar-overview-copy"><i /> LIVE WORKSPACE ANALYSIS <small>Based on records in the selected workspace</small></div><div className="radar-metrics"><div><span>Projected month-end spend</span><strong>{money(projectedExpense)}</strong></div><div><span>Projected month-end income</span><strong>{money(projectedIncome)}</strong></div><div><span>Days remaining</span><strong>{remaining}</strong></div></div></section>
+    <section className="surface-card radar-trends-card">
+      <div className="section-heading"><div><p className="eyebrow">SIX-MONTH VIEW</p><h2>Income & expense trends</h2><p className="section-subtitle">Monthly totals from saved transactions in this workspace.</p></div></div>
+      {trendData.trends.length ? <div className="radar-trend-list">{trendData.trends.map(row => { const peak = Math.max(1, ...trendData.trends.flatMap(item => [item.incomeMinor, item.expenseMinor])); return <div className="radar-trend-row" key={row.month}><span>{new Date(row.month + '-01T12:00:00').toLocaleDateString('en-BD', { month: 'short', year: '2-digit' })}</span><div className="radar-trend-bars"><i className="income-bar" style={{ width: (row.incomeMinor / peak * 100) + '%' }} /><i className="expense-bar" style={{ width: (row.expenseMinor / peak * 100) + '%' }} /></div><small>{money(row.incomeMinor)} / {money(row.expenseMinor)}</small></div>; })}<div className="radar-trend-legend"><span><i className="income-bar"/> Income</span><span><i className="expense-bar"/> Expenses</span></div></div> : <p className="section-subtitle">Monthly trends will appear as transactions are recorded.</p>}
+      {trendData.categoryBreakdown.length > 0 && <div className="radar-category-breakdown"><p className="eyebrow">TOP CATEGORIES THIS MONTH</p>{trendData.categoryBreakdown.map(item => { const max = Math.max(1, ...trendData.categoryBreakdown.map(row => row.totalMinor)); return <div className="radar-category-row" key={item.categoryId || 'uncategorized'}><span>{item.name}</span><div><i style={{ width: (item.totalMinor / max * 100) + '%', background: item.color }} /></div><b>{money(item.totalMinor)}</b></div>; })}</div>}
+    </section>
     <div className="intelligence-grid">
       <Card icon={<ShieldAlert size={19} />} eyebrow="SPENDING GUARDRAIL" title="Safe-to-Spend" description="An estimated buffer after your current spending pace.">
         <strong className="safe-spend-value">{money(safeBuffer)}</strong><div className={'intelligence-status ' + (safeBuffer >= 0 ? 'positive' : 'warning')}>{safeBuffer >= 0 ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{safeBuffer >= 0 ? 'Projected buffer is positive' : 'Spending pace may exceed liquid balances'}</div>
