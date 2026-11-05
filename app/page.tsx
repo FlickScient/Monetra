@@ -327,8 +327,8 @@ export default function HomePage() {
       </div>
 
       <nav className="mobile-nav">{navItems.map(({ key, label, icon: Icon }) => <button key={key} className={activeView === key ? 'active' : ''} onClick={() => setActiveView(key)}><Icon size={20} /><span>{label}</span></button>)}</nav>
-      {showWalletForm && <WalletModal workspaceId={activeWorkspaceId} onClose={() => setShowWalletForm(false)} onSaved={async (message) => { setShowWalletForm(false); setNotice(message); await loadFinanceData(); }} />}
-      {editingWallet && <WalletModal workspaceId={activeWorkspaceId} initialWallet={editingWallet} onClose={() => setEditingWallet(null)} onSaved={async (message) => { setEditingWallet(null); setNotice(message); await loadFinanceData(); }} />}
+      {showWalletForm && <WalletModal workspaceId={activeWorkspaceId} onClose={() => setShowWalletForm(false)} onSaved={(message) => { setShowWalletForm(false); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
+      {editingWallet && <WalletModal workspaceId={activeWorkspaceId} initialWallet={editingWallet} onClose={() => setEditingWallet(null)} onSaved={(message) => { setEditingWallet(null); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       {showTransactionForm && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={(message) => { setShowTransactionForm(false); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       {editingTransaction && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} initialTransaction={editingTransaction} onClose={() => setEditingTransaction(null)} onSaved={(message) => { setEditingTransaction(null); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       <FloatingCalculator />
@@ -434,7 +434,7 @@ function TransactionsView({ workspaceId, transactions, wallets, categories, onAd
     </section>
   </div>;
 }
-function WalletModal({ workspaceId, initialWallet, onClose, onSaved }: { workspaceId: string; initialWallet?: Wallet; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
+function WalletModal({ workspaceId, initialWallet, onClose, onSaved }: { workspaceId: string; initialWallet?: Wallet; onClose: () => void; onSaved: (message: string) => void }) {
   const [name, setName] = useState(initialWallet?.name || ''); const [type, setType] = useState<WalletType>(initialWallet?.walletType || 'cash'); const [opening, setOpening] = useState(''); const [notes, setNotes] = useState(initialWallet?.notes || ''); const [creditLimit, setCreditLimit] = useState(initialWallet ? (Number(initialWallet.creditLimitMinor || 0) / 100).toFixed(2) : ''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
@@ -444,7 +444,7 @@ function WalletModal({ workspaceId, initialWallet, onClose, onSaved }: { workspa
       const body = initialWallet ? { name, notes: notes.trim() || null, ...(type === 'credit_card' ? { creditLimitMinor: Math.round(Number(creditLimit || 0) * 100) } : {}) } : { name, walletType: type, currency: 'BDT', openingBalanceMinor: amount, notes: notes.trim() || null, creditLimitMinor: type === 'credit_card' ? Math.round(Number(creditLimit || 0) * 100) : 0 };
       const res = await fetch(endpoint, { method: initialWallet ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify(body) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not add this wallet.'); }
-      else await onSaved(initialWallet ? 'Wallet updated.' : 'Wallet added. Your balance is now synced.');
+      else onSaved(initialWallet ? 'Wallet updated. Balances are syncing.' : 'Wallet added. Balances are syncing.');
     } catch { setError('Connection issue. Please try again.'); }
     finally { setBusy(false); }
   }
