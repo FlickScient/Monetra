@@ -11,7 +11,7 @@
 /out/
 /build
 
-#Misc
+# Misc
 .DS_Store
 *.pem
 
