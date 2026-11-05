@@ -130,7 +130,6 @@ export async function POST(req: Request) {
       const increasesBalance = isCreditCard
         ? transactionType === 'expense'
         : transactionType === 'income';
-      const decreasesBalance = !increasesBalance;
       const delta = increasesBalance ? amountMinor : -amountMinor;
       if (!Number.isSafeInteger(Number(wallet.currentBalanceMinor) + delta)) {
         throw new Error('BALANCE_LIMIT_EXCEEDED');
