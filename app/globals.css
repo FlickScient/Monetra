@@ -443,3 +443,11 @@ input, select, textarea { min-width: 0; }
 .monetra-ai-spin{animation:monetra-ai-rotate 1s linear infinite}
 @keyframes monetra-ai-rotate{to{transform:rotate(360deg)}}
 @media(max-width:600px){.monetra-ai-card{padding:15px}.monetra-ai-suggestions{grid-template-columns:1fr}.monetra-ai-message{max-width:100%}.monetra-ai-conversation{max-height:430px;padding:11px}}
+
+
+/* Transaction record actions */
+.transaction-actions{display:flex;align-items:center;gap:6px;margin-left:10px;flex-shrink:0}
+.transaction-actions button{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--border,#e5e7eb);border-radius:8px;background:transparent;color:var(--muted,#64748b);cursor:pointer}
+.transaction-actions button:hover{color:var(--foreground,#172b27);background:var(--surface-soft,#f3f6f5)}
+.transaction-actions button:last-child:hover{color:#b42318;border-color:#f2c5c1;background:#fff5f4}
+@media(max-width:640px){.transaction-row{gap:9px}.transaction-actions{gap:3px;margin-left:2px}.transaction-actions button{width:28px;height:28px}}
