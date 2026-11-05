@@ -72,9 +72,9 @@ export function FiscusView({ workspaces, activeWorkspaceId }: { workspaces: Fisc
             <span className="fiscus-hero-mark"><FiscusMark size={43} /></span>
             <div><span className="fiscus-kicker">FISCUS INTELLIGENCE ENGINE</span><h2>Understand the numbers.<br /><em>Make the next move.</em></h2></div>
           </div>
-          <span className="fiscus-offline"><i /> Backend connection pending</span>
+          <span className="fiscus-offline"><i /> Research workspace preview</span>
         </div>
-        <p className="fiscus-hero-copy">Ask questions across your money life. Fiscus is being built to explain what happened, what may happen next, and which decisions deserve a closer look.</p>
+        <p className="fiscus-hero-copy">Fiscus is the research workspace for deeper financial analysis. For live questions about your selected workspace, open Financial Radar and use Ask Monetra AI.</p>
         <div className="fiscus-principles">
           <span><ShieldCheck size={14} /> Record-backed answers</span>
           <span><Activity size={14} /> Transparent calculations</span>
@@ -96,7 +96,7 @@ export function FiscusView({ workspaces, activeWorkspaceId }: { workspaces: Fisc
       <div className="fiscus-content-grid">
         <section className="surface-card fiscus-chat-card">
           <div className="fiscus-section-heading">
-            <div><span className="eyebrow">ASK FISCUS</span><h2>What would you like to know?</h2><p className="section-subtitle">Start with a question. The assistant is not connected yet.</p></div>
+            <div><span className="eyebrow">ASK FISCUS</span><h2>What would you like to know?</h2><p className="section-subtitle">This is a concept preview. Live workspace chat is available in Financial Radar.</p></div>
             <span className="fiscus-chat-mark"><FiscusMark size={25} /></span>
           </div>
           <div className="fiscus-prompt-grid">
@@ -107,7 +107,7 @@ export function FiscusView({ workspaces, activeWorkspaceId }: { workspaces: Fisc
             <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask something about your finances…" rows={3} />
             <span className="fiscus-composer-bottom"><small>Scope: {scopeLabel}</small><button type="button" disabled aria-label="Send question"><Send size={16} /> Send</button></span>
           </label>
-          <p className="fiscus-honesty-note"><CircleHelp size={14} /> No message is sent, no records are analyzed, and no AI response is generated until the backend is connected.</p>
+          <p className="fiscus-honesty-note"><CircleHelp size={14} /> This preview does not send messages. Use Financial Radar → Ask Monetra AI for live analysis.</p>
         </section>
 
         <aside className="fiscus-side-stack">
@@ -123,7 +123,7 @@ export function FiscusView({ workspaces, activeWorkspaceId }: { workspaces: Fisc
           </section>
         </aside>
       </div>
-      <ModuleStatus>Interface ready · AI service, record retrieval, and response streaming pending</ModuleStatus>
+      <ModuleStatus>Concept preview · Live Monetra AI chat is available in Financial Radar</ModuleStatus>
     </div>
   );
 }
