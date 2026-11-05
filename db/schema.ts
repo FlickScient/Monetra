@@ -73,6 +73,7 @@ export const transactions = pgTable('transactions', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
   workspaceDateIdx: index('transactions_workspace_date_idx').on(table.workspaceId, table.occurredAt),
+  activeDateIdx: index('transactions_workspace_active_date_idx').on(table.workspaceId, table.occurredAt.desc()).where(sql`${table.voidedAt} IS NULL`),
   idempotencyUnique: uniqueIndex('transactions_workspace_idempotency_unique').on(table.workspaceId, table.idempotencyKey).where(sql`${table.idempotencyKey} IS NOT NULL`),
 }));
 
