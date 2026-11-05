@@ -5,7 +5,7 @@ import {
   ArrowDownLeft, ArrowUpRight, BarChart3, Bell, ChevronRight, CreditCard,
   Home, Moon, Plus, Receipt, Search, Sun, WalletCards, X, ArrowRight,
   CircleHelp, Sparkles, TrendingUp, ShieldCheck, Menu, Landmark, Activity,
-  HandCoins, PiggyBank, Settings as SettingsIcon, Pencil, Trash2,
+  HandCoins, PiggyBank, Settings as SettingsIcon, Pencil, Trash2, Download,
 } from 'lucide-react';
 import { useUser, UserButton } from '@clerk/nextjs';
 import { FiscusView, SettingsView } from '@/components/monetra/module-views';
@@ -292,7 +292,7 @@ export default function HomePage() {
           )}
 
           {activeView === 'wallets' && <WalletsView wallets={wallets} onAdd={() => setShowWalletForm(true)} onEdit={(wallet) => setEditingWallet(wallet)} onArchive={(wallet) => void archiveWallet(wallet)} onRestore={(wallet) => void restoreWallet(wallet)} />}
-          {activeView === 'transactions' && <TransactionsView transactions={transactions} wallets={wallets} categories={categories} onAdd={() => setShowTransactionForm(true)} onEdit={(transaction) => setEditingTransaction(transaction)} onDelete={(transaction) => void deleteTransaction(transaction)} onLoadMore={loadMoreTransactions} hasMore={hasMoreTransactions} />}
+          {activeView === 'transactions' && <TransactionsView workspaceId={activeWorkspaceId} transactions={transactions} wallets={wallets} categories={categories} onAdd={() => setShowTransactionForm(true)} onEdit={(transaction) => setEditingTransaction(transaction)} onDelete={(transaction) => void deleteTransaction(transaction)} onLoadMore={loadMoreTransactions} hasMore={hasMoreTransactions} />}
           {activeView === 'intelligence' && <FinancialIntelligenceView wallets={wallets} transactions={transactions} monthlyIncomeMinor={monthlyIncome} monthlyExpenseMinor={monthlyExpense} workspaceId={activeWorkspaceId} />}
           {activeView === 'due-debt' && <DueDebtView workspaceId={activeWorkspaceId} />}
           {activeView === 'savings' && <SavingsGoalsView workspaceId={activeWorkspaceId} wallets={wallets} />}
@@ -329,14 +329,65 @@ function WalletsView({ wallets, onAdd, onEdit, onArchive, onRestore }: { wallets
   </div>;
 }
 
-function TransactionsView({ transactions, wallets, categories, onAdd, onEdit, onDelete, onLoadMore, hasMore }: { transactions: Transaction[]; wallets: Wallet[]; categories: Category[]; onAdd: () => void; onEdit: (transaction: Transaction) => void; onDelete: (transaction: Transaction) => void; onLoadMore: () => Promise<void>; hasMore: boolean }) {
+function TransactionsView({ workspaceId, transactions, wallets, categories, onAdd, onEdit, onDelete, onLoadMore, hasMore }: { workspaceId: string; transactions: Transaction[]; wallets: Wallet[]; categories: Category[]; onAdd: () => void; onEdit: (transaction: Transaction) => void; onDelete: (transaction: Transaction) => void; onLoadMore: () => Promise<void>; hasMore: boolean }) {
   const [query, setQuery] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [filter, setFilter] = useState<'all' | TransactionType>('all');
-  const filtered = transactions.filter((t) => t.description.toLowerCase().includes(query.toLowerCase()) && (filter === 'all' || t.transactionType === filter));
-  return <div className="page-stack"><section className="page-intro"><div><p className="eyebrow">YOUR FINANCIAL HISTORY</p><h1>Transactions<span>.</span></h1><p className="intro-copy">Every movement, accounted for.</p></div><button className="primary-btn intro-action" onClick={onAdd}><Plus size={17} /> New transaction</button></section><section className="surface-card ledger-card"><div className="ledger-toolbar"><div className="search-wrap"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search transactions..." /></div><div className="filter-tabs">{(['all', 'income', 'expense', 'transfer'] as const).map((item) => <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div></div>{filtered.length === 0 ? <EmptyState icon={<Search size={22} />} title="Nothing matches" text="Try a different search or filter." /> : <div className="transaction-list">{filtered.map((t) => <TransactionRow key={t.id} transaction={t} wallets={wallets} categories={categories} onEdit={() => onEdit(t)} onDelete={() => onDelete(t)} />)}</div>}{hasMore && query.trim() === '' && filter === 'all' && <button className="load-more-btn" disabled={loadingMore} onClick={async () => { setLoadingMore(true); await onLoadMore(); setLoadingMore(false); }}>{loadingMore ? 'Loading older activity…' : 'Load older transactions'} <ChevronRight size={15} /></button>}</section></div>;
-}
+  const [walletFilter, setWalletFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const filtered = transactions.filter((t) => {
+    const transactionDate = t.occurredAt.slice(0, 10);
+    return t.description.toLowerCase().includes(query.toLowerCase()) &&
+      (filter === 'all' || t.transactionType === filter) &&
+      (walletFilter === 'all' || t.walletId === walletFilter || t.destinationWalletId === walletFilter) &&
+      (categoryFilter === 'all' || t.categoryId === categoryFilter) &&
+      (!fromDate || transactionDate >= fromDate) && (!toDate || transactionDate <= toDate);
+  });
 
+  async function exportTransactions() {
+    setExporting(true); setExportError('');
+    try {
+      const response = await fetch('/api/transactions/export', { headers: { 'x-workspace-id': workspaceId } });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Could not export transactions.');
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url; anchor.download = 'monetra-transactions.csv';
+      document.body.appendChild(anchor); anchor.click(); anchor.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Could not export transactions.');
+    } finally { setExporting(false); }
+  }
+
+  return <div className="page-stack">
+    <section className="page-intro"><div><p className="eyebrow">YOUR FINANCIAL HISTORY</p><h1>Transactions<span>.</span></h1><p className="intro-copy">Every movement, accounted for.</p></div><div className="transaction-page-actions"><button className="secondary-btn" type="button" onClick={() => void exportTransactions()} disabled={exporting}><Download size={15}/>{exporting ? 'Preparing CSV…' : 'Export CSV'}</button><button className="primary-btn intro-action" onClick={onAdd}><Plus size={17} /> New transaction</button></div></section>
+    <section className="surface-card ledger-card">
+      <div className="ledger-toolbar">
+        <div className="search-wrap"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search loaded transactions..." /></div>
+        <div className="filter-tabs">{(['all', 'income', 'expense', 'transfer'] as const).map((item) => <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div>
+      </div>
+      <div className="transaction-advanced-filters">
+        <select value={walletFilter} onChange={event => setWalletFilter(event.target.value)} aria-label="Filter by wallet"><option value="all">All wallets</option>{wallets.map(wallet => <option key={wallet.id} value={wallet.id}>{wallet.name}</option>)}</select>
+        <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} aria-label="Filter by category"><option value="all">All categories</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select>
+        <label>From <input type="date" value={fromDate} onChange={event => setFromDate(event.target.value)}/></label>
+        <label>To <input type="date" value={toDate} onChange={event => setToDate(event.target.value)}/></label>
+        {(walletFilter !== 'all' || categoryFilter !== 'all' || fromDate || toDate || query) && <button type="button" onClick={() => {setWalletFilter('all');setCategoryFilter('all');setFromDate('');setToDate('');setQuery('');setFilter('all');}}>Clear filters</button>}
+      </div>
+      {exportError && <p className="form-error">{exportError}</p>}
+      {filtered.length === 0 ? <EmptyState icon={<Search size={22} />} title="Nothing matches" text="Try a different search, date range or filter." /> : <div className="transaction-list">{filtered.map((t) => <TransactionRow key={t.id} transaction={t} wallets={wallets} categories={categories} onEdit={() => onEdit(t)} onDelete={() => onDelete(t)} />)}</div>}
+      {hasMore && <button className="load-more-btn" disabled={loadingMore} onClick={async () => { setLoadingMore(true); await onLoadMore(); setLoadingMore(false); }}>{loadingMore ? 'Loading older activity…' : 'Load older transactions'} <ChevronRight size={15} /></button>}
+      <p className="transaction-list-note">Search and filters apply to transactions currently loaded. Load older transactions to include more history. CSV export includes all active transactions in this workspace.</p>
+    </section>
+  </div>;
+}
 function WalletModal({ workspaceId, initialWallet, onClose, onSaved }: { workspaceId: string; initialWallet?: Wallet; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
   const [name, setName] = useState(initialWallet?.name || ''); const [type, setType] = useState<WalletType>(initialWallet?.walletType || 'cash'); const [opening, setOpening] = useState(''); const [notes, setNotes] = useState(initialWallet?.notes || ''); const [creditLimit, setCreditLimit] = useState(initialWallet ? (Number(initialWallet.creditLimitMinor || 0) / 100).toFixed(2) : ''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   async function submit(event: FormEvent) {
