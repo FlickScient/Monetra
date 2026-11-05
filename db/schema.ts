@@ -71,6 +71,7 @@ export const transactions = pgTable('transactions', {
 }, (table) => ({
   workspaceDateIdx: index('transactions_workspace_date_idx').on(table.workspaceId, table.occurredAt),
   activeDateIdx: index('transactions_workspace_active_date_idx').on(table.workspaceId, table.occurredAt.desc()).where(sql`${table.voidedAt} IS NULL`),
+  workspaceUserActiveDateIdx: index('transactions_workspace_user_active_date_idx').on(table.workspaceId, table.userId, table.occurredAt.desc()).where(sql`${table.voidedAt} IS NULL`),
   idempotencyUnique: uniqueIndex('transactions_workspace_idempotency_unique').on(table.workspaceId, table.idempotencyKey).where(sql`${table.idempotencyKey} IS NOT NULL`),
 }));
 
@@ -98,6 +99,7 @@ export const ledgerEntries = pgTable('ledger_entries', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
   workspaceIdx: index('ledger_entries_workspace_idx').on(table.workspaceId),
+  workspaceAccountIdx: index('ledger_entries_workspace_account_idx').on(table.workspaceId, table.ledgerAccountId),
   transactionIdx: index('ledger_entries_transaction_idx').on(table.transactionId),
   oneSide: check('ledger_entries_one_side_check', sql`(${table.debitMinor} > 0 AND ${table.creditMinor} = 0) OR (${table.creditMinor} > 0 AND ${table.debitMinor} = 0)`),
 }));

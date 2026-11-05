@@ -20,8 +20,10 @@ export async function ensureWalletLedgerAccount(
   let [account] = await tx.select().from(ledgerAccounts)
     .where(and(
       eq(ledgerAccounts.workspaceId, owner.workspaceId),
+      eq(ledgerAccounts.userId, owner.userId),
       eq(ledgerAccounts.walletId, wallet.id),
     )).limit(1);
+  let accountCreated = false;
 
   const expectedType = wallet.walletType === 'credit_card' ? 'liability' : 'asset';
   if (account && account.accountType !== expectedType) {
@@ -36,24 +38,28 @@ export async function ensureWalletLedgerAccount(
       accountType: expectedType,
       name: `Wallet: ${wallet.name}`,
     }).returning();
+    accountCreated = true;
   }
   if (!account) throw new Error('LEDGER_ACCOUNT_CREATE_FAILED');
 
-  // Reconcile the journal to the wallet's persisted balance at cutover.
-  // This preserves the live balance without inventing historical transaction detail.
-  const [ledgerBalanceRow] = await tx.select({
-    balance: expectedType === 'asset'
-      ? sql<string>`(COALESCE(SUM(${ledgerEntries.debitMinor}), 0) - COALESCE(SUM(${ledgerEntries.creditMinor}), 0))::text`
-      : sql<string>`(COALESCE(SUM(${ledgerEntries.creditMinor}), 0) - COALESCE(SUM(${ledgerEntries.debitMinor}), 0))::text`,
-  }).from(ledgerEntries)
-    .where(and(
-      eq(ledgerEntries.workspaceId, owner.workspaceId),
-      eq(ledgerEntries.ledgerAccountId, account.id),
-    ));
+  // Only reconcile the opening balance when the wallet ledger account is first
+  // created. Re-running a full SUM over every historical journal entry on every
+  // transaction made normal posting progressively slower as history grew.
+  if (accountCreated) {
+    const [ledgerBalanceRow] = await tx.select({
+      balance: expectedType === 'asset'
+        ? sql<string>`(COALESCE(SUM(${ledgerEntries.debitMinor}), 0) - COALESCE(SUM(${ledgerEntries.creditMinor}), 0))::text`
+        : sql<string>`(COALESCE(SUM(${ledgerEntries.creditMinor}), 0) - COALESCE(SUM(${ledgerEntries.debitMinor}), 0))::text`,
+    }).from(ledgerEntries)
+      .where(and(
+        eq(ledgerEntries.workspaceId, owner.workspaceId),
+        eq(ledgerEntries.userId, owner.userId),
+        eq(ledgerEntries.ledgerAccountId, account.id),
+      ));
 
-  if (!Number.isSafeInteger(wallet.currentBalanceMinor)) throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
-  const balanceDifference = BigInt(wallet.currentBalanceMinor) - BigInt(ledgerBalanceRow?.balance ?? '0');
-  if (balanceDifference !== BigInt(0)) {
+    if (!Number.isSafeInteger(wallet.currentBalanceMinor)) throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
+    const balanceDifference = BigInt(wallet.currentBalanceMinor) - BigInt(ledgerBalanceRow?.balance ?? '0');
+    if (balanceDifference !== BigInt(0)) {
     const absoluteDifference = balanceDifference < BigInt(0) ? -balanceDifference : balanceDifference;
     if (absoluteDifference > BigInt(Number.MAX_SAFE_INTEGER)) {
       throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
@@ -82,6 +88,7 @@ export async function ensureWalletLedgerAccount(
           { workspaceId: owner.workspaceId, userId: owner.userId, transactionId: openingTransaction.id, ledgerAccountId: equity.id, debitMinor: amount, creditMinor: 0 },
           { workspaceId: owner.workspaceId, userId: owner.userId, transactionId: openingTransaction.id, ledgerAccountId: account.id, debitMinor: 0, creditMinor: amount },
         ]);
+    }
   }
 
   return account;
@@ -97,6 +104,7 @@ async function getOrCreateSystemAccount(
   let [account] = await tx.select().from(ledgerAccounts)
     .where(and(
       eq(ledgerAccounts.workspaceId, owner.workspaceId),
+      eq(ledgerAccounts.userId, owner.userId),
       eq(ledgerAccounts.accountType, accountType),
       isNull(ledgerAccounts.walletId),
     )).limit(1);

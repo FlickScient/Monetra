@@ -179,7 +179,8 @@ export async function POST(req: Request) {
       return { transaction: txn, wallet: updatedWallet, replayed: false };
     });
 
-    if (!result.replayed) await recordFinanceAudit(context, { entityType: 'transaction', entityId: result.transaction.id, action: 'created', summary: 'Recorded ' + transactionType + ' ৳' + (amountMinor / 100).toFixed(2) + ': ' + description.trim() });
+    // Audit logging is best-effort and must not delay the transaction response.
+    if (!result.replayed) void recordFinanceAudit(context, { entityType: 'transaction', entityId: result.transaction.id, action: 'created', summary: 'Recorded ' + transactionType + ' ৳' + (amountMinor / 100).toFixed(2) + ': ' + description.trim() });
     return NextResponse.json(result, { status: result.replayed ? 200 : 201 });
   } catch (error) {
     if (error instanceof Error && error.message === 'IDEMPOTENCY_KEY_REUSED') {
