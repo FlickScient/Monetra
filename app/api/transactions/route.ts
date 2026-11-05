@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getWorkspaceContext } from '@/lib/workspace';
 import { db } from '@/db';
 import { wallets, transactions, categories } from '@/db/schema';
-import { eq, sql, and, gte, ne, desc } from 'drizzle-orm';
+import { eq, sql, and, gte, ne, desc, isNull } from 'drizzle-orm';
 import { postFinancialJournal } from '@/lib/ledger';
 import { isUuid } from '@/lib/validation';
 
@@ -29,12 +29,14 @@ export async function GET(req: Request) {
     }).from(transactions)
       .where(and(
         eq(transactions.workspaceId, context.workspaceId),
+        eq(transactions.userId, context.userId),
+        isNull(transactions.voidedAt),
         ne(transactions.transactionType, 'adjustment'),
       ))
       .orderBy(desc(transactions.occurredAt), desc(transactions.id))
       .limit(limit + 1)
       .offset(offset);
-      return NextResponse.json(rows.slice(0, limit));
+      return NextResponse.json(rows);
   } catch {
     return NextResponse.json({ error: 'Unable to load transactions' }, { status: 500 });
   }
