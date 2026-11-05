@@ -9,6 +9,25 @@ export const runtime = 'nodejs';
 
 type Message = { role: 'user' | 'model'; content: string };
 
+// Best-effort per-instance guard; Google's project-level free-tier quotas remain authoritative.
+const requestBuckets = new Map<string, number[]>();
+function isRateLimited(userId: string) {
+  const now = Date.now();
+  const recent = (requestBuckets.get(userId) || []).filter((time) => now - time < 10 * 60 * 1000);
+  if (recent.length >= 10) {
+    requestBuckets.set(userId, recent);
+    return true;
+  }
+  recent.push(now);
+  requestBuckets.set(userId, recent);
+  if (requestBuckets.size > 1500) {
+    for (const [id, times] of requestBuckets) {
+      if (!times.length || now - times[times.length - 1] >= 10 * 60 * 1000) requestBuckets.delete(id);
+    }
+  }
+  return false;
+}
+
 export async function POST(request: Request) {
   const context = await getWorkspaceContext(request);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
@@ -18,6 +37,10 @@ export async function POST(request: Request) {
     error: 'Add GEMINI_API_KEY in Vercel → Settings → Environment Variables, then redeploy.',
     code: 'AI_NOT_CONFIGURED',
   }, { status: 503 });
+  if (isRateLimited(context.userId)) return NextResponse.json({
+    error: 'Monetra AI has a temporary per-user limit of 10 messages per 10 minutes. Please wait a little and try again.',
+    code: 'RATE_LIMITED',
+  }, { status: 429 });
 
   let body: { messages?: unknown };
   try { body = await request.json(); } catch {
