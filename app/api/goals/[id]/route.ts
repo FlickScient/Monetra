@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { savingsGoals, goalAllocations } from '@/db/modules-schema';
+import { savingsGoals, goalAllocations, goalAllocationEvents } from '@/db/modules-schema';
 import { getWorkspaceContext } from '@/lib/workspace';
 import { isUuid, isDateOnly } from '@/lib/validation';
 
@@ -27,10 +27,22 @@ export async function PATCH(req: Request, { params }: Params) {
     values.targetDate = body.targetDate;
   }
   try {
-    const [goal] = await db.update(savingsGoals).set(values)
-      .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.userId, context.userId), eq(savingsGoals.status, 'active')))
-      .returning();
-    return goal ? NextResponse.json(goal) : NextResponse.json({ error: 'Goal not found' }, { status: 404 });
+    const goal = await db.transaction(async tx => {
+      const [current] = await tx.select().from(savingsGoals)
+        .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.userId, context.userId), eq(savingsGoals.status, 'active')))
+        .for('update');
+      if (!current) throw new Error('GOAL_NOT_FOUND');
+      if (body.targetMinor !== undefined) {
+        const [allocated] = await tx.select({ total: sql<string>`coalesce(sum(${goalAllocations.amountMinor}),0)::text` })
+          .from(goalAllocations).where(and(eq(goalAllocations.goalId, current.id), eq(goalAllocations.workspaceId, context.workspaceId)));
+        if (Number(body.targetMinor) < Number(allocated?.total ?? 0)) throw new Error('TARGET_BELOW_ALLOCATED');
+      }
+      const [saved] = await tx.update(savingsGoals).set(values)
+        .where(and(eq(savingsGoals.id, current.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.userId, context.userId)))
+        .returning();
+      return saved;
+    });
+    return NextResponse.json(goal);
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
     if (code === 'GOAL_NOT_FOUND') return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
