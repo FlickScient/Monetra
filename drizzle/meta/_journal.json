@@ -36,6 +36,13 @@
       "when": 1793880000000,
       "tag": "0004_ledger_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793966400000,
+      "tag": "0005_transaction_voiding",
+      "breakpoints": true
     }
   ]
 }
