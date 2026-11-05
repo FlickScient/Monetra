@@ -10,10 +10,10 @@ export async function GET(req: Request) {
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
   try {
     const debts = await db.select().from(dueDebts)
-      .where(and(eq(dueDebts.workspaceId, context.workspaceId), sql`${dueDebts.status} <> 'archived'`))
+      .where(and(eq(dueDebts.workspaceId, context.workspaceId), eq(dueDebts.userId, context.userId), sql`${dueDebts.status} <> 'archived'`))
       .orderBy(asc(dueDebts.createdAt));
     const payments = debts.length ? await db.select().from(dueDebtPayments)
-      .where(eq(dueDebtPayments.workspaceId, context.workspaceId)) : [];
+      .where(and(eq(dueDebtPayments.workspaceId, context.workspaceId), eq(dueDebtPayments.userId, context.userId))) : [];
     return NextResponse.json(debts.map(debt => {
       const paidMinor = payments.filter(payment => payment.dueDebtId === debt.id)
         .reduce((sum, payment) => sum + Number(payment.amountMinor), 0);
