@@ -41,7 +41,7 @@ export async function POST(req: Request, { params }: Params) {
       // Serialize requests sharing an idempotency key before checking for a prior payment.
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${context.workspaceId}), hashtext(${idempotencyKey}))`);
       const [prior] = await tx.select().from(dueDebtPayments)
-        .where(and(eq(dueDebtPayments.workspaceId, context.workspaceId), eq(dueDebtPayments.idempotencyKey, idempotencyKey)));
+        .where(and(eq(dueDebtPayments.workspaceId, context.workspaceId), eq(dueDebtPayments.userId, context.userId), eq(dueDebtPayments.idempotencyKey, idempotencyKey)));
       if (prior) {
         if (prior.dueDebtId !== params.id || Number(prior.amountMinor) !== amountMinor ||
             prior.paymentMethod !== paymentMethod || prior.note !== note ||
@@ -57,7 +57,7 @@ export async function POST(req: Request, { params }: Params) {
       if (!debt || debt.status === 'archived') throw new Error('DEBT_NOT_FOUND');
 
       const [totals] = await tx.select({ paid: sql<string>`coalesce(sum(${dueDebtPayments.amountMinor}),0)::text` })
-        .from(dueDebtPayments).where(and(eq(dueDebtPayments.dueDebtId, debt.id), eq(dueDebtPayments.workspaceId, context.workspaceId)));
+        .from(dueDebtPayments).where(and(eq(dueDebtPayments.dueDebtId, debt.id), eq(dueDebtPayments.workspaceId, context.workspaceId), eq(dueDebtPayments.userId, context.userId)));
       const outstanding = Number(debt.principalMinor) - Number(totals?.paid ?? 0);
       if (amountMinor > outstanding) throw new Error('PAYMENT_EXCEEDS_OUTSTANDING');
 
@@ -67,7 +67,7 @@ export async function POST(req: Request, { params }: Params) {
       }).returning();
       const nextStatus = amountMinor === outstanding ? 'settled' : 'partially_settled';
       await tx.update(dueDebts).set({ status: nextStatus, updatedAt: new Date() })
-        .where(and(eq(dueDebts.id, debt.id), eq(dueDebts.workspaceId, context.workspaceId)));
+        .where(and(eq(dueDebts.id, debt.id), eq(dueDebts.workspaceId, context.workspaceId), eq(dueDebts.userId, context.userId)));
       return { payment, replayed: false, outstandingMinor: outstanding - amountMinor };
     });
     return NextResponse.json(result, { status: result.replayed ? 200 : 201 });
