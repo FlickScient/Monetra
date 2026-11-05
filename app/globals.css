@@ -404,3 +404,42 @@ input, select, textarea { min-width: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+
+/* Monetra AI chat */
+.monetra-ai-card{display:grid;gap:15px;padding:20px}
+.monetra-ai-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.monetra-ai-identity{display:flex;align-items:center;gap:12px;min-width:0}
+.monetra-ai-mark{display:grid;width:42px;height:42px;flex:0 0 auto;place-items:center;border-radius:13px;background:var(--green-soft);color:var(--green)}
+.monetra-ai-identity h2{margin:4px 0;color:var(--text);font-size:16px;letter-spacing:-.35px}
+.monetra-ai-identity .section-subtitle{margin-top:4px;line-height:1.5}
+.monetra-ai-clear{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:7px 9px;color:var(--muted);font-size:9px;font-weight:700}
+.monetra-ai-clear:disabled{opacity:.4;cursor:not-allowed}
+.monetra-ai-conversation{display:grid;gap:13px;max-height:490px;overflow-y:auto;border:1px solid var(--line);border-radius:13px;background:var(--surface-soft);padding:15px;scroll-behavior:smooth}
+.monetra-ai-empty{display:grid;justify-items:center;padding:13px 4px 5px;text-align:center}
+.monetra-ai-welcome-icon{display:grid;width:39px;height:39px;place-items:center;border-radius:12px;background:var(--green-soft);color:var(--green)}
+.monetra-ai-empty>strong{margin-top:11px;color:var(--text);font-size:13px}
+.monetra-ai-empty>p{max-width:430px;margin:6px 0 0;color:var(--muted);font-size:10px;line-height:1.6}
+.monetra-ai-suggestions{display:grid;width:100%;grid-template-columns:1fr 1fr;gap:7px;margin-top:15px}
+.monetra-ai-suggestions button{display:flex;min-height:47px;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:9px;background:var(--surface);padding:9px 10px;color:var(--text);font-size:9px;line-height:1.45;text-align:left}
+.monetra-ai-suggestions button svg{flex:0 0 auto;color:var(--green)}
+.monetra-ai-suggestions button:disabled{opacity:.5}
+.monetra-ai-message{display:flex;align-items:flex-start;gap:8px;max-width:90%}
+.monetra-ai-message.from-user{justify-self:end;flex-direction:row-reverse}
+.monetra-ai-avatar{display:grid;width:27px;height:27px;flex:0 0 auto;place-items:center;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--green)}
+.monetra-ai-bubble{border:1px solid var(--line);border-radius:4px 12px 12px 12px;background:var(--surface);padding:10px 12px;color:var(--text);font-size:10px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.from-user .monetra-ai-bubble{border-color:transparent;border-radius:12px 4px 12px 12px;background:var(--green);color:#fff}
+.monetra-ai-thinking{display:flex;align-items:center;gap:8px;color:var(--muted)}
+.monetra-ai-error{margin:0;border-radius:8px;background:#bd594b12;padding:9px 11px;color:#bd594b;font-size:10px;line-height:1.5}
+.monetra-ai-composer{display:grid;gap:8px;border:1px solid var(--line);border-radius:12px;background:var(--surface-soft);padding:11px}
+.monetra-ai-composer textarea{width:100%;min-height:48px;max-height:150px;resize:vertical;border:0;outline:0;background:transparent;color:var(--text);font:inherit;font-size:11px;line-height:1.55}
+.monetra-ai-composer textarea::placeholder{color:var(--muted)}
+.monetra-ai-composer-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding-top:8px}
+.monetra-ai-composer-footer small{color:var(--muted);font-size:8px}
+.monetra-ai-composer-footer button{display:grid;width:32px;height:32px;place-items:center;border:0;border-radius:9px;background:var(--green);color:white}
+.monetra-ai-composer-footer button:disabled{opacity:.4;cursor:not-allowed}
+.monetra-ai-privacy{display:flex;align-items:center;gap:6px;margin:0;color:var(--muted);font-size:8px;line-height:1.5}
+.monetra-ai-privacy svg{flex:0 0 auto;color:var(--green)}
+.monetra-ai-spin{animation:monetra-ai-rotate 1s linear infinite}
+@keyframes monetra-ai-rotate{to{transform:rotate(360deg)}}
+@media(max-width:600px){.monetra-ai-card{padding:15px}.monetra-ai-suggestions{grid-template-columns:1fr}.monetra-ai-message{max-width:100%}.monetra-ai-conversation{max-height:430px;padding:11px}}
