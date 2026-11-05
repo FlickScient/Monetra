@@ -29,7 +29,7 @@ function timestamp(value: unknown): Date {
   return new Date(String(value));
 }
 function withOwner(row: Record<string, any>, workspaceId: string, userId: string, fields: string[] = []) {
-  const result = { ...row, workspaceId, userId };
+  const result: Record<string, any> = { ...row, workspaceId, userId };
   for (const field of fields) {
     if (result[field] !== null && result[field] !== undefined) result[field] = timestamp(result[field]);
   }
@@ -189,7 +189,7 @@ export async function POST(req: Request) {
         rows[key].map((row) => withOwner(row, context.workspaceId, context.userId, dateFields));
       const plainRows = (key: typeof TABLE_KEYS[number], dateFields: string[] = []) =>
         rows[key].map((row) => {
-          const result = { ...row, workspaceId: context.workspaceId };
+          const result: Record<string, any> = { ...row, workspaceId: context.workspaceId };
           for (const field of dateFields) if (result[field]) result[field] = timestamp(result[field]);
           return result;
         });
