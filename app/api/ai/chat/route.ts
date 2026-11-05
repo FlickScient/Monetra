@@ -238,3 +238,21 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ answer, model: activeModel });
+
+    } catch (error) {
+    console.error(
+      'MONETRA_AI_CHAT_ERROR:',
+      failureStage,
+      error instanceof Error ? error.message : 'unknown_error',
+    );
+
+    return NextResponse.json({
+      error: failureStage === 'finance_data'
+        ? 'Monetra could not read this workspace’s finance data. Check the database migrations and Vercel function logs. (AI_DATA_ERROR)'
+        : 'The Gemini request could not be completed. Check the Vercel function logs. (AI_PROVIDER_ERROR)',
+      code: failureStage === 'finance_data'
+        ? 'AI_DATA_ERROR'
+        : 'AI_PROVIDER_ERROR',
+    }, { status: 500 });
+  }
+}
