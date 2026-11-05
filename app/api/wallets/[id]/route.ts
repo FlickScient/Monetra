@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { ledgerAccounts, wallets } from '@/db/schema';
 import { goalAllocations } from '@/db/modules-schema';
@@ -79,18 +79,27 @@ export async function DELETE(req: Request, { params }: Params) {
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
   if (!isUuid(params.id)) return NextResponse.json({ error: 'Invalid wallet ID' }, { status: 400 });
   try {
-    const [wallet] = await db.select().from(wallets)
-      .where(and(eq(wallets.id, params.id), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId)));
-    if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
-    if (Number(wallet.currentBalanceMinor) !== 0) return NextResponse.json({ error: 'Move the remaining balance out of this wallet before archiving it' }, { status: 409 });
-    const [allocation] = await db.select({ id: goalAllocations.id }).from(goalAllocations)
-      .where(and(eq(goalAllocations.walletId, wallet.id), eq(goalAllocations.workspaceId, context.workspaceId))).limit(1);
-    if (allocation) return NextResponse.json({ error: 'Release this wallet from all savings goals before archiving it' }, { status: 409 });
-    const [archived] = await db.update(wallets).set({ status: 'inactive', updatedAt: new Date() })
-      .where(and(eq(wallets.id, wallet.id), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId), eq(wallets.status, 'active')))
-      .returning({ id: wallets.id });
-    return archived ? NextResponse.json({ ok: true, archived: true }) : NextResponse.json({ error: 'Wallet is already archived' }, { status: 409 });
+    await db.transaction(async tx => {
+      const [wallet] = await tx.select().from(wallets)
+        .where(and(eq(wallets.id, params.id), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId)))
+        .for('update');
+      if (!wallet) throw new Error('WALLET_NOT_FOUND');
+      if (Number(wallet.currentBalanceMinor) !== 0) throw new Error('WALLET_HAS_BALANCE');
+      const [allocation] = await tx.select({ id: goalAllocations.id }).from(goalAllocations)
+        .where(and(eq(goalAllocations.walletId, wallet.id), eq(goalAllocations.workspaceId, context.workspaceId))).limit(1);
+      if (allocation) throw new Error('WALLET_HAS_ALLOCATIONS');
+      await tx.update(wallets).set({ status: 'inactive', updatedAt: new Date() })
+        .where(and(eq(wallets.id, wallet.id), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId), eq(wallets.status, 'active')));
+    });
+    return NextResponse.json({ ok: true, archived: true });
   } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    const errors: Record<string, [number, string]> = {
+      WALLET_NOT_FOUND: [404, 'Wallet not found'],
+      WALLET_HAS_BALANCE: [409, 'Move the remaining balance out of this wallet before archiving it'],
+      WALLET_HAS_ALLOCATIONS: [409, 'Release this wallet from all savings goals before archiving it'],
+    };
+    if (errors[code]) return NextResponse.json({ error: errors[code][1] }, { status: errors[code][0] });
     console.error('MONETRA_WALLET_ARCHIVE_ERROR:', error);
     return NextResponse.json({ error: 'Unable to archive wallet' }, { status: 500 });
   }
