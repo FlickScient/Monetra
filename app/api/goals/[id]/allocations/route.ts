@@ -13,7 +13,7 @@ export async function GET(req: Request, { params }: Params) {
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
   if (!isUuid(params.id)) return NextResponse.json({ error: 'Invalid goal ID' }, { status: 400 });
   try {
-    const goal = await db.query.savingsGoals.findFirst({ where: (g, { and, eq }) => and(eq(g.id, params.id), eq(g.workspaceId, context.workspaceId)) });
+    const goal = await db.query.savingsGoals.findFirst({ where: (g, { and, eq }) => and(eq(g.id, params.id), eq(g.workspaceId, context.workspaceId), eq(g.userId, context.userId)) });
     if (!goal) return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
     const history = await db.select().from(goalAllocationEvents)
       .where(and(eq(goalAllocationEvents.goalId, params.id), eq(goalAllocationEvents.workspaceId, context.workspaceId)))
@@ -37,13 +37,13 @@ export async function POST(req: Request, { params }: Params) {
       // Serialize all changes to this goal so concurrent allocations cannot
       // exceed its target or race with goal archiving.
       const [goal] = await tx.select().from(savingsGoals)
-        .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.status, 'active')))
+        .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.userId, context.userId), eq(savingsGoals.status, 'active')))
         .for('update');
       if (!goal) throw new Error('GOAL_NOT_FOUND');
 
       // Serialize allocation changes per wallet to prevent concurrent over-allocation.
       const [wallet] = await tx.select().from(wallets)
-        .where(and(eq(wallets.id, walletId), eq(wallets.workspaceId, context.workspaceId), eq(wallets.status, 'active')))
+        .where(and(eq(wallets.id, walletId), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId), eq(wallets.status, 'active')))
         .for('update');
       if (!wallet) throw new Error('WALLET_NOT_FOUND');
       if (wallet.currency !== goal.currency || wallet.walletType === 'credit_card') throw new Error('WALLET_NOT_ELIGIBLE');
