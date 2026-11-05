@@ -113,6 +113,7 @@ export async function POST(req: Request) {
           and(
             eq(wallets.id, walletId),
             eq(wallets.workspaceId, context.workspaceId),
+            eq(wallets.userId, context.userId),
             gte(wallets.currentBalanceMinor, amountMinor),
           ),
         )
@@ -129,6 +130,7 @@ export async function POST(req: Request) {
         .where(and(
           eq(wallets.id, destinationWalletId),
           eq(wallets.workspaceId, context.workspaceId),
+          eq(wallets.userId, context.userId),
           eq(wallets.status, 'active'),
         ))
         .returning({ id: wallets.id });
