@@ -3,6 +3,7 @@ import { getWorkspaceContext } from '@/lib/workspace';
 import { db } from '@/db';
 import { transactions } from '@/db/schema';
 import { and, eq, gte, lt, isNull, sql } from 'drizzle-orm';
+import { dhakaDateBoundary, dhakaMonthStart, shiftMonthStart } from '@/lib/dhaka-time';
 
 export async function GET(req: Request) {
   const context = await getWorkspaceContext(req);
@@ -11,8 +12,9 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const requestedStart = url.searchParams.get('from');
   const requestedEnd = url.searchParams.get('to');
-  const monthStart = requestedStart ? new Date(requestedStart) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const nextMonthStart = requestedEnd ? new Date(requestedEnd) : new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1);
+  const currentMonth = dhakaMonthStart();
+  const monthStart = requestedStart ? new Date(requestedStart) : dhakaDateBoundary(currentMonth);
+  const nextMonthStart = requestedEnd ? new Date(requestedEnd) : dhakaDateBoundary(shiftMonthStart(currentMonth, 1));
   if (Number.isNaN(monthStart.getTime()) || Number.isNaN(nextMonthStart.getTime()) || monthStart >= nextMonthStart) {
     return NextResponse.json({ error: 'Invalid summary date range' }, { status: 400 });
   }

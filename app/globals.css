@@ -616,3 +616,78 @@ input, select, textarea { min-width: 0; }
  .ie-day-heading{grid-template-columns:minmax(0,1fr) 18px;gap:7px;padding:13px 12px}.ie-day-date{gap:8px}.ie-day-date>b{width:35px;height:35px;font-size:15px}.ie-day-date strong{font-size:11px}.ie-day-figures{grid-column:1/-1;grid-row:2;display:flex;justify-content:flex-end;gap:11px;padding-right:24px}.ie-day-heading>svg{grid-column:2;grid-row:1}
  .ie-day-details{padding:0 12px 13px}.ie-entry{gap:8px}.ie-entry-info b,.ie-entry>strong{font-size:11px}.ie-day-total{gap:9px}
 }
+
+
+/* Release polish: alerts, reports, backup and print layout */
+.money-alerts-card { margin-top: 2px; }
+.money-alert-list { display: grid; gap: 0; }
+.money-alert-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 13px 2px; border: 0; border-bottom: 1px solid var(--border, #e7ece9); background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.money-alert-row:last-child { border-bottom: 0; }
+.money-alert-row:hover { background: rgba(15, 118, 110, .045); }
+.money-alert-icon { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border-radius: 11px; color: #0f766e; background: rgba(15, 118, 110, .09); }
+.money-alert-row.severity-4 .money-alert-icon, .money-alert-row.severity-5 .money-alert-icon { color: #b45309; background: rgba(217, 119, 6, .11); }
+.money-alert-copy { display: grid; gap: 3px; flex: 1; min-width: 0; }
+.money-alert-copy strong { font-size: 13px; font-weight: 650; }
+.money-alert-copy small { color: var(--muted, #718078); font-size: 12px; }
+.money-alert-row > b { font-size: 12px; white-space: nowrap; }
+.money-alert-clear { display: flex; align-items: center; gap: 11px; padding: 14px 2px; color: #0f766e; }
+.money-alert-clear span { display: grid; gap: 3px; }
+.money-alert-clear strong { color: var(--foreground, #17231f); font-size: 13px; }
+.money-alert-clear small { color: var(--muted, #718078); font-size: 12px; }
+
+.report-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.report-controls { display: flex; align-items: end; gap: 14px; flex-wrap: wrap; }
+.report-period-switch { display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--surface-muted, #f1f5f3); }
+.report-period-switch button { border: 0; border-radius: 9px; padding: 8px 13px; background: transparent; color: var(--muted, #718078); font-size: 12px; font-weight: 650; cursor: pointer; }
+.report-period-switch button.active { background: var(--surface, #fff); color: var(--foreground, #17231f); box-shadow: 0 1px 4px rgba(15, 23, 42, .08); }
+.report-controls label { display: grid; gap: 6px; color: var(--muted, #718078); font-size: 11px; font-weight: 650; }
+.report-controls input, .report-controls select { min-width: 160px; border: 1px solid var(--border, #dce5e0); border-radius: 10px; padding: 9px 11px; background: var(--surface, #fff); color: var(--foreground, #17231f); font: inherit; }
+.report-refresh { margin-left: auto; }
+.report-section { display: grid; gap: 18px; }
+.report-series { display: grid; gap: 12px; }
+.report-series-row { display: grid; grid-template-columns: 74px minmax(80px, 1fr) 112px; align-items: center; gap: 12px; }
+.report-series-label { color: var(--muted, #718078); font-size: 11px; }
+.report-series-bars { display: grid; gap: 4px; }
+.report-bar { display: block; height: 7px; min-width: 0; max-width: 100%; border-radius: 99px; }
+.report-bar.income { background: #0f9b78; }
+.report-bar.expense { background: #d97757; }
+.report-series-value { text-align: right; font-size: 11px; font-weight: 650; }
+.report-legend { display: flex; gap: 18px; color: var(--muted, #718078); font-size: 11px; }
+.report-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.report-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.report-legend i.income { background: #0f9b78; }
+.report-legend i.expense { background: #d97757; }
+.report-categories { display: grid; gap: 14px; }
+.report-category { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.report-category > div:first-child { display: grid; gap: 3px; }
+.report-category strong { font-size: 13px; }
+.report-category small { color: var(--muted, #718078); font-size: 11px; }
+.report-category-total { width: min(48%, 260px); display: grid; gap: 6px; text-align: right; }
+.report-category-total b { font-size: 12px; }
+.report-category-total span { display: block; height: 6px; border-radius: 99px; background: var(--surface-muted, #edf2ef); overflow: hidden; }
+.report-category-total i { display: block; height: 100%; border-radius: inherit; background: #0f766e; }
+.report-footnote { color: var(--muted, #718078); font-size: 11px; }
+.backup-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+.backup-upload { position: relative; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.backup-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+
+@media (max-width: 640px) {
+  .report-actions { width: 100%; }
+  .report-actions button { flex: 1; justify-content: center; }
+  .report-controls { align-items: stretch; }
+  .report-controls label { flex: 1; min-width: 130px; }
+  .report-refresh { margin-left: 0; align-self: end; }
+  .report-series-row { grid-template-columns: 54px minmax(50px, 1fr) 88px; gap: 8px; }
+  .report-category-total { width: 44%; }
+  .money-alert-row { gap: 9px; }
+  .money-alert-row > b { font-size: 11px; }
+}
+
+@media print {
+  body { background: #fff !important; color: #111 !important; }
+  .sidebar, .topbar, .mobile-nav, .report-actions, .report-controls, .floating-calculator { display: none !important; }
+  .app-shell, .main-column, .content-wrap, .reports-page { display: block !important; width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+  .surface-card, .metric-card { break-inside: avoid; box-shadow: none !important; border: 1px solid #ddd !important; background: #fff !important; color: #111 !important; }
+  .report-footnote, .section-subtitle, .report-category small, .report-series-label { color: #555 !important; }
+  .page-intro { margin-bottom: 18px !important; }
+}

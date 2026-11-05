@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { recordFinanceAudit } from '@/lib/audit';
 import { db } from '@/db';
 import { wallets, transactions, categories } from '@/db/schema';
 import { eq, sql, and, gte, ne, desc, isNull } from 'drizzle-orm';
@@ -178,6 +179,7 @@ export async function POST(req: Request) {
       return { transaction: txn, wallet: updatedWallet, replayed: false };
     });
 
+    if (!result.replayed) await recordFinanceAudit(context, { entityType: 'transaction', entityId: result.transaction.id, action: 'created', summary: 'Recorded ' + transactionType + ' ৳' + (amountMinor / 100).toFixed(2) + ': ' + description.trim() });
     return NextResponse.json(result, { status: result.replayed ? 200 : 201 });
   } catch (error) {
     if (error instanceof Error && error.message === 'IDEMPOTENCY_KEY_REUSED') {

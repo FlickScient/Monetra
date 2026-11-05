@@ -3,6 +3,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { savingsGoals, goalAllocations } from '@/db/modules-schema';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { recordFinanceAudit } from '@/lib/audit';
 import { isDateOnly } from '@/lib/validation';
 
 export async function GET(req: Request) {
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
       workspaceId: context.workspaceId, userId: context.userId, name,
       targetMinor, currency, targetDate: targetDate || null,
     }).returning();
+    await recordFinanceAudit(context, { entityType: 'savings_goal', entityId: goal.id, action: 'created', summary: 'Created savings goal: ' + goal.name });
     return NextResponse.json({ ...goal, allocations: [] }, { status: 201 });
   } catch {
     return NextResponse.json({ error: 'Unable to create savings goal' }, { status: 500 });

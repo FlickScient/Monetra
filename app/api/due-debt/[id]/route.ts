@@ -3,6 +3,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { dueDebts, dueDebtPayments } from '@/db/modules-schema';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { recordFinanceAudit } from '@/lib/audit';
 import { isUuid, isDateOnly } from '@/lib/validation';
 
 type Params = { params: { id: string } };
@@ -62,6 +63,7 @@ export async function PATCH(req: Request, { params }: Params) {
         .returning();
       return saved;
     });
+    await recordFinanceAudit(context, { entityType: 'debt', entityId: debt.id, action: 'updated', summary: 'Updated Due & Debt record: ' + debt.counterpartyName });
     return NextResponse.json(debt);
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
@@ -80,6 +82,7 @@ export async function DELETE(req: Request, { params }: Params) {
     const [debt] = await db.update(dueDebts).set({ status: 'archived', updatedAt: new Date() })
       .where(and(eq(dueDebts.id, params.id), eq(dueDebts.workspaceId, context.workspaceId), eq(dueDebts.userId, context.userId), sql`${dueDebts.status} <> 'archived'`))
       .returning({ id: dueDebts.id });
+    if (debt) await recordFinanceAudit(context, { entityType: 'debt', entityId: debt.id, action: 'archived', summary: 'Archived Due & Debt record' });
     return debt ? NextResponse.json({ ok: true }) : NextResponse.json({ error: 'Record not found' }, { status: 404 });
   } catch { return NextResponse.json({ error: 'Unable to archive Due & Debt record' }, { status: 500 }); }
 }

@@ -16,6 +16,9 @@ import { FinancialIntelligenceView } from '@/components/monetra/financial-intell
 import { SavingsGoalsView } from '@/components/monetra/savings-goals-view';
 import { FinanceOperationsView } from '@/components/monetra/finance-operations-view';
 import { IncomeExpenseView } from '@/components/monetra/income-expense-view';
+import { dhakaDateBoundary, dhakaMonthStart, shiftMonthStart } from '@/lib/dhaka-time';
+import { MoneyAlerts } from '@/components/monetra/money-alerts';
+import { ReportsView } from '@/components/monetra/reports-view';
 
 type WalletType = 'cash' | 'bkash' | 'nagad' | 'rocket' | 'bank' | 'savings' | 'debit_card' | 'credit_card' | 'custom';
 type TransactionType = 'income' | 'expense' | 'transfer';
@@ -24,7 +27,7 @@ type Category = { id: string; name: string; categoryType: 'income' | 'expense'; 
 type Transaction = { id: string; transactionType: TransactionType; walletId: string; destinationWalletId: string | null; amountMinor: number; description: string; occurredAt: string; categoryId: string | null };
 type FinanceSummary = { incomeMinor: number; expenseMinor: number; categorySpend: { categoryId: string | null; totalMinor: number }[] };
 type Workspace = { id: string; name: string; type: 'personal' | 'family' | 'business'; role: 'owner' | 'administrator' | 'editor' | 'viewer' };
-type View = 'overview' | 'wallets' | 'transactions' | 'income-expense' | 'intelligence' | 'due-debt' | 'savings' | 'tools' | 'vault' | 'settings';
+type View = 'overview' | 'wallets' | 'transactions' | 'income-expense' | 'reports' | 'intelligence' | 'due-debt' | 'savings' | 'tools' | 'vault' | 'settings';
 
 const walletLabels: Record<WalletType, string> = {
   cash: 'Cash', bkash: 'bKash', nagad: 'Nagad', rocket: 'Rocket', bank: 'Bank',
@@ -33,7 +36,7 @@ const walletLabels: Record<WalletType, string> = {
 const money = (minor: number, currency = 'BDT') =>
   new Intl.NumberFormat('en-BD', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100);
 const dateLabel = (value: string) =>
-  new Intl.DateTimeFormat('en-BD', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
+  new Intl.DateTimeFormat('en-BD', { timeZone: 'Asia/Dhaka', month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
 
 export default function HomePage() {
   const { user, isLoaded } = useUser();
@@ -53,6 +56,7 @@ export default function HomePage() {
   const [dark, setDark] = useState(false);
   const [notice, setNotice] = useState('');
   const [loadError, setLoadError] = useState('');
+  const [financeRefreshVersion, setFinanceRefreshVersion] = useState(0);
   const financeRequestId = useRef(0);
 
   useEffect(() => {
@@ -103,9 +107,9 @@ export default function HomePage() {
       setSummary({ incomeMinor: 0, expenseMinor: 0, categorySpend: [] });
     }
     try {
-      const now = new Date();
-      const localMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const localNextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const monthStart = dhakaMonthStart();
+      const localMonthStart = dhakaDateBoundary(monthStart);
+      const localNextMonthStart = dhakaDateBoundary(shiftMonthStart(monthStart, 1));
       const summaryUrl = '/api/transactions/summary?from=' + encodeURIComponent(localMonthStart.toISOString()) + '&to=' + encodeURIComponent(localNextMonthStart.toISOString());
       const headers: Record<string, string> = {};
       if (workspaceId) headers['x-workspace-id'] = workspaceId;
@@ -116,6 +120,7 @@ export default function HomePage() {
       const [walletData, categoryData, transactionData, summaryData] = await Promise.all([walletRes.json(), categoryRes.json(), transactionRes.json(), summaryRes.json()]);
       if (requestId !== financeRequestId.current) return;
       setWallets(walletData); setCategories(categoryData); setTransactions(transactionData.slice(0, 50)); setHasMoreTransactions(transactionData.length > 50); setSummary(summaryData);
+      setFinanceRefreshVersion(version => version + 1);
     } catch {
       if (requestId === financeRequestId.current) {
         if (silent) setNotice('Saved, but the background refresh failed. Pull to refresh or reopen the workspace.');
@@ -218,6 +223,7 @@ export default function HomePage() {
     { key: 'wallets' as const, label: 'Wallets', icon: WalletCards },
     { key: 'transactions' as const, label: 'Transactions', icon: Receipt },
     { key: 'income-expense' as const, label: 'Income & Expense', icon: BarChart3 },
+    { key: 'reports' as const, label: 'Reports', icon: Download },
     { key: 'intelligence' as const, label: 'Financial Radar', icon: Activity },
     { key: 'due-debt' as const, label: 'Due & Debt', icon: HandCoins },
     { key: 'savings' as const, label: 'Savings Goals', icon: PiggyBank },
@@ -271,7 +277,7 @@ export default function HomePage() {
           {activeView === 'overview' && (
             <div className="page-stack">
               <section className="page-intro">
-                <div><p className="eyebrow">{new Intl.DateTimeFormat('en-BD', { weekday: 'long' }).format(new Date()).toUpperCase()}, YOUR MONEY CHECK-IN</p><h1>Good to see you, {firstName}<span>.</span></h1><p className="intro-copy">Here’s what’s happening with your money.</p></div>
+                <div><p className="eyebrow">{new Intl.DateTimeFormat('en-BD', { timeZone: 'Asia/Dhaka', weekday: 'long' }).format(new Date()).toUpperCase()}, YOUR MONEY CHECK-IN</p><h1>Good to see you, {firstName}<span>.</span></h1><p className="intro-copy">Here’s what’s happening with your money.</p></div>
                 <button className="primary-btn intro-action" onClick={() => setShowTransactionForm(true)}><Plus size={17} /> New transaction</button>
               </section>
 
@@ -293,6 +299,8 @@ export default function HomePage() {
                 <article className="metric-card"><div className="metric-top"><span className="metric-icon expense"><ArrowUpRight size={17} /></span><span className="metric-period">THIS MONTH</span></div><p className="metric-label">Money out</p><p className="metric-value">{money(monthlyExpense)}</p><p className="metric-foot">Expenses recorded this month</p></article>
                 <article className="metric-card metric-card-accent"><div className="metric-top"><span className="metric-icon net"><TrendingUp size={17} /></span><span className="metric-period">THIS MONTH</span></div><p className="metric-label">Net cash flow</p><p className="metric-value">{money(monthlyIncome - monthlyExpense)}</p><p className="metric-foot">Income minus expenses</p></article>
               </section>
+
+              <MoneyAlerts key={activeWorkspaceId + '-' + financeRefreshVersion} workspaceId={activeWorkspaceId} onNavigate={(view) => setActiveView(view)} />
 
               <div className="dashboard-grid">
                 <section className="surface-card spending-card">
@@ -322,6 +330,7 @@ export default function HomePage() {
 
           {activeView === 'wallets' && <WalletsView wallets={wallets} onAdd={() => setShowWalletForm(true)} onEdit={(wallet) => setEditingWallet(wallet)} onArchive={(wallet) => void archiveWallet(wallet)} onRestore={(wallet) => void restoreWallet(wallet)} />}
           {activeView === 'income-expense' && <IncomeExpenseView key={activeWorkspaceId} workspaceId={activeWorkspaceId} onAdd={() => setShowTransactionForm(true)} />}
+          {activeView === 'reports' && <ReportsView key={activeWorkspaceId} workspaceId={activeWorkspaceId} />}
           {activeView === 'transactions' && <TransactionsView key={activeWorkspaceId} workspaceId={activeWorkspaceId} transactions={transactions} wallets={wallets} categories={categories} onAdd={() => setShowTransactionForm(true)} onEdit={(transaction) => setEditingTransaction(transaction)} onDelete={(transaction) => void deleteTransaction(transaction)} onBulkDelete={bulkDeleteTransactions} onLoadMore={loadMoreTransactions} hasMore={hasMoreTransactions} />}
           {activeView === 'intelligence' && <FinancialIntelligenceView wallets={wallets} transactions={transactions} monthlyIncomeMinor={monthlyIncome} monthlyExpenseMinor={monthlyExpense} workspaceId={activeWorkspaceId} />}
           {activeView === 'due-debt' && <DueDebtView workspaceId={activeWorkspaceId} />}

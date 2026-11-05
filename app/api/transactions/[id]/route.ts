@@ -3,6 +3,7 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { categories, ledgerEntries, transactions, wallets } from '@/db/schema';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { recordFinanceAudit } from '@/lib/audit';
 import { isUuid } from '@/lib/validation';
 import { postFinancialJournal } from '@/lib/ledger';
 
@@ -147,6 +148,7 @@ export async function PATCH(req: Request, { params }: Params) {
       }
       return saved;
     });
+    await recordFinanceAudit(context, { entityType: 'transaction', entityId: updated.id, action: 'updated', summary: 'Updated transaction: ' + updated.description });
     return NextResponse.json(updated);
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
@@ -206,6 +208,7 @@ export async function DELETE(req: Request, { params }: Params) {
       await tx.update(transactions).set({ voidedAt: new Date() })
         .where(and(eq(transactions.id, current.id), eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), isNull(transactions.voidedAt)));
     });
+    await recordFinanceAudit(context, { entityType: 'transaction', entityId: params.id, action: 'voided', summary: 'Voided transaction record' });
     return NextResponse.json({ ok: true, deleted: true });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';

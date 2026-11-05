@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { FiscusMark } from '@/components/monetra/fiscus-mark';
 import { MonetraAIChat } from '@/components/monetra/monetra-ai-chat';
+import { BackupControls } from '@/components/monetra/backup-controls';
 import {
   Activity,
   CalendarClock,
@@ -199,6 +200,7 @@ export function SettingsView({ dark, workspaceId, onCategoriesChanged, onToggleT
         </div>
       </section>
       <CategoryManager workspaceId={workspaceId} onChanged={onCategoriesChanged} />
+      <BackupControls workspaceId={workspaceId} />
       <section className="surface-card settings-section settings-security">
         <LockKeyhole size={18} />
         <div><strong>Account security</strong><p>Sign-in and account security are managed by your Monetra authentication provider.</p></div>

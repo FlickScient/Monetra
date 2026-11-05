@@ -6,9 +6,10 @@ import { postFinancialJournal } from '@/lib/ledger';
 import { financeAuditEvents, monthlyBudgets, recurringTransactions, walletReconciliations } from '@/db/modules-schema';
 import { getWorkspaceContext } from '@/lib/workspace';
 import { isDateOnly, isUuid } from '@/lib/validation';
+import { dhakaDateBoundary, dhakaDateString, dhakaMonthStart, shiftMonthStart } from '@/lib/dhaka-time';
 
 const validMoney = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
-const monthDate = (value: Date) => new Date(value.getFullYear(), value.getMonth(), 1).toISOString().slice(0, 10);
+const monthDate = (value: Date) => dhakaMonthStart(value);
 function advanceRecurringDate(value: string, frequency: string) {
   const [year, month, day] = value.split('-').map(Number);
   if (frequency === 'weekly') return new Date(Date.UTC(year, month - 1, day + 7)).toISOString().slice(0, 10);
@@ -23,47 +24,47 @@ export async function GET(req: Request) {
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
   const now = new Date();
   const start = monthDate(now);
-  const next = monthDate(new Date(now.getFullYear(), now.getMonth() + 1, 1));
-  const previous = monthDate(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+  const next = shiftMonthStart(start, 1);
+  const previous = shiftMonthStart(start, -1);
   try {
     const [budgetRows, spending, previousBudgets, previousSpending, recurringRows, walletRows, reconciliationRows, auditRows] = await Promise.all([
       db.select({ id: monthlyBudgets.id, categoryId: monthlyBudgets.categoryId, monthStart: monthlyBudgets.monthStart, limitMinor: monthlyBudgets.limitMinor, carryForward: monthlyBudgets.carryForward, categoryName: categories.name, categoryColor: categories.color })
-        .from(monthlyBudgets).innerJoin(categories, eq(categories.id, monthlyBudgets.categoryId))
+        .from(monthlyBudgets).innerJoin(categories, and(eq(categories.id, monthlyBudgets.categoryId), eq(categories.workspaceId, context.workspaceId), eq(categories.userId, context.userId)))
         .where(and(eq(monthlyBudgets.workspaceId, context.workspaceId), eq(monthlyBudgets.userId, context.userId), eq(monthlyBudgets.monthStart, start))),
       db.select({ categoryId: transactions.categoryId, totalMinor: sql<string>`coalesce(sum(${transactions.amountMinor}), 0)::text` })
-        .from(transactions).where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), eq(transactions.transactionType, 'expense'), isNull(transactions.voidedAt), gte(transactions.occurredAt, new Date(start + 'T00:00:00')), lt(transactions.occurredAt, new Date(next + 'T00:00:00')))).groupBy(transactions.categoryId),
+        .from(transactions).where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), eq(transactions.transactionType, 'expense'), isNull(transactions.voidedAt), gte(transactions.occurredAt, dhakaDateBoundary(start)), lt(transactions.occurredAt, dhakaDateBoundary(next)))).groupBy(transactions.categoryId),
       db.select({ categoryId: monthlyBudgets.categoryId, limitMinor: monthlyBudgets.limitMinor, carryForward: monthlyBudgets.carryForward })
         .from(monthlyBudgets).where(and(eq(monthlyBudgets.workspaceId, context.workspaceId), eq(monthlyBudgets.userId, context.userId), eq(monthlyBudgets.monthStart, previous))),
       db.select({ categoryId: transactions.categoryId, totalMinor: sql<string>`coalesce(sum(${transactions.amountMinor}), 0)::text` })
-        .from(transactions).where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), eq(transactions.transactionType, 'expense'), isNull(transactions.voidedAt), gte(transactions.occurredAt, new Date(previous + 'T00:00:00')), lt(transactions.occurredAt, new Date(start + 'T00:00:00')))).groupBy(transactions.categoryId),
+        .from(transactions).where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), eq(transactions.transactionType, 'expense'), isNull(transactions.voidedAt), gte(transactions.occurredAt, dhakaDateBoundary(previous)), lt(transactions.occurredAt, dhakaDateBoundary(start)))).groupBy(transactions.categoryId),
       db.select({ id: recurringTransactions.id, transactionType: recurringTransactions.transactionType, walletId: recurringTransactions.walletId, categoryId: recurringTransactions.categoryId, description: recurringTransactions.description, amountMinor: recurringTransactions.amountMinor, frequency: recurringTransactions.frequency, nextRun: recurringTransactions.nextRun, enabled: recurringTransactions.enabled, walletName: wallets.name })
-        .from(recurringTransactions).leftJoin(wallets, eq(wallets.id, recurringTransactions.walletId))
+        .from(recurringTransactions).leftJoin(wallets, and(eq(wallets.id, recurringTransactions.walletId), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId)))
         .where(and(eq(recurringTransactions.workspaceId, context.workspaceId), eq(recurringTransactions.userId, context.userId))).orderBy(recurringTransactions.nextRun),
       db.select({ id: wallets.id, name: wallets.name, currency: wallets.currency, currentBalanceMinor: wallets.currentBalanceMinor })
         .from(wallets).where(and(eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId), eq(wallets.status, 'active'))),
       db.select({ id: walletReconciliations.id, walletId: walletReconciliations.walletId, recordedMinor: walletReconciliations.recordedMinor, actualMinor: walletReconciliations.actualMinor, varianceMinor: walletReconciliations.varianceMinor, note: walletReconciliations.note, createdAt: walletReconciliations.createdAt, walletName: wallets.name })
-        .from(walletReconciliations).leftJoin(wallets, eq(wallets.id, walletReconciliations.walletId))
+        .from(walletReconciliations).leftJoin(wallets, and(eq(wallets.id, walletReconciliations.walletId), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId)))
         .where(and(eq(walletReconciliations.workspaceId, context.workspaceId), eq(walletReconciliations.userId, context.userId))).orderBy(desc(walletReconciliations.createdAt)).limit(30),
       db.select().from(financeAuditEvents).where(and(eq(financeAuditEvents.workspaceId, context.workspaceId), eq(financeAuditEvents.userId, context.userId))).orderBy(desc(financeAuditEvents.createdAt)).limit(40),
     ]);
-    const trendStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    const trendStart = dhakaDateBoundary(shiftMonthStart(start, -5));
     const trends = await db.select({
-      month: sql<string>`to_char(date_trunc('month', ${transactions.occurredAt}), 'YYYY-MM')`,
+      month: sql<string>`to_char(date_trunc('month', ${transactions.occurredAt} + interval '6 hours'), 'YYYY-MM')`,
       incomeMinor: sql<string>`coalesce(sum(case when ${transactions.transactionType} = 'income' then ${transactions.amountMinor} else 0 end), 0)::text`,
       expenseMinor: sql<string>`coalesce(sum(case when ${transactions.transactionType} = 'expense' then ${transactions.amountMinor} else 0 end), 0)::text`,
     }).from(transactions).where(and(
       eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId),
-      isNull(transactions.voidedAt), gte(transactions.occurredAt, trendStart), lt(transactions.occurredAt, new Date(next + 'T00:00:00')),
-    )).groupBy(sql`date_trunc('month', ${transactions.occurredAt})`).orderBy(sql`date_trunc('month', ${transactions.occurredAt})`);
+      isNull(transactions.voidedAt), gte(transactions.occurredAt, trendStart), lt(transactions.occurredAt, dhakaDateBoundary(next)),
+    )).groupBy(sql`date_trunc('month', ${transactions.occurredAt} + interval '6 hours')`).orderBy(sql`date_trunc('month', ${transactions.occurredAt} + interval '6 hours')`);
     const categoryBreakdown = await db.select({
       categoryId: transactions.categoryId,
       categoryName: categories.name,
       color: categories.color,
       totalMinor: sql<string>`coalesce(sum(${transactions.amountMinor}), 0)::text`,
-    }).from(transactions).leftJoin(categories, eq(categories.id, transactions.categoryId)).where(and(
+    }).from(transactions).leftJoin(categories, and(eq(categories.id, transactions.categoryId), eq(categories.workspaceId, context.workspaceId), eq(categories.userId, context.userId))).where(and(
       eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId),
       eq(transactions.transactionType, 'expense'), isNull(transactions.voidedAt),
-      gte(transactions.occurredAt, new Date(start + 'T00:00:00')), lt(transactions.occurredAt, new Date(next + 'T00:00:00')),
+      gte(transactions.occurredAt, dhakaDateBoundary(start)), lt(transactions.occurredAt, dhakaDateBoundary(next)),
     )).groupBy(transactions.categoryId, categories.name, categories.color).orderBy(sql`sum(${transactions.amountMinor}) desc`).limit(6);
     const spent = new Map(spending.map(row => [row.categoryId || '', Number(row.totalMinor)]));
     const previousSpent = new Map(previousSpending.map(row => [row.categoryId || '', Number(row.totalMinor)]));
@@ -98,41 +99,94 @@ export async function POST(req: Request) {
         const [schedule] = await tx.select().from(recurringTransactions)
           .where(and(eq(recurringTransactions.id, id), eq(recurringTransactions.workspaceId, context.workspaceId), eq(recurringTransactions.userId, context.userId), eq(recurringTransactions.enabled, true))).for('update');
         if (!schedule) throw new Error('RECURRING_NOT_FOUND');
-        const today = new Date().toISOString().slice(0, 10);
+        const today = dhakaDateString();
         if (schedule.nextRun > today) throw new Error('RECURRING_NOT_DUE');
-        const idempotencyKey = `recurring:${schedule.id}:${schedule.nextRun}`;
-        const [prior] = await tx.select().from(transactions)
-          .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), eq(transactions.idempotencyKey, idempotencyKey))).limit(1);
-        if (!prior) {
-          const [wallet] = await tx.select().from(wallets)
-            .where(and(eq(wallets.id, schedule.walletId), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId), eq(wallets.status, 'active'))).for('update');
-          if (!wallet) throw new Error('RECURRING_WALLET_UNAVAILABLE');
-          if (schedule.categoryId) {
-            const [category] = await tx.select().from(categories).where(and(eq(categories.id, schedule.categoryId), eq(categories.workspaceId, context.workspaceId), eq(categories.userId, context.userId), eq(categories.categoryType, schedule.transactionType as 'income' | 'expense'))).limit(1);
-            if (!category) throw new Error('RECURRING_CATEGORY_INVALID');
-          }
-          const isCreditCard = wallet.walletType === 'credit_card';
-          if (!Number.isSafeInteger(Number(wallet.currentBalanceMinor)) || !Number.isSafeInteger(Number(wallet.currentBalanceMinor) + Number(schedule.amountMinor))) throw new Error('RECURRING_BALANCE_RANGE');
-          if (isCreditCard && schedule.transactionType === 'expense' && Number(wallet.creditLimitMinor) > 0 && Number(wallet.currentBalanceMinor) + Number(schedule.amountMinor) > Number(wallet.creditLimitMinor)) throw new Error('RECURRING_CREDIT_LIMIT');
-          if (isCreditCard && schedule.transactionType === 'income' && Number(wallet.currentBalanceMinor) < Number(schedule.amountMinor)) throw new Error('RECURRING_INSUFFICIENT');
-          const delta = isCreditCard ? (schedule.transactionType === 'expense' ? Number(schedule.amountMinor) : -Number(schedule.amountMinor)) : (schedule.transactionType === 'income' ? Number(schedule.amountMinor) : -Number(schedule.amountMinor));
-          const [updatedWallet] = await tx.update(wallets).set({ currentBalanceMinor: sql`${wallets.currentBalanceMinor} + ${delta}`, updatedAt: new Date() })
-            .where(and(eq(wallets.id, wallet.id), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId))).returning();
-          if (!updatedWallet) throw new Error('RECURRING_WALLET_UNAVAILABLE');
-          const [created] = await tx.insert(transactions).values({
-            workspaceId: context.workspaceId, userId: context.userId, transactionType: schedule.transactionType,
-            walletId: wallet.id, categoryId: schedule.categoryId, idempotencyKey, amountMinor: Number(schedule.amountMinor),
-            description: schedule.description, occurredAt: new Date(schedule.nextRun + 'T12:00:00.000Z'),
-          }).returning();
-          await postFinancialJournal(tx, context, created, wallet);
+
+        let walletState = (await tx.select().from(wallets)
+          .where(and(eq(wallets.id, schedule.walletId), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId), eq(wallets.status, 'active'))).for('update'))[0];
+        if (!walletState) throw new Error('RECURRING_WALLET_UNAVAILABLE');
+
+        if (schedule.categoryId) {
+          const [category] = await tx.select().from(categories).where(and(eq(categories.id, schedule.categoryId), eq(categories.workspaceId, context.workspaceId), eq(categories.userId, context.userId), eq(categories.categoryType, schedule.transactionType as 'income' | 'expense'))).limit(1);
+          if (!category) throw new Error('RECURRING_CATEGORY_INVALID');
         }
-        const nextDate = advanceRecurringDate(schedule.nextRun, schedule.frequency);
-        await tx.update(recurringTransactions).set({ lastGeneratedFor: schedule.nextRun, nextRun: nextDate, updatedAt: new Date() })
-          .where(and(eq(recurringTransactions.id, schedule.id), eq(recurringTransactions.workspaceId, context.workspaceId), eq(recurringTransactions.userId, context.userId)));
-        await tx.insert(financeAuditEvents).values({ workspaceId: context.workspaceId, userId: context.userId, entityType: 'recurring', entityId: schedule.id, action: 'generated', summary: `Recorded scheduled ${schedule.transactionType}: ${schedule.description}` });
-        return { recorded: true, nextRun: nextDate, description: schedule.description };
+
+        let dueDate = schedule.nextRun;
+        let processedCount = 0;
+        let recordedCount = 0;
+        let lastProcessedDate = schedule.nextRun;
+
+        // Catch up missed dates in a bounded batch. Every occurrence has its own idempotency key.
+        while (dueDate <= today && processedCount < 24) {
+          const idempotencyKey = 'recurring:' + schedule.id + ':' + dueDate;
+          const [prior] = await tx.select().from(transactions)
+            .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), eq(transactions.idempotencyKey, idempotencyKey))).limit(1);
+
+          if (!prior) {
+            const isCreditCard = walletState.walletType === 'credit_card';
+            const currentBalance = Number(walletState.currentBalanceMinor);
+            if (!Number.isSafeInteger(currentBalance) || !Number.isSafeInteger(currentBalance + Number(schedule.amountMinor))) throw new Error('RECURRING_BALANCE_RANGE');
+            if (isCreditCard && schedule.transactionType === 'expense' && Number(walletState.creditLimitMinor) > 0 && currentBalance + Number(schedule.amountMinor) > Number(walletState.creditLimitMinor)) throw new Error('RECURRING_CREDIT_LIMIT');
+            if (isCreditCard && schedule.transactionType === 'income' && currentBalance < Number(schedule.amountMinor)) throw new Error('RECURRING_INSUFFICIENT');
+
+            const delta = isCreditCard
+              ? (schedule.transactionType === 'expense' ? Number(schedule.amountMinor) : -Number(schedule.amountMinor))
+              : (schedule.transactionType === 'income' ? Number(schedule.amountMinor) : -Number(schedule.amountMinor));
+            const nextBalance = currentBalance + delta;
+            const [updatedWallet] = await tx.update(wallets).set({ currentBalanceMinor: nextBalance, updatedAt: new Date() })
+              .where(and(eq(wallets.id, walletState.id), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId), eq(wallets.status, 'active'))).returning();
+            if (!updatedWallet) throw new Error('RECURRING_WALLET_UNAVAILABLE');
+
+            const [created] = await tx.insert(transactions).values({
+              workspaceId: context.workspaceId, userId: context.userId, transactionType: schedule.transactionType,
+              walletId: walletState.id, categoryId: schedule.categoryId, idempotencyKey,
+              amountMinor: Number(schedule.amountMinor), description: schedule.description,
+              occurredAt: new Date(dueDate + 'T12:00:00+06:00'),
+            }).returning();
+            await postFinancialJournal(tx, context, created, walletState);
+            walletState = { ...walletState, currentBalanceMinor: nextBalance };
+            recordedCount += 1;
+          }
+
+          processedCount += 1;
+          lastProcessedDate = dueDate;
+          dueDate = advanceRecurringDate(dueDate, schedule.frequency);
+        }
+
+        await tx.update(recurringTransactions).set({
+          lastGeneratedFor: lastProcessedDate,
+          nextRun: dueDate,
+          updatedAt: new Date(),
+        }).where(and(eq(recurringTransactions.id, schedule.id), eq(recurringTransactions.workspaceId, context.workspaceId), eq(recurringTransactions.userId, context.userId)));
+        await tx.insert(financeAuditEvents).values({
+          workspaceId: context.workspaceId, userId: context.userId, entityType: 'recurring',
+          entityId: schedule.id, action: 'generated',
+          summary: 'Recorded ' + recordedCount + ' due occurrence(s): ' + schedule.description,
+        });
+        return { recorded: true, recordedCount, processedCount, nextRun: dueDate, moreDue: dueDate <= today, description: schedule.description };
       });
       return NextResponse.json(result, { status: 201 });
+    }
+    if (body.kind === 'recurring-skip') {
+      const { id } = body;
+      if (!isUuid(id)) return NextResponse.json({ error: 'Valid recurring item ID is required' }, { status: 400 });
+      const result = await db.transaction(async tx => {
+        const [schedule] = await tx.select().from(recurringTransactions)
+          .where(and(eq(recurringTransactions.id, id), eq(recurringTransactions.workspaceId, context.workspaceId), eq(recurringTransactions.userId, context.userId), eq(recurringTransactions.enabled, true))).for('update');
+        if (!schedule) throw new Error('RECURRING_NOT_FOUND');
+        const today = dhakaDateString();
+        if (schedule.nextRun > today) throw new Error('RECURRING_NOT_DUE');
+        const nextRun = advanceRecurringDate(schedule.nextRun, schedule.frequency);
+        await tx.update(recurringTransactions).set({ nextRun, updatedAt: new Date() })
+          .where(and(eq(recurringTransactions.id, schedule.id), eq(recurringTransactions.workspaceId, context.workspaceId), eq(recurringTransactions.userId, context.userId)));
+        await tx.insert(financeAuditEvents).values({
+          workspaceId: context.workspaceId, userId: context.userId, entityType: 'recurring',
+          entityId: schedule.id, action: 'skipped',
+          summary: 'Skipped scheduled occurrence: ' + schedule.description,
+        });
+        return { skipped: true, nextRun };
+      });
+      return NextResponse.json(result);
     }
     if (body.kind === 'budget') {
       const { categoryId, limitMinor, carryForward = false, monthStart = monthDate(now) } = body;

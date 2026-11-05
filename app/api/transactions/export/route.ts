@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { and, desc, eq, isNull, ne } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lt, ne } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '@/db';
 import { categories, transactions, wallets } from '@/db/schema';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { isDateOnly } from '@/lib/validation';
 
 function csvCell(value: unknown) {
   let text = value === null || value === undefined ? '' : String(value);
@@ -16,6 +17,16 @@ const destinationWallets = alias(wallets, 'destination_wallets');
 export async function GET(req: Request) {
   const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
+  const url = new URL(req.url);
+  const from = url.searchParams.get('from');
+  const to = url.searchParams.get('to');
+  if ((from || to) && (!from || !to || !isDateOnly(from) || !isDateOnly(to) || from >= to)) {
+    return NextResponse.json({ error: 'Provide a valid inclusive start date and exclusive end date' }, { status: 400 });
+  }
+  const dateFilters = from && to
+    ? [gte(transactions.occurredAt, new Date(from + 'T00:00:00+06:00')), lt(transactions.occurredAt, new Date(to + 'T00:00:00+06:00'))]
+    : [];
+
   try {
     const rows = await db.select({
       type: transactions.transactionType,
@@ -30,7 +41,7 @@ export async function GET(req: Request) {
       .leftJoin(wallets, and(eq(wallets.id, transactions.walletId), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId)))
       .leftJoin(destinationWallets, and(eq(destinationWallets.id, transactions.destinationWalletId), eq(destinationWallets.workspaceId, context.workspaceId), eq(destinationWallets.userId, context.userId)))
       .leftJoin(categories, and(eq(categories.id, transactions.categoryId), eq(categories.workspaceId, context.workspaceId), eq(categories.userId, context.userId)))
-      .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), isNull(transactions.voidedAt), ne(transactions.transactionType, 'adjustment')))
+      .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), isNull(transactions.voidedAt), ne(transactions.transactionType, 'adjustment'), ...dateFilters))
       .orderBy(desc(transactions.occurredAt), desc(transactions.id));
 
     const header = ['Date', 'Type', 'Description', 'Amount', 'Wallet', 'Destination wallet', 'Category', 'Currency'];

@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { goalAllocations, goalAllocationEvents, savingsGoals } from '@/db/modules-schema';
 import { wallets } from '@/db/schema';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { recordFinanceAudit } from '@/lib/audit';
 import { isUuid } from '@/lib/validation';
 
 type Params = { params: { id: string } };
@@ -84,6 +85,7 @@ export async function POST(req: Request, { params }: Params) {
       }).returning();
       return event;
     });
+    await recordFinanceAudit(context, { entityType: 'savings_goal', entityId: params.id, action: result.action, summary: (result.action === 'allocate' ? 'Allocated ৳' : 'Released ৳') + (Number(result.amountMinor) / 100).toFixed(2) + (result.action === 'allocate' ? ' to' : ' from') + ' savings goal' });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';

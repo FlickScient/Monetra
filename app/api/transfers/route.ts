@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { recordFinanceAudit } from '@/lib/audit';
 import { db } from '@/db';
 import { wallets, transactions } from '@/db/schema';
 import { postFinancialJournal } from '@/lib/ledger';
@@ -156,6 +157,7 @@ export async function POST(req: Request) {
       return { transaction: txn, replayed: false };
     });
 
+    if (!result.replayed) await recordFinanceAudit(context, { entityType: 'transfer', entityId: result.transaction.id, action: 'created', summary: 'Transferred ৳' + (amountMinor / 100).toFixed(2) + ': ' + normalizedDescription });
     return NextResponse.json(result, { status: result.replayed ? 200 : 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';

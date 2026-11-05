@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { dhakaDateString } from '@/lib/dhaka-time';
 import { CalendarDays, CheckCircle2, CirclePause, CirclePlay, ClipboardList, Plus, RefreshCw, Wallet } from 'lucide-react';
 
 type WalletRow = { id: string; name: string; currency: string; currentBalanceMinor: number };
@@ -12,7 +13,7 @@ type DebtRow = { id: string; direction: 'receivable' | 'payable'; counterpartyNa
 type Payload = { monthStart: string; budgets: BudgetRow[]; recurring: RecurringRow[]; wallets: WalletRow[]; reconciliations: ReconciliationRow[]; audit: { id: string; summary: string; createdAt: string }[] };
 const money = (minor: number) => new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(Math.round(minor / 100));
 const toMinor = (value: string) => { const amount = Number(value); return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : -1; };
-const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const today = () => dhakaDateString();
 
 export function FinanceOperationsView({ workspaceId, categories }: { workspaceId: string; categories: CategoryRow[] }) {
   const [data, setData] = useState<Payload | null>(null);
@@ -21,7 +22,7 @@ export function FinanceOperationsView({ workspaceId, categories }: { workspaceId
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [tab, setTab] = useState<'budgets' | 'recurring' | 'calendar' | 'reconcile'>('budgets');
+  const [tab, setTab] = useState<'budgets' | 'recurring' | 'calendar' | 'reconcile' | 'activity'>('budgets');
   const [budgetCategory, setBudgetCategory] = useState('');
   const [budgetAmount, setBudgetAmount] = useState('');
   const [carryForward, setCarryForward] = useState(false);
@@ -99,13 +100,26 @@ export function FinanceOperationsView({ workspaceId, categories }: { workspaceId
     if (await submit('reconciliation', { walletId: reconcileWallet, actualMinor: amount, note: reconcileNote.trim() || null })) { setActualBalance(''); setReconcileNote(''); }
   }
   async function runRecurring(item: RecurringRow) {
+    if (item.nextRun < today() && !window.confirm('This schedule has missed dates. Record every due occurrence, up to 24 per click, as separate transactions?')) return;
     setBusy(true); setError(''); setNotice('');
     try {
       const response = await fetch('/api/finance-tools', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ kind: 'recurring-run', id: item.id }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Could not record scheduled transaction.');
-      setNotice('Transaction recorded once. Next occurrence: ' + result.nextRun + '.'); await load();
+      setNotice('Recorded ' + (result.recordedCount || 0) + ' due occurrence(s). Next occurrence: ' + result.nextRun + (result.moreDue ? ' · More overdue dates remain; record again to continue.' : '.')); await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not record scheduled transaction.'); }
+    finally { setBusy(false); }
+  }
+
+  async function skipRecurring(item: RecurringRow) {
+    if (!window.confirm('Skip this scheduled occurrence without recording a transaction?')) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/finance-tools', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ kind: 'recurring-skip', id: item.id }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Could not skip this occurrence.');
+      setNotice('Skipped this occurrence. Next date: ' + result.nextRun + '.'); await load();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not skip this occurrence.'); }
     finally { setBusy(false); }
   }
 
@@ -120,7 +134,7 @@ export function FinanceOperationsView({ workspaceId, categories }: { workspaceId
     finally { setBusy(false); }
   }
 
-  const tabs = [{ id: 'budgets', label: 'Smart budgets' }, { id: 'recurring', label: 'Recurring' }, { id: 'calendar', label: 'Cash calendar' }, { id: 'reconcile', label: 'Reconciliation' }] as const;
+  const tabs = [{ id: 'budgets', label: 'Smart budgets' }, { id: 'recurring', label: 'Recurring' }, { id: 'calendar', label: 'Cash calendar' }, { id: 'reconcile', label: 'Reconciliation' }, { id: 'activity', label: 'Activity history' }] as const;
   return <div className="page-stack module-page finance-ops-page">
     <section className="page-intro"><div><p className="eyebrow">MONETRA MONEY SYSTEMS</p><h1>Money Tools<span>.</span></h1><p className="intro-copy">Plan spending, prepare for upcoming commitments and keep your balances honest.</p></div><span className="module-intro-icon"><ClipboardList size={22}/></span></section>
     <div className="finance-ops-tabs" role="tablist" aria-label="Money tools">{tabs.map(item => <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'active' : ''} onClick={() => { setTab(item.id); setError(''); setNotice(''); }}>{item.label}</button>)}</div>
@@ -137,7 +151,7 @@ export function FinanceOperationsView({ workspaceId, categories }: { workspaceId
         <div className="finance-ops-list">{(data?.budgets || []).map(item => { const effectiveLimit = item.limitMinor + item.carryInMinor; const percent = effectiveLimit ? item.spentMinor / effectiveLimit * 100 : 0; const level = percent >= 100 ? 'danger' : percent >= 80 ? 'warning' : percent >= 50 ? 'notice' : 'safe'; return <div className="finance-budget-row" key={item.id}><div className="finance-ops-row-top"><strong>{item.categoryName}</strong><span>{money(item.spentMinor)} / {money(effectiveLimit)}</span></div><div className="finance-ops-progress"><span className={level} style={{ width: Math.min(100, percent) + '%' }}/></div><small>{percent >= 100 ? 'Over budget' : percent >= 80 ? '80%+ · Near limit' : percent >= 50 ? '50%+ · Half used' : 'Within budget'}{item.carryInMinor > 0 ? ' · ' + money(item.carryInMinor) + ' carried from last month' : ''}</small></div>; })}{!data?.budgets.length && <p className="section-subtitle">No budgets set for this month yet.</p>}</div>
       </section>}
       {tab === 'recurring' && <section className="surface-card finance-ops-card">
-        <div className="section-heading"><div><p className="eyebrow">REPEAT WITH CONTROL</p><h2>Recurring schedules</h2><p className="section-subtitle">Track salary, rent, subscriptions and bills. Due schedules are recorded only when you choose Record now. Each occurrence has a duplicate-safe key.</p></div></div>
+        <div className="section-heading"><div><p className="eyebrow">REPEAT WITH CONTROL</p><h2>Recurring schedules</h2><p className="section-subtitle">Track salary, rent, subscriptions and bills. Due schedules are recorded only when you choose Record due; missed dates are caught up in safe batches of up to 24. Each occurrence has a duplicate-safe key.</p></div></div>
         <form className="finance-ops-form" onSubmit={saveRecurring}>
           <label>Type<select value={type} onChange={e => setType(e.target.value as 'income' | 'expense')}><option value="expense">Expense</option><option value="income">Income</option></select></label>
           <label>Description<input value={description} onChange={e => setDescription(e.target.value)} maxLength={160} placeholder="Rent / Salary / Internet" required/></label>
@@ -148,11 +162,11 @@ export function FinanceOperationsView({ workspaceId, categories }: { workspaceId
           <label>Next date<input type="date" value={nextRun} onChange={e => setNextRun(e.target.value)} required/></label>
           <button className="primary-btn" type="submit" disabled={busy || !data?.wallets.length}><Plus size={15}/> Add schedule</button>
         </form>
-        <div className="finance-ops-list">{(data?.recurring || []).map(item => <div className="finance-ops-row" key={item.id}><div><strong>{item.description}</strong><small>{item.walletName || 'Wallet'} · {item.frequency} · Next {item.nextRun}</small></div><div className="finance-ops-row-end"><b>{money(item.amountMinor)}</b>{item.enabled && item.nextRun <= today() && <button type="button" className="secondary-btn" disabled={busy} onClick={() => void runRecurring(item)}><CheckCircle2 size={14}/> Record now</button>}<button type="button" className="secondary-btn" disabled={busy} onClick={() => void toggleRecurring(item)}>{item.enabled ? <><CirclePause size={14}/> Pause</> : <><CirclePlay size={14}/> Resume</>}</button></div></div>)}{!data?.recurring.length && <p className="section-subtitle">No recurring schedules yet.</p>}</div>
+        <div className="finance-ops-list">{(data?.recurring || []).map(item => <div className="finance-ops-row" key={item.id}><div><strong>{item.description}</strong><small>{item.walletName || 'Wallet'} · {item.frequency} · Next {item.nextRun}</small></div><div className="finance-ops-row-end"><b>{money(item.amountMinor)}</b>{item.enabled && item.nextRun <= today() && <><button type="button" className="secondary-btn" disabled={busy} onClick={() => void runRecurring(item)}><CheckCircle2 size={14}/> Record due</button><button type="button" className="secondary-btn" disabled={busy} onClick={() => void skipRecurring(item)}>Skip occurrence</button></>}<button type="button" className="secondary-btn" disabled={busy} onClick={() => void toggleRecurring(item)}>{item.enabled ? <><CirclePause size={14}/> Pause</> : <><CirclePlay size={14}/> Resume</>}</button></div></div>)}{!data?.recurring.length && <p className="section-subtitle">No recurring schedules yet.</p>}</div>
       </section>}
       {tab === 'calendar' && <section className="surface-card finance-ops-card">
         <div className="section-heading"><div><p className="eyebrow">NEXT COMMITMENTS</p><h2>Cash-flow calendar</h2><p className="section-subtitle">Upcoming recurring reminders and Due & Debt dates, in date order.</p></div><CalendarDays size={20}/></div>
-        <div className="finance-calendar-list">{calendarItems.map((item, index) => <div className="finance-calendar-row" key={item.date + item.title + index}><time>{new Date(item.date + 'T12:00:00').toLocaleDateString('en-BD', { day: 'numeric', month: 'short' })}</time><div><strong>{item.title}</strong><small>{item.detail}</small></div><b className={item.incoming ? 'positive-text' : 'negative-text'}>{item.incoming ? '+' : '−'}{money(item.amount)}</b></div>)}{!calendarItems.length && <p className="section-subtitle">No upcoming items. Add recurring schedules or due dates to populate the calendar.</p>}</div>
+        <div className="finance-calendar-list">{calendarItems.map((item, index) => <div className="finance-calendar-row" key={item.date + item.title + index}><time>{new Date(item.date + 'T12:00:00+06:00').toLocaleDateString('en-BD', { timeZone: 'Asia/Dhaka', day: 'numeric', month: 'short' })}</time><div><strong>{item.title}</strong><small>{item.detail}</small></div><b className={item.incoming ? 'positive-text' : 'negative-text'}>{item.incoming ? '+' : '−'}{money(item.amount)}</b></div>)}{!calendarItems.length && <p className="section-subtitle">No upcoming items. Add recurring schedules or due dates to populate the calendar.</p>}</div>
       </section>}
       {tab === 'reconcile' && <section className="surface-card finance-ops-card">
         <div className="section-heading"><div><p className="eyebrow">BALANCE INTEGRITY</p><h2>Wallet reconciliation</h2><p className="section-subtitle">Compare recorded and counted balances. Saving a check never changes your wallet or ledger.</p></div><Wallet size={20}/></div>
@@ -162,9 +176,9 @@ export function FinanceOperationsView({ workspaceId, categories }: { workspaceId
           <label>Note (optional)<input value={reconcileNote} onChange={e => setReconcileNote(e.target.value)} maxLength={500} placeholder="Counted cash / bank statement"/></label>
           <button className="primary-btn" type="submit" disabled={busy || !data?.wallets.length}><CheckCircle2 size={15}/> Save check</button>
         </form>
-        <div className="finance-ops-list">{(data?.reconciliations || []).map(item => <div className="finance-ops-row" key={item.id}><div><strong>{item.walletName || 'Wallet'} · {new Date(item.createdAt).toLocaleDateString('en-BD')}</strong><small>Recorded {money(item.recordedMinor)} · Actual {money(item.actualMinor)}{item.note ? ' · ' + item.note : ''}</small></div><b className={item.varianceMinor === 0 ? 'positive-text' : 'negative-text'}>{item.varianceMinor > 0 ? '+' : ''}{money(item.varianceMinor)}</b></div>)}{!data?.reconciliations.length && <p className="section-subtitle">No reconciliation checks recorded yet.</p>}</div>
+        <div className="finance-ops-list">{(data?.reconciliations || []).map(item => <div className="finance-ops-row" key={item.id}><div><strong>{item.walletName || 'Wallet'} · {new Date(item.createdAt).toLocaleDateString('en-BD', { timeZone: 'Asia/Dhaka' })}</strong><small>Recorded {money(item.recordedMinor)} · Actual {money(item.actualMinor)}{item.note ? ' · ' + item.note : ''}</small></div><b className={item.varianceMinor === 0 ? 'positive-text' : 'negative-text'}>{item.varianceMinor > 0 ? '+' : ''}{money(item.varianceMinor)}</b></div>)}{!data?.reconciliations.length && <p className="section-subtitle">No reconciliation checks recorded yet.</p>}</div>
       </section>}
-      <section className="surface-card finance-audit-card"><div className="section-heading"><div><p className="eyebrow">THE PAPER TRAIL</p><h2>Audit history</h2><p className="section-subtitle">Recent budget, recurring and reconciliation changes.</p></div><RefreshCw size={18}/></div>{(data?.audit || []).slice(0, 8).map(item => <div className="finance-audit-row" key={item.id}><span>{item.summary}</span><small>{new Date(item.createdAt).toLocaleString('en-BD')}</small></div>)}{!data?.audit.length && <p className="section-subtitle">No changes recorded yet.</p>}</section>
+      {tab === 'activity' && <section className="surface-card finance-audit-card"><div className="section-heading"><div><p className="eyebrow">THE PAPER TRAIL</p><h2>Activity history</h2><p className="section-subtitle">Recent transactions, repayments, savings and workspace changes.</p></div><RefreshCw size={18}/></div>{(data?.audit || []).map(item => <div className="finance-audit-row" key={item.id}><span>{item.summary}</span><small>{new Date(item.createdAt).toLocaleString('en-BD', { timeZone: 'Asia/Dhaka' })}</small></div>)}{!data?.audit.length && <p className="section-subtitle">No changes recorded yet.</p>}</section>}
     </>}
   </div>;
 }

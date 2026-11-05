@@ -3,6 +3,7 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { dueDebts, dueDebtPayments } from '@/db/modules-schema';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { recordFinanceAudit } from '@/lib/audit';
 import { isDateOnly } from '@/lib/validation';
 
 export async function GET(req: Request) {
@@ -42,6 +43,7 @@ export async function POST(req: Request) {
       counterpartyName: counterpartyName.trim(), principalMinor, currency,
       annualRateBps: 0, dueDate, note,
     }).returning();
+    await recordFinanceAudit(context, { entityType: 'debt', entityId: debt.id, action: 'created', summary: 'Created ' + String(direction) + ' record for ' + counterpartyName + ' · ৳' + (principalMinor / 100).toFixed(2) });
     return NextResponse.json({ ...debt, paidMinor: 0, outstandingMinor: principalMinor, payments: [] }, { status: 201 });
   } catch { return NextResponse.json({ error: 'Unable to create Due & Debt record' }, { status: 500 }); }
 }

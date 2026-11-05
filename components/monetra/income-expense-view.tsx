@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, ChevronDown, ChevronUp, Plus, RefreshCw, Search } from 'lucide-react';
+import { dhakaMonthStart, shiftMonthStart } from '@/lib/dhaka-time';
 
 type LedgerEntry = {
   id: string; transactionType: 'income' | 'expense'; amountMinor: number; description: string;
@@ -12,12 +13,11 @@ type LedgerDay = { date: string; incomeMinor: number; expenseMinor: number; netM
 type LedgerData = { month: string; incomeMinor: number; expenseMinor: number; netMinor: number; days: LedgerDay[]; transactions: LedgerEntry[]; truncated: boolean };
 
 const money = (minor: number, currency = 'BDT') => new Intl.NumberFormat('en-BD', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100);
-const monthKey = (date: Date) => date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
-const monthTitle = (key: string) => new Date(key + '-01T12:00:00').toLocaleDateString('en-BD', { month: 'long', year: 'numeric' });
-const dayTitle = (key: string) => new Date(key + 'T12:00:00').toLocaleDateString('en-BD', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+const monthTitle = (key: string) => new Date(key + '-01T12:00:00+06:00').toLocaleDateString('en-BD', { timeZone: 'Asia/Dhaka', month: 'long', year: 'numeric' });
+const dayTitle = (key: string) => new Date(key + 'T12:00:00+06:00').toLocaleDateString('en-BD', { timeZone: 'Asia/Dhaka', weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
 
 export function IncomeExpenseView({ workspaceId, onAdd }: { workspaceId: string; onAdd: () => void }) {
-  const [month, setMonth] = useState(() => monthKey(new Date()));
+  const [month, setMonth] = useState(() => dhakaMonthStart().slice(0, 7));
   const [mode, setMode] = useState<'daily' | 'monthly'>('daily');
   const [data, setData] = useState<LedgerData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,7 +52,7 @@ export function IncomeExpenseView({ workspaceId, onAdd }: { workspaceId: string;
   );
   function moveMonth(delta: number) {
     const [year, monthNumber] = month.split('-').map(Number);
-    setMonth(monthKey(new Date(year, monthNumber - 1 + delta, 1)));
+    setMonth(shiftMonthStart(year + '-' + String(monthNumber).padStart(2, '0') + '-01', delta).slice(0, 7));
   }
   const dayCount = data?.days.length || 0;
 
@@ -66,8 +66,8 @@ export function IncomeExpenseView({ workspaceId, onAdd }: { workspaceId: string;
       <div className="ie-month-nav">
         <button type="button" aria-label="Previous month" onClick={() => moveMonth(-1)}><ArrowLeft size={18}/></button>
         <div><CalendarDays size={17}/><strong>{monthTitle(month)}</strong></div>
-        <button type="button" aria-label="Next month" onClick={() => moveMonth(1)} disabled={month >= monthKey(new Date())}><ArrowRight size={18}/></button>
-        <button className="ie-today-btn" type="button" onClick={() => setMonth(monthKey(new Date()))}>This month</button>
+        <button type="button" aria-label="Next month" onClick={() => moveMonth(1)} disabled={month >= dhakaMonthStart().slice(0, 7)}><ArrowRight size={18}/></button>
+        <button className="ie-today-btn" type="button" onClick={() => setMonth(dhakaMonthStart().slice(0, 7))}>This month</button>
       </div>
 
       <div className="ie-period-tabs" role="tablist" aria-label="Ledger view">

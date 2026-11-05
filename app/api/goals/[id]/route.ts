@@ -3,6 +3,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { savingsGoals, goalAllocations, goalAllocationEvents } from '@/db/modules-schema';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { recordFinanceAudit } from '@/lib/audit';
 import { isUuid, isDateOnly } from '@/lib/validation';
 
 type Params = { params: { id: string } };
@@ -42,6 +43,7 @@ export async function PATCH(req: Request, { params }: Params) {
         .returning();
       return saved;
     });
+    await recordFinanceAudit(context, { entityType: 'savings_goal', entityId: goal.id, action: 'updated', summary: 'Updated savings goal: ' + goal.name });
     return NextResponse.json(goal);
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
@@ -74,6 +76,7 @@ export async function DELETE(req: Request, { params }: Params) {
       await tx.update(savingsGoals).set({ status: 'archived', updatedAt: new Date() })
         .where(and(eq(savingsGoals.id, goal.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.userId, context.userId)));
     });
+    await recordFinanceAudit(context, { entityType: 'savings_goal', entityId: params.id, action: 'archived', summary: 'Archived savings goal and released its allocations' });
     return NextResponse.json({ ok: true, archived: true, allocationsReleased: true });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';

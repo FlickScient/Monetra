@@ -3,6 +3,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { dueDebts, dueDebtPayments } from '@/db/modules-schema';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { recordFinanceAudit } from '@/lib/audit';
 import { isUuid } from '@/lib/validation';
 
 type Params = { params: { id: string } };
@@ -71,6 +72,7 @@ export async function POST(req: Request, { params }: Params) {
         .where(and(eq(dueDebts.id, debt.id), eq(dueDebts.workspaceId, context.workspaceId), eq(dueDebts.userId, context.userId)));
       return { payment, replayed: false, outstandingMinor: outstanding - amountMinor };
     });
+    if (!result.replayed) await recordFinanceAudit(context, { entityType: 'debt', entityId: params.id, action: 'payment', summary: 'Recorded debt payment ৳' + (amountMinor / 100).toFixed(2) });
     return NextResponse.json(result, { status: result.replayed ? 200 : 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';

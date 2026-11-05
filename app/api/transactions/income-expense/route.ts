@@ -33,13 +33,13 @@ export async function GET(request: Request) {
     }).from(transactions).where(and(baseFilter, sql`${transactions.transactionType} IN ('income', 'expense')`));
 
     const days = await db.select({
-      date: sql<string>`to_char(${transactions.occurredAt} AT TIME ZONE 'Asia/Dhaka', 'YYYY-MM-DD')`,
+      date: sql<string>`to_char(${transactions.occurredAt} + interval '6 hours', 'YYYY-MM-DD')`,
       incomeMinor: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.transactionType} = 'income' THEN ${transactions.amountMinor} ELSE 0 END), 0)::text`,
       expenseMinor: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.transactionType} = 'expense' THEN ${transactions.amountMinor} ELSE 0 END), 0)::text`,
       count: sql<number>`COUNT(*)::int`,
     }).from(transactions).where(and(baseFilter, sql`${transactions.transactionType} IN ('income', 'expense')`))
-      .groupBy(sql`to_char(${transactions.occurredAt} AT TIME ZONE 'Asia/Dhaka', 'YYYY-MM-DD')`)
-      .orderBy(sql`to_char(${transactions.occurredAt} AT TIME ZONE 'Asia/Dhaka', 'YYYY-MM-DD') DESC`);
+      .groupBy(sql`to_char(${transactions.occurredAt} + interval '6 hours', 'YYYY-MM-DD')`)
+      .orderBy(sql`to_char(${transactions.occurredAt} + interval '6 hours', 'YYYY-MM-DD') DESC`);
 
     const rows = await db.select({
       id: transactions.id,
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
       categoryColor: categories.color,
       walletName: wallets.name,
       currency: wallets.currency,
-      localDate: sql<string>`to_char(${transactions.occurredAt} AT TIME ZONE 'Asia/Dhaka', 'YYYY-MM-DD')`,
+      localDate: sql<string>`to_char(${transactions.occurredAt} + interval '6 hours', 'YYYY-MM-DD')`,
     }).from(transactions)
       .leftJoin(categories, and(eq(categories.id, transactions.categoryId), eq(categories.workspaceId, context.workspaceId), eq(categories.userId, context.userId)))
       .leftJoin(wallets, and(eq(wallets.id, transactions.walletId), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId)))

@@ -73,16 +73,16 @@ export async function POST(request: Request) {
         .from(wallets).where(and(eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId), eq(wallets.status, 'active'))),
       db.select({ type: transactions.transactionType, amountMinor: transactions.amountMinor, description: transactions.description, date: transactions.occurredAt, category: categories.name, wallet: wallets.name })
         .from(transactions)
-        .leftJoin(categories, and(eq(categories.id, transactions.categoryId), eq(categories.workspaceId, context.workspaceId)))
-        .leftJoin(wallets, and(eq(wallets.id, transactions.walletId), eq(wallets.workspaceId, context.workspaceId)))
+        .leftJoin(categories, and(eq(categories.id, transactions.categoryId), eq(categories.workspaceId, context.workspaceId), eq(categories.userId, context.userId)))
+        .leftJoin(wallets, and(eq(wallets.id, transactions.walletId), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId)))
         .where(txFilter).orderBy(desc(transactions.occurredAt)).limit(150),
-      db.select({ month: sql<string>`to_char(date_trunc('month', ${transactions.occurredAt}), 'YYYY-MM')`, type: transactions.transactionType, totalMinor: sql<string>`COALESCE(SUM(${transactions.amountMinor}), 0)::text`, count: sql<number>`COUNT(*)::int` })
+      db.select({ month: sql<string>`to_char(date_trunc('month', ${transactions.occurredAt} + interval '6 hours'), 'YYYY-MM')`, type: transactions.transactionType, totalMinor: sql<string>`COALESCE(SUM(${transactions.amountMinor}), 0)::text`, count: sql<number>`COUNT(*)::int` })
         .from(transactions).where(txFilter)
-        .groupBy(sql`date_trunc('month', ${transactions.occurredAt})`, transactions.transactionType)
-        .orderBy(sql`date_trunc('month', ${transactions.occurredAt})`),
+        .groupBy(sql`date_trunc('month', ${transactions.occurredAt} + interval '6 hours')`, transactions.transactionType)
+        .orderBy(sql`date_trunc('month', ${transactions.occurredAt} + interval '6 hours')`),
       db.select({ category: sql<string>`COALESCE(${categories.name}, 'Uncategorized')`, totalMinor: sql<string>`COALESCE(SUM(${transactions.amountMinor}), 0)::text`, count: sql<number>`COUNT(*)::int` })
         .from(transactions)
-        .leftJoin(categories, and(eq(categories.id, transactions.categoryId), eq(categories.workspaceId, context.workspaceId)))
+        .leftJoin(categories, and(eq(categories.id, transactions.categoryId), eq(categories.workspaceId, context.workspaceId), eq(categories.userId, context.userId)))
         .where(and(txFilter, eq(transactions.transactionType, 'expense')))
         .groupBy(categories.name).orderBy(sql`SUM(${transactions.amountMinor}) DESC`),
       db.select({ direction: dueDebts.direction, counterparty: dueDebts.counterpartyName, amountMinor: dueDebts.principalMinor, paidMinor: sql<string>`(SELECT COALESCE(SUM(${dueDebtPayments.amountMinor}), 0)::text FROM ${dueDebtPayments} WHERE ${dueDebtPayments.dueDebtId} = ${dueDebts.id} AND ${dueDebtPayments.workspaceId} = ${context.workspaceId} AND ${dueDebtPayments.userId} = ${context.userId})`, currency: dueDebts.currency, annualRateBps: dueDebts.annualRateBps, dueDate: dueDebts.dueDate, status: dueDebts.status, note: dueDebts.note })

@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { ledgerAccounts, wallets } from '@/db/schema';
 import { goalAllocations } from '@/db/modules-schema';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { recordFinanceAudit } from '@/lib/audit';
 import { isUuid } from '@/lib/validation';
 
 type Params = { params: { id: string } };
@@ -58,6 +59,7 @@ export async function PATCH(req: Request, { params }: Params) {
       }
       return updated;
     });
+    await recordFinanceAudit(context, { entityType: 'wallet', entityId: wallet.id, action: 'updated', summary: 'Updated wallet: ' + wallet.name });
     return NextResponse.json(wallet);
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
@@ -91,6 +93,7 @@ export async function DELETE(req: Request, { params }: Params) {
       await tx.update(wallets).set({ status: 'inactive', updatedAt: new Date() })
         .where(and(eq(wallets.id, wallet.id), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId), eq(wallets.status, 'active')));
     });
+    await recordFinanceAudit(context, { entityType: 'wallet', entityId: params.id, action: 'archived', summary: 'Archived wallet' });
     return NextResponse.json({ ok: true, archived: true });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';

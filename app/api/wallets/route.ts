@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { recordFinanceAudit } from '@/lib/audit';
 import { db } from '@/db';
 import { wallets } from '@/db/schema';
 import { ensureWalletLedgerAccount } from '@/lib/ledger';
@@ -75,6 +76,7 @@ export async function POST(req: Request) {
       return created;
     });
 
+    await recordFinanceAudit(context, { entityType: 'wallet', entityId: wallet.id, action: 'created', summary: 'Created wallet: ' + wallet.name });
     return NextResponse.json(wallet, { status: 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
