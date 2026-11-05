@@ -466,3 +466,12 @@ input, select, textarea { min-width: 0; }
 .wallet-card-actions{display:flex;align-items:center;gap:8px;margin-top:14px}
 .wallet-card-actions button{display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;background:transparent;color:var(--muted,#64748b);font-size:12px;cursor:pointer}
 .wallet-card-actions button:hover{color:var(--foreground,#172b27);background:var(--surface-soft,#f3f6f5)}
+
+.transaction-page-actions{display:flex;align-items:center;gap:9px}
+.transaction-page-actions .secondary-btn{display:inline-flex;align-items:center;gap:7px}
+.transaction-advanced-filters{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:12px 0 16px;border-bottom:1px solid var(--border,#e5e7eb);margin-bottom:4px}
+.transaction-advanced-filters select,.transaction-advanced-filters input{border:1px solid var(--border,#e5e7eb);border-radius:8px;background:var(--surface,#fff);color:var(--foreground,#172b27);padding:8px 10px;font:inherit;font-size:12px}
+.transaction-advanced-filters label{display:flex;align-items:center;gap:6px;color:var(--muted,#64748b);font-size:12px}
+.transaction-advanced-filters>button{border:0;background:transparent;color:var(--muted,#64748b);font-size:12px;text-decoration:underline;cursor:pointer}
+.transaction-list-note{font-size:11px;color:var(--muted,#64748b);margin-top:12px}
+@media(max-width:640px){.transaction-page-actions{width:100%;justify-content:flex-start}.transaction-advanced-filters{align-items:stretch}.transaction-advanced-filters select{flex:1 1 44%}.transaction-advanced-filters label{flex:1 1 44%;justify-content:space-between}.transaction-advanced-filters input{min-width:0;width:65%}}
