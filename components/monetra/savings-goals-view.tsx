@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ArrowDownToLine, ArrowUpFromLine, PiggyBank, Plus, Target, Trash2, Wallet, Pencil } from 'lucide-react';
 
-type WalletRecord = { id: string; name: string; walletType: string; currentBalanceMinor: number; currency: string };
+type WalletRecord = { id: string; name: string; walletType: string; currentBalanceMinor: number; currency: string; status: string };
 type Allocation = { id?: string; walletId: string; amountMinor: number };
 type Goal = { id: string; name: string; targetMinor: number; targetDate: string | null; currency: string; allocations: Allocation[]; createdAt: string };
 const formatMoney = (minor: number) => new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(Math.round(minor / 100));
@@ -17,7 +17,7 @@ export function SavingsGoalsView({ workspaceId, wallets }: { workspaceId: string
   const [targetDate, setTargetDate] = useState('');
   const [activeGoal, setActiveGoal] = useState('');
   const [editingGoal, setEditingGoal] = useState('');
-  const [sourceWallet, setSourceWallet] = useState(wallets[0]?.id || '');
+  const [sourceWallet, setSourceWallet] = useState(wallets.find(wallet => wallet.status === 'active')?.id || wallets[0]?.id || '');
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
 
@@ -37,6 +37,12 @@ export function SavingsGoalsView({ workspaceId, wallets }: { workspaceId: string
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [workspaceId]);
+
+  useEffect(() => {
+    if (!wallets.some(wallet => wallet.id === sourceWallet && wallet.status === 'active')) {
+      setSourceWallet(wallets.find(wallet => wallet.status === 'active')?.id || '');
+    }
+  }, [wallets, sourceWallet]);
 
   const allocatedByWallet = useMemo(() => {
     const totals = new Map<string, number>();
