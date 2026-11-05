@@ -105,7 +105,8 @@ export async function POST(request: Request) {
 
     const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
     failureStage = 'gemini_request';
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const requestOptions: RequestInit = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -114,7 +115,17 @@ export async function POST(request: Request) {
         generationConfig: { temperature: 0.35, maxOutputTokens: 1100 },
       }),
       cache: 'no-store',
-    });
+    };
+    let response = await fetch(endpoint, requestOptions);
+    // A single bounded retry helps with transient Gemini capacity spikes without
+    // multiplying quota usage or delaying the user through repeated attempts.
+    if ([500, 502, 503, 504].includes(response.status)) {
+      const firstStatus = response.status;
+      await response.body?.cancel().catch(() => undefined);
+      await new Promise(resolve => setTimeout(resolve, 850));
+      response = await fetch(endpoint, requestOptions);
+      if (!response.ok) console.warn('MONETRA_GEMINI_RETRY_EXHAUSTED:', firstStatus, response.status);
+    }
     if (!response.ok) {
       const providerError = await response.json().catch(() => ({}));
       const providerMessage = typeof providerError?.error?.message === 'string' ? providerError.error.message.slice(0, 240) : 'No provider message returned';
@@ -122,7 +133,8 @@ export async function POST(request: Request) {
       if (response.status === 429) return NextResponse.json({ error: 'Gemini free-tier quota is temporarily exhausted. Try again later; Monetra has not charged you.', code: 'PROVIDER_QUOTA' }, { status: 429 });
       if (response.status === 401 || response.status === 403) return NextResponse.json({ error: 'Gemini rejected this key or the API is not enabled for its Google Cloud project. Verify GEMINI_API_KEY, key restrictions, and the Generative Language API.', code: 'API_KEY_INVALID' }, { status: 502 });
       if (response.status === 400 || response.status === 404) return NextResponse.json({ error: `Gemini rejected the model/request (${response.status}): ${providerMessage}`, code: 'MODEL_CONFIG' }, { status: 502 });
-      return NextResponse.json({ error: 'Gemini is temporarily unavailable. Try again shortly.' }, { status: 502 });
+      if (response.status === 503 || response.status >= 500) return NextResponse.json({ error: 'Google Gemini is experiencing high demand right now. Monetra retried once, but Google is still unavailable. Your data is safe—please try again in a minute.', code: 'GEMINI_OVERLOADED' }, { status: 503 });
+      return NextResponse.json({ error: 'Gemini could not complete this request. Please try again.' }, { status: 502 });
     }
     const result = await response.json();
     const answer = result?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || '').join('').trim();
