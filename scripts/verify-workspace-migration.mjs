@@ -43,6 +43,8 @@ try {
   const invalid = financeTables.filter(name => !byTable.has(name) || byTable.get(name).is_nullable !== 'NO');
   const transactionColumns = await pool.query("select column_name from information_schema.columns where table_schema = current_schema() and table_name = 'transactions' and column_name = 'idempotency_key'");
   if (transactionColumns.rowCount !== 1) invalid.push('transactions.idempotency_key');
+  const voidedColumn = await pool.query("select column_name from information_schema.columns where table_schema = current_schema() and table_name = 'transactions' and column_name = 'voided_at'");
+  if (voidedColumn.rowCount !== 1) invalid.push('transactions.voided_at');
   if (invalid.length) throw new Error(`workspace_id missing or nullable on: ${invalid.join(', ')}`);
 
   const ledgerIntegrity = await pool.query(
@@ -79,6 +81,9 @@ try {
   if (row.incomplete_users !== 0 || row.workspaces_without_finance_owner !== 0 || row.workspaces !== row.owners * 3) {
     throw new Error(`Workspace ownership mismatch: ${JSON.stringify(row)}. Each existing owner must have exactly three private workspaces.`);
   }
+
+  const voidedIndex = await pool.query("select indexname from pg_indexes where schemaname = current_schema() and indexname = 'transactions_workspace_active_date_idx'");
+  if (voidedIndex.rowCount !== 1) throw new Error('Active transaction index is missing.');
 
   const history = await pool.query(
     "select count(*)::int as count from drizzle.__drizzle_migrations",
