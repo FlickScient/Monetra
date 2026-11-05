@@ -17,7 +17,7 @@ import { SavingsGoalsView } from '@/components/monetra/savings-goals-view';
 
 type WalletType = 'cash' | 'bkash' | 'nagad' | 'rocket' | 'bank' | 'savings' | 'debit_card' | 'credit_card' | 'custom';
 type TransactionType = 'income' | 'expense' | 'transfer';
-type Wallet = { id: string; name: string; walletType: WalletType; currentBalanceMinor: number; currency: string; status: string };
+type Wallet = { id: string; name: string; walletType: WalletType; currentBalanceMinor: number; currency: string; status: string; notes?: string | null; creditLimitMinor?: number };
 type Category = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
 type Transaction = { id: string; transactionType: TransactionType; walletId: string; destinationWalletId: string | null; amountMinor: number; description: string; occurredAt: string; categoryId: string | null };
 type FinanceSummary = { incomeMinor: number; expenseMinor: number; categorySpend: { categoryId: string | null; totalMinor: number }[] };
@@ -45,6 +45,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState<View>('overview');
   const [showWalletForm, setShowWalletForm] = useState(false);
+  const [editingWallet, setEditingWallet] = useState<Wallet | null>(null);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [dark, setDark] = useState(false);
@@ -117,6 +118,17 @@ export default function HomePage() {
       if (requestId === financeRequestId.current) setLoading(false);
     }
   }
+  async function archiveWallet(wallet: Wallet) {
+    if (!window.confirm('Archive ' + wallet.name + '? Its history will remain, but it cannot be used for new activity.')) return;
+    try {
+      const response = await fetch('/api/wallets/' + wallet.id, { method: 'DELETE', headers: { 'x-workspace-id': activeWorkspaceId } });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not archive wallet.');
+      setNotice('Wallet archived. Its transaction history is preserved.');
+      await loadFinanceData();
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not archive wallet.'); }
+  }
+
   async function deleteTransaction(transaction: Transaction) {
     if (!window.confirm('Delete this transaction? Its wallet balance and ledger will be reversed.')) return;
     try {
@@ -269,7 +281,7 @@ export default function HomePage() {
             </div>
           )}
 
-          {activeView === 'wallets' && <WalletsView wallets={wallets} onAdd={() => setShowWalletForm(true)} />}
+          {activeView === 'wallets' && <WalletsView wallets={wallets} onAdd={() => setShowWalletForm(true)} onEdit={(wallet) => setEditingWallet(wallet)} onArchive={(wallet) => void archiveWallet(wallet)} />}
           {activeView === 'transactions' && <TransactionsView transactions={transactions} wallets={wallets} categories={categories} onAdd={() => setShowTransactionForm(true)} onEdit={(transaction) => setEditingTransaction(transaction)} onDelete={(transaction) => void deleteTransaction(transaction)} onLoadMore={loadMoreTransactions} hasMore={hasMoreTransactions} />}
           {activeView === 'intelligence' && <FinancialIntelligenceView wallets={wallets} transactions={transactions} monthlyIncomeMinor={monthlyIncome} monthlyExpenseMinor={monthlyExpense} workspaceId={activeWorkspaceId} />}
           {activeView === 'due-debt' && <DueDebtView workspaceId={activeWorkspaceId} />}
@@ -281,6 +293,7 @@ export default function HomePage() {
 
       <nav className="mobile-nav">{navItems.map(({ key, label, icon: Icon }) => <button key={key} className={activeView === key ? 'active' : ''} onClick={() => setActiveView(key)}><Icon size={20} /><span>{label}</span></button>)}</nav>
       {showWalletForm && <WalletModal workspaceId={activeWorkspaceId} onClose={() => setShowWalletForm(false)} onSaved={async (message) => { setShowWalletForm(false); setNotice(message); await loadFinanceData(); }} />}
+      {editingWallet && <WalletModal workspaceId={activeWorkspaceId} initialWallet={editingWallet} onClose={() => setEditingWallet(null)} onSaved={async (message) => { setEditingWallet(null); setNotice(message); await loadFinanceData(); }} />}
       {showTransactionForm && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={async (message) => { setShowTransactionForm(false); setNotice(message); await loadFinanceData(); }} />}
       {editingTransaction && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} initialTransaction={editingTransaction} onClose={() => setEditingTransaction(null)} onSaved={async (message) => { setEditingTransaction(null); setNotice(message); await loadFinanceData(); }} />}
       <FloatingCalculator />
@@ -300,9 +313,9 @@ function TransactionRow({ transaction, wallets, categories, onEdit, onDelete }: 
   return <div className="transaction-row"><span className={`transaction-icon ${positive ? 'income' : transfer ? 'transfer' : 'expense'}`}>{positive ? <ArrowDownLeft size={18} /> : transfer ? <ArrowRight size={18} /> : <ArrowUpRight size={18} />}</span><span className="transaction-main"><b>{transaction.description}</b><small>{category?.name || transaction.transactionType} <i /> {wallet?.name || 'Wallet'} {transfer && transaction.destinationWalletId ? <> <i /> To {wallets.find((w) => w.id === transaction.destinationWalletId)?.name || 'another wallet'}</> : null} <i /> {dateLabel(transaction.occurredAt)}</small></span><b className={`transaction-amount ${positive ? 'positive' : transfer ? 'neutral' : ''}`}>{positive ? '+' : transfer ? '' : '−'}{money(Number(transaction.amountMinor), wallet?.currency || 'BDT')}</b><span className="transaction-actions"><button type="button" onClick={onEdit} aria-label="Edit transaction" title="Edit"><Pencil size={14}/></button><button type="button" onClick={onDelete} aria-label="Delete transaction" title="Delete"><Trash2 size={14}/></button></span></div>;
 }
 
-function WalletsView({ wallets, onAdd }: { wallets: Wallet[]; onAdd: () => void }) {
+function WalletsView({ wallets, onAdd, onEdit, onArchive }: { wallets: Wallet[]; onAdd: () => void; onEdit: (wallet: Wallet) => void; onArchive: (wallet: Wallet) => void }) {
   return <div className="page-stack"><section className="page-intro"><div><p className="eyebrow">YOUR MONEY, ORGANIZED</p><h1>Wallets<span>.</span></h1><p className="intro-copy">Every account, one clear picture.</p></div><button className="primary-btn intro-action" onClick={onAdd}><Plus size={17} /> Add wallet</button></section>
-    {wallets.length === 0 ? <section className="surface-card"><EmptyState icon={<WalletCards size={22} />} title="No wallets yet" text="Start with your everyday cash, bank account, or a card." action="Add your first wallet" onClick={onAdd} /></section> : <div className="wallet-grid">{wallets.map((wallet) => <article key={wallet.id} className={`wallet-card ${wallet.walletType === 'credit_card' ? 'credit-wallet' : ''}`}><div className="wallet-card-top"><span className="wallet-card-icon">{wallet.walletType === 'bank' ? <Landmark size={20} /> : wallet.walletType.includes('card') ? <CreditCard size={20} /> : <WalletCards size={20} />}</span><span className="wallet-status"><i />{wallet.status || 'Active'}</span></div><h3>{wallet.name}</h3><p>{walletLabels[wallet.walletType]}</p><div className="wallet-card-balance">{wallet.walletType === 'credit_card' ? '−' : ''}{money(Math.abs(Number(wallet.currentBalanceMinor)), wallet.currency)}</div><small>{wallet.walletType === 'credit_card' ? 'Outstanding liability' : 'Available balance'}</small></article>)}</div>}
+    {wallets.length === 0 ? <section className="surface-card"><EmptyState icon={<WalletCards size={22} />} title="No wallets yet" text="Start with your everyday cash, bank account, or a card." action="Add your first wallet" onClick={onAdd} /></section> : <div className="wallet-grid">{wallets.map((wallet) => <article key={wallet.id} className={`wallet-card ${wallet.walletType === 'credit_card' ? 'credit-wallet' : ''}`}><div className="wallet-card-top"><span className="wallet-card-icon">{wallet.walletType === 'bank' ? <Landmark size={20} /> : wallet.walletType.includes('card') ? <CreditCard size={20} /> : <WalletCards size={20} />}</span><span className="wallet-status"><i />{wallet.status || 'Active'}</span></div><h3>{wallet.name}</h3><p>{walletLabels[wallet.walletType]}</p><div className="wallet-card-balance">{wallet.walletType === 'credit_card' ? '−' : ''}{money(Math.abs(Number(wallet.currentBalanceMinor)), wallet.currency)}</div><small>{wallet.walletType === 'credit_card' ? 'Outstanding liability' : 'Available balance'}</small><div className="wallet-card-actions"><button type="button" onClick={() => onEdit(wallet)}><Pencil size={13}/> Edit</button>{wallet.status === 'active' ? <button type="button" onClick={() => onArchive(wallet)}><Trash2 size={13}/> Archive</button> : <span>Archived</span>}</div></article>)}</div>}
   </div>;
 }
 
@@ -314,19 +327,21 @@ function TransactionsView({ transactions, wallets, categories, onAdd, onEdit, on
   return <div className="page-stack"><section className="page-intro"><div><p className="eyebrow">YOUR FINANCIAL HISTORY</p><h1>Transactions<span>.</span></h1><p className="intro-copy">Every movement, accounted for.</p></div><button className="primary-btn intro-action" onClick={onAdd}><Plus size={17} /> New transaction</button></section><section className="surface-card ledger-card"><div className="ledger-toolbar"><div className="search-wrap"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search transactions..." /></div><div className="filter-tabs">{(['all', 'income', 'expense', 'transfer'] as const).map((item) => <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div></div>{filtered.length === 0 ? <EmptyState icon={<Search size={22} />} title="Nothing matches" text="Try a different search or filter." /> : <div className="transaction-list">{filtered.map((t) => <TransactionRow key={t.id} transaction={t} wallets={wallets} categories={categories} onEdit={() => onEdit(t)} onDelete={() => onDelete(t)} />)}</div>}{hasMore && query.trim() === '' && filter === 'all' && <button className="load-more-btn" disabled={loadingMore} onClick={async () => { setLoadingMore(true); await onLoadMore(); setLoadingMore(false); }}>{loadingMore ? 'Loading older activity…' : 'Load older transactions'} <ChevronRight size={15} /></button>}</section></div>;
 }
 
-function WalletModal({ workspaceId, onClose, onSaved }: { workspaceId: string; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
-  const [name, setName] = useState(''); const [type, setType] = useState<WalletType>('cash'); const [opening, setOpening] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+function WalletModal({ workspaceId, initialWallet, onClose, onSaved }: { workspaceId: string; initialWallet?: Wallet; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
+  const [name, setName] = useState(initialWallet?.name || ''); const [type, setType] = useState<WalletType>(initialWallet?.walletType || 'cash'); const [opening, setOpening] = useState(''); const [notes, setNotes] = useState(initialWallet?.notes || ''); const [creditLimit, setCreditLimit] = useState(initialWallet ? (Number(initialWallet.creditLimitMinor || 0) / 100).toFixed(2) : ''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
     try {
       const amount = Math.round(Number(opening || 0) * 100);
-      const res = await fetch('/api/wallets', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ name, walletType: type, currency: 'BDT', openingBalanceMinor: amount }) });
+      const endpoint = initialWallet ? '/api/wallets/' + initialWallet.id : '/api/wallets';
+      const body = initialWallet ? { name, notes: notes.trim() || null, ...(type === 'credit_card' ? { creditLimitMinor: Math.round(Number(creditLimit || 0) * 100) } : {}) } : { name, walletType: type, currency: 'BDT', openingBalanceMinor: amount, notes: notes.trim() || null, creditLimitMinor: type === 'credit_card' ? Math.round(Number(creditLimit || 0) * 100) : 0 };
+      const res = await fetch(endpoint, { method: initialWallet ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify(body) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not add this wallet.'); }
-      else await onSaved('Wallet added. Your balance is now synced.');
+      else await onSaved(initialWallet ? 'Wallet updated.' : 'Wallet added. Your balance is now synced.');
     } catch { setError('Connection issue. Please try again.'); }
     finally { setBusy(false); }
   }
-  return <Modal title="Add a wallet" subtitle="Bring another account into your overview." onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Wallet name<input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Everyday cash" required /></label><label className="field-label">Wallet type<select className="field" value={type} onChange={(e) => setType(e.target.value as WalletType)}>{Object.entries(walletLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="field-label">Opening balance<input className="field" type="number" min="0" step="0.01" value={opening} onChange={(e) => setOpening(e.target.value)} placeholder="0.00" /></label>{type === 'credit_card' && <p className="form-hint">Credit cards are liabilities. Their balance reduces net worth and is not counted as available money.</p>}{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy}>{busy ? 'Saving...' : 'Create wallet'}</button></form></Modal>;
+  return <Modal title={initialWallet ? 'Edit wallet' : 'Add a wallet'} subtitle={initialWallet ? 'Update account details without changing its ledger history.' : 'Bring another account into your overview.'} onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Wallet name<input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Everyday cash" required /></label><label className="field-label">Wallet type<select className="field" value={type} onChange={(e) => setType(e.target.value as WalletType)} disabled={!!initialWallet}>{Object.entries(walletLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{!initialWallet && <label className="field-label">Opening balance<input className="field" type="number" min="0" step="0.01" value={opening} onChange={(e) => setOpening(e.target.value)} placeholder="0.00" /></label>}{type === 'credit_card' && <label className="field-label">Credit limit<input className="field" type="number" min="0" step="0.01" value={creditLimit} onChange={(e) => setCreditLimit(e.target.value)} placeholder="0.00" /></label>}<label className="field-label">Notes<textarea className="field" rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional account details" /></label>{initialWallet && <p className="form-hint">Wallet type and opening balance are locked to protect existing accounting entries.</p>}{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy}>{busy ? 'Saving...' : initialWallet ? 'Save changes' : 'Create wallet'}</button></form></Modal>;
 }
 
 function TransactionModal({ workspaceId, wallets, categories, initialTransaction, onClose, onSaved }: { workspaceId: string; wallets: Wallet[]; categories: Category[]; initialTransaction?: Transaction; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
