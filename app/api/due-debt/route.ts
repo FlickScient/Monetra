@@ -27,12 +27,11 @@ export async function POST(req: Request) {
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
-  const { direction, counterpartyName, principalMinor, currency = 'BDT', annualRateBps = 0, dueDate = null, note = null } = body;
+  const { direction, counterpartyName, principalMinor, currency = 'BDT', dueDate = null, note = null } = body;
   if (!['receivable', 'payable'].includes(String(direction)) ||
       typeof counterpartyName !== 'string' || !counterpartyName.trim() || counterpartyName.trim().length > 120 ||
       typeof principalMinor !== 'number' || !Number.isSafeInteger(principalMinor) || principalMinor <= 0 ||
       typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency) ||
-      typeof annualRateBps !== 'number' || !Number.isSafeInteger(annualRateBps) || annualRateBps < 0 || annualRateBps > 100000 ||
       (dueDate !== null && (typeof dueDate !== 'string' || !isDateOnly(dueDate))) ||
       (note !== null && (typeof note !== 'string' || note.length > 2000))) {
     return NextResponse.json({ error: 'Invalid Due & Debt details' }, { status: 400 });
@@ -41,7 +40,7 @@ export async function POST(req: Request) {
     const [debt] = await db.insert(dueDebts).values({
       workspaceId: context.workspaceId, userId: context.userId, direction: String(direction),
       counterpartyName: counterpartyName.trim(), principalMinor, currency,
-      annualRateBps, dueDate, note,
+      annualRateBps: 0, dueDate, note,
     }).returning();
     return NextResponse.json({ ...debt, paidMinor: 0, outstandingMinor: principalMinor, payments: [] }, { status: 201 });
   } catch { return NextResponse.json({ error: 'Unable to create Due & Debt record' }, { status: 500 }); }

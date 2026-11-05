@@ -65,7 +65,8 @@ export async function POST(req: Request, { params }: Params) {
         workspaceId: context.workspaceId, dueDebtId: debt.id, userId: context.userId,
         amountMinor, paidAt: date, paymentMethod, note, idempotencyKey,
       }).returning();
-      const nextStatus = amountMinor === outstanding ? 'settled' : 'partially_settled';
+      const nextPaid = Number(totals?.paid ?? 0) + amountMinor;
+      const nextStatus = nextPaid >= Number(debt.principalMinor) ? 'settled' : 'partially_settled';
       await tx.update(dueDebts).set({ status: nextStatus, updatedAt: new Date() })
         .where(and(eq(dueDebts.id, debt.id), eq(dueDebts.workspaceId, context.workspaceId), eq(dueDebts.userId, context.userId)));
       return { payment, replayed: false, outstandingMinor: outstanding - amountMinor };

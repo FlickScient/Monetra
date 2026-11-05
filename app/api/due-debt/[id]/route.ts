@@ -41,10 +41,6 @@ export async function PATCH(req: Request, { params }: Params) {
     if (body.note !== null && (typeof body.note !== 'string' || body.note.length > 2000)) return NextResponse.json({ error: 'Invalid note' }, { status: 400 });
     values.note = body.note;
   }
-  if (body.annualRateBps !== undefined) {
-    if (typeof body.annualRateBps !== 'number' || !Number.isSafeInteger(body.annualRateBps) || body.annualRateBps < 0 || body.annualRateBps > 100000) return NextResponse.json({ error: 'Invalid annual rate' }, { status: 400 });
-    values.annualRateBps = body.annualRateBps;
-  }
   try {
     const debt = await db.transaction(async tx => {
       const [current] = await tx.select().from(dueDebts)
