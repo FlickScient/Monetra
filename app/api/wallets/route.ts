@@ -48,7 +48,8 @@ export async function POST(req: Request) {
     typeof notes !== 'string' && notes !== null ||
     typeof notes === 'string' && notes.length > 1000 ||
     typeof creditLimitMinor !== 'number' || !Number.isSafeInteger(creditLimitMinor) || creditLimitMinor < 0 ||
-    walletType !== 'credit_card' && creditLimitMinor !== 0
+    walletType !== 'credit_card' && creditLimitMinor !== 0 ||
+    walletType === 'credit_card' && creditLimitMinor > 0 && openingBalanceMinor > creditLimitMinor
   ) {
     return NextResponse.json({ error: 'Invalid currency or opening balance' }, { status: 400 });
   }
@@ -91,7 +92,7 @@ export async function GET(req: Request) {
 
   try {
     const userWallets = await db.query.wallets.findMany({
-      where: (w, { eq }) => eq(w.workspaceId, context.workspaceId),
+      where: (w, { and, eq }) => and(eq(w.workspaceId, context.workspaceId), eq(w.userId, context.userId)),
       orderBy: (w, { asc }) => asc(w.createdAt),
     });
 
