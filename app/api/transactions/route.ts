@@ -91,7 +91,7 @@ export async function POST(req: Request) {
       if (idempotencyKey) {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${context.workspaceId}), hashtext(${idempotencyKey}))`);
         const [prior] = await tx.select().from(transactions)
-          .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.idempotencyKey, idempotencyKey)))
+          .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), eq(transactions.idempotencyKey, idempotencyKey)))
           .limit(1);
         if (prior) {
           const sameRequest = prior.walletId === walletId && prior.transactionType === transactionType &&
@@ -100,7 +100,7 @@ export async function POST(req: Request) {
             (occurredAt === undefined || prior.occurredAt.getTime() === parsedDate.getTime());
           if (!sameRequest) throw new Error('IDEMPOTENCY_KEY_REUSED');
           const [currentWallet] = await tx.select().from(wallets)
-            .where(and(eq(wallets.id, walletId), eq(wallets.workspaceId, context.workspaceId)));
+            .where(and(eq(wallets.id, walletId), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId)));
           return { transaction: prior, wallet: currentWallet, replayed: true };
         }
       }
@@ -115,7 +115,7 @@ export async function POST(req: Request) {
 
       if (categoryId) {
         const category = await tx.query.categories.findFirst({
-          where: and(eq(categories.id, categoryId), eq(categories.workspaceId, context.workspaceId)),
+          where: and(eq(categories.id, categoryId), eq(categories.workspaceId, context.workspaceId), eq(categories.userId, context.userId)),
         });
         if (!category || category.categoryType !== transactionType) {
           throw new Error('INVALID_CATEGORY');
