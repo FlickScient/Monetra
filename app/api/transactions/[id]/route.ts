@@ -83,7 +83,8 @@ export async function PATCH(req: Request, { params }: Params) {
       const relatedIds = [current.walletId, ...(current.destinationWalletId ? [current.destinationWalletId] : []), String(walletId), ...(type === 'transfer' ? [String(destinationWalletId)] : [])];
       const locked = await lockRelatedWallets(tx, context.workspaceId, context.userId, relatedIds);
       const walletMap = new Map(locked.map(wallet => [wallet.id, wallet] as const));
-      if (relatedIds.some(id => !walletMap.has(id)) || locked.some(wallet => wallet.status !== 'active')) throw new Error('WALLET_NOT_AVAILABLE');
+      if (relatedIds.some(id => !walletMap.has(id))) throw new Error('WALLET_NOT_AVAILABLE');
+      if (locked.some(wallet => wallet.status !== 'active')) throw new Error('WALLET_INACTIVE');
       if (locked.some(wallet => !Number.isSafeInteger(wallet.currentBalanceMinor))) throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
 
       const walletTypes = new Map(locked.map(wallet => [wallet.id, wallet.walletType] as const));
@@ -154,6 +155,7 @@ export async function PATCH(req: Request, { params }: Params) {
       INVALID_TRANSACTION_FIELDS: [400, 'Check the transaction type, wallet, amount, date and description'],
       INVALID_CATEGORY: [400, 'Category not found or does not match transaction type'],
       WALLET_NOT_AVAILABLE: [404, 'One of the selected wallets is unavailable'],
+      WALLET_INACTIVE: [409, 'Restore the archived wallet before editing or deleting this transaction'],
       LEDGER_BALANCE_OUT_OF_RANGE: [409, 'Wallet balance needs reconciliation before editing'],
       BALANCE_LIMIT_EXCEEDED: [400, 'This balance exceeds the supported safe integer range'],
       INVALID_TRANSFER: [400, 'Invalid transfer details'],
@@ -185,6 +187,7 @@ export async function DELETE(req: Request, { params }: Params) {
       const ids = [current.walletId, ...(current.destinationWalletId ? [current.destinationWalletId] : [])];
       const locked = await lockRelatedWallets(tx, context.workspaceId, context.userId, ids);
       if (ids.some(id => !locked.some(wallet => wallet.id === id))) throw new Error('WALLET_NOT_AVAILABLE');
+      if (locked.some(wallet => wallet.status !== 'active')) throw new Error('WALLET_INACTIVE');
       if (locked.some(wallet => !Number.isSafeInteger(wallet.currentBalanceMinor))) throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
       const walletTypes = new Map(locked.map(wallet => [wallet.id, wallet.walletType]));
       const oldEffects = effectsFor(current, walletTypes);
@@ -209,6 +212,7 @@ export async function DELETE(req: Request, { params }: Params) {
     const messages: Record<string, [number, string]> = {
       TRANSACTION_NOT_FOUND: [404, 'Transaction not found or already deleted'],
       WALLET_NOT_AVAILABLE: [404, 'Wallet not found'],
+      WALLET_INACTIVE: [409, 'Restore the archived wallet before editing or deleting this transaction'],
       LEDGER_BALANCE_OUT_OF_RANGE: [409, 'Wallet balance needs reconciliation before deleting'],
       BALANCE_LIMIT_EXCEEDED: [400, 'This balance exceeds the supported safe integer range'],
       INVALID_TRANSFER: [400, 'Invalid transfer details'],
