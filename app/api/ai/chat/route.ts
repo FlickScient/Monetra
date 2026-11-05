@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { getWorkspaceContext } from '@/lib/workspace';
 import { db } from '@/db';
 import { categories, transactions, wallets } from '@/db/schema';
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const txFilter = and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId));
+    const txFilter = and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), isNull(transactions.voidedAt));
     const [walletRows, recentRows, monthlyRows, categoryRows, debtRows, goalRows] = await Promise.all([
       db.select({ name: wallets.name, type: wallets.walletType, currency: wallets.currency, openingBalanceMinor: wallets.openingBalanceMinor, currentBalanceMinor: wallets.currentBalanceMinor, status: wallets.status })
         .from(wallets).where(and(eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId))),
