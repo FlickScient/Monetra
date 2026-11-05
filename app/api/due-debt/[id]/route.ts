@@ -57,7 +57,10 @@ export async function PATCH(req: Request, { params }: Params) {
       if (body.principalMinor !== undefined && Number(body.principalMinor) < paidMinor) throw new Error('PRINCIPAL_BELOW_PAID');
       if (body.direction !== undefined && body.direction !== current.direction && paidMinor > 0) throw new Error('DIRECTION_LOCKED_AFTER_PAYMENT');
       if (body.direction !== undefined) values.direction = String(body.direction);
-      if (body.principalMinor !== undefined) values.principalMinor = body.principalMinor as number;
+      if (body.principalMinor !== undefined) {
+        values.principalMinor = body.principalMinor as number;
+        values.status = Number(body.principalMinor) === paidMinor ? 'settled' : paidMinor > 0 ? 'partially_settled' : 'open';
+      }
       const [saved] = await tx.update(dueDebts).set(values)
         .where(and(eq(dueDebts.id, current.id), eq(dueDebts.workspaceId, context.workspaceId), eq(dueDebts.userId, context.userId)))
         .returning();
