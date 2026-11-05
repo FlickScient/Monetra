@@ -128,7 +128,7 @@ export function FiscusView({ workspaces, activeWorkspaceId }: { workspaces: Fisc
   );
 }
 
-function CategoryManager({ workspaceId }: { workspaceId: string }) {
+function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onChanged: () => void }) {
   type CategoryRow = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
   const [items, setItems] = useState<CategoryRow[]>([]);
   const [name, setName] = useState('');
@@ -157,7 +157,7 @@ function CategoryManager({ workspaceId }: { workspaceId: string }) {
       const response = await fetch('/api/categories', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ name, categoryType, color }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not create category.');
-      setItems(current => [...current, data]); setName(''); setNotice('Category created.');
+      setItems(current => [...current, data]); setName(''); setNotice('Category created.'); onChanged();
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not create category.'); }
     finally { setBusy(false); }
   }
@@ -169,7 +169,7 @@ function CategoryManager({ workspaceId }: { workspaceId: string }) {
       const response = await fetch('/api/categories/' + item.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ name: editName, categoryType: editType, color: editColor }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not update category.');
-      setItems(current => current.map(row => row.id === item.id ? data : row)); setEditing(''); setNotice('Category updated.');
+      setItems(current => current.map(row => row.id === item.id ? data : row)); setEditing(''); setNotice('Category updated.'); onChanged();
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not update category.'); }
     finally { setBusy(false); }
   }
@@ -180,7 +180,7 @@ function CategoryManager({ workspaceId }: { workspaceId: string }) {
       const response = await fetch('/api/categories/' + item.id, { method: 'DELETE', headers: { 'x-workspace-id': workspaceId } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not delete category.');
-      setItems(current => current.filter(row => row.id !== item.id)); setNotice('Category deleted. Existing transactions were kept.');
+      setItems(current => current.filter(row => row.id !== item.id)); setNotice('Category deleted. Existing transactions were kept.'); onChanged();
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not delete category.'); }
     finally { setBusy(false); }
   }
@@ -216,7 +216,7 @@ function CategoryManager({ workspaceId }: { workspaceId: string }) {
   </section>;
 }
 
-export function SettingsView({ dark, workspaceId, onToggleTheme }: { dark: boolean; workspaceId: string; onToggleTheme: () => void }) {
+export function SettingsView({ dark, workspaceId, onCategoriesChanged, onToggleTheme }: { dark: boolean; workspaceId: string; onCategoriesChanged: () => void; onToggleTheme: () => void }) {
   return (
     <div className="page-stack module-page">
       <ModuleIntro eyebrow="MAKE MONETRA YOURS" title="Settings" description="Manage the experience and review how your financial workspace is organized." icon={<ShieldCheck size={22} />} />
@@ -237,7 +237,7 @@ export function SettingsView({ dark, workspaceId, onToggleTheme }: { dark: boole
           <div><span className="settings-workspace-mark debt">↔</span><span><strong>Due & Debt</strong><small>Independent receivables and payables ledger</small></span></div>
         </div>
       </section>
-      <CategoryManager workspaceId={workspaceId} />
+      <CategoryManager workspaceId={workspaceId} onChanged={onCategoriesChanged} />
       <section className="surface-card settings-section settings-security">
         <LockKeyhole size={18} />
         <div><strong>Account security</strong><p>Sign-in and account security are managed by your Monetra authentication provider.</p></div>
