@@ -59,8 +59,8 @@ export async function PATCH(req: Request, { params }: Params) {
 
       const type = (body.transactionType === undefined ? current.transactionType : body.transactionType) as FinanceType;
       const walletId = body.walletId === undefined ? current.walletId : body.walletId;
-      const destinationWalletId = body.destinationWalletId === undefined ? current.destinationWalletId : body.destinationWalletId;
-      const categoryId = body.categoryId === undefined ? current.categoryId : body.categoryId;
+      const destinationWalletId = type === 'transfer' ? (body.destinationWalletId === undefined ? current.destinationWalletId : body.destinationWalletId) : null;
+      const categoryId = type === 'transfer' ? null : (body.categoryId === undefined ? current.categoryId : body.categoryId);
       const amountMinor = body.amountMinor === undefined ? Number(current.amountMinor) : body.amountMinor;
       const description = body.description === undefined ? current.description : body.description;
       const occurredAt = body.occurredAt === undefined ? current.occurredAt : new Date(String(body.occurredAt));
