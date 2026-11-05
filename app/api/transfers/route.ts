@@ -50,7 +50,7 @@ export async function POST(req: Request) {
       if (idempotencyKey) {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${context.workspaceId}), hashtext(${idempotencyKey}))`);
         const [prior] = await tx.select().from(transactions)
-          .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.idempotencyKey, idempotencyKey)))
+          .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), eq(transactions.idempotencyKey, idempotencyKey)))
           .limit(1);
         if (prior) {
           const sameRequest = prior.transactionType === 'transfer' && prior.walletId === walletId &&
@@ -67,6 +67,7 @@ export async function POST(req: Request) {
       const lockedWallets = await tx.select().from(wallets)
         .where(and(
           eq(wallets.workspaceId, context.workspaceId),
+          eq(wallets.userId, context.userId),
           inArray(wallets.id, [walletId, destinationWalletId]),
         ))
         .orderBy(asc(wallets.id))
