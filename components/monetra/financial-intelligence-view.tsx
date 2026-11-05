@@ -1,5 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
+import { MonetraAIChat } from './monetra-ai-chat';
 import { Activity, AlertTriangle, Calculator, CheckCircle2, ClipboardCheck, Lightbulb, PiggyBank, ShieldAlert, Target, TrendingUp, Wallet } from 'lucide-react';
 
 type WalletRecord = { id: string; name: string; walletType: string; currentBalanceMinor: number; currency: string };
@@ -43,8 +44,8 @@ function Card({ icon, eyebrow, title, description, children }: { icon: React.Rea
   return <section className="surface-card intelligence-card"><div className="intelligence-card-heading"><span className="intelligence-icon">{icon}</span><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2><p className="section-subtitle">{description}</p></div></div>{children}</section>;
 }
 
-export function FinancialIntelligenceView({ wallets, transactions, monthlyIncomeMinor, monthlyExpenseMinor }: {
-  wallets: WalletRecord[]; transactions: TransactionRecord[]; monthlyIncomeMinor: number; monthlyExpenseMinor: number;
+export function FinancialIntelligenceView({ wallets, transactions, monthlyIncomeMinor, monthlyExpenseMinor, workspaceId }: {
+  wallets: WalletRecord[]; transactions: TransactionRecord[]; monthlyIncomeMinor: number; monthlyExpenseMinor: number; workspaceId: string;
 }) {
   const now = new Date();
   const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -98,6 +99,7 @@ export function FinancialIntelligenceView({ wallets, transactions, monthlyIncome
 
   return <div className="page-stack module-page intelligence-page">
     <section className="page-intro"><div><p className="eyebrow">MONETRA INTELLIGENCE SUITE</p><h1>Financial Radar<span>.</span></h1><p className="intro-copy">See patterns, test decisions and keep your next move in view.</p></div><span className="module-intro-icon"><Activity size={22} /></span></section>
+    <MonetraAIChat workspaceId={workspaceId} />
     <section className="radar-overview"><div className="radar-overview-copy"><i /> LIVE WORKSPACE ANALYSIS <small>Based on records in the selected workspace</small></div><div className="radar-metrics"><div><span>Projected month-end spend</span><strong>{money(projectedExpense)}</strong></div><div><span>Projected month-end income</span><strong>{money(projectedIncome)}</strong></div><div><span>Days remaining</span><strong>{remaining}</strong></div></div></section>
     <div className="intelligence-grid">
       <Card icon={<ShieldAlert size={19} />} eyebrow="SPENDING GUARDRAIL" title="Safe-to-Spend" description="An estimated buffer after your current spending pace.">
