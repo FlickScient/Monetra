@@ -89,15 +89,17 @@ export default function HomePage() {
     }
   }
 
-  async function loadFinanceData(workspaceId = activeWorkspaceId) {
+  async function loadFinanceData(workspaceId = activeWorkspaceId, silent = false) {
     const requestId = ++financeRequestId.current;
-    setLoading(true);
-    setLoadError('');
-    setWallets([]);
-    setCategories([]);
-    setTransactions([]);
-    setHasMoreTransactions(false);
-    setSummary({ incomeMinor: 0, expenseMinor: 0, categorySpend: [] });
+    if (!silent) {
+      setLoading(true);
+      setLoadError('');
+      setWallets([]);
+      setCategories([]);
+      setTransactions([]);
+      setHasMoreTransactions(false);
+      setSummary({ incomeMinor: 0, expenseMinor: 0, categorySpend: [] });
+    }
     try {
       const now = new Date();
       const localMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -113,9 +115,12 @@ export default function HomePage() {
       if (requestId !== financeRequestId.current) return;
       setWallets(walletData); setCategories(categoryData); setTransactions(transactionData.slice(0, 50)); setHasMoreTransactions(transactionData.length > 50); setSummary(summaryData);
     } catch {
-      if (requestId === financeRequestId.current) setLoadError('We couldn’t sync your finance data. Check your connection and try again.');
+      if (requestId === financeRequestId.current) {
+        if (silent) setNotice('Saved, but the background refresh failed. Pull to refresh or reopen the workspace.');
+        else setLoadError('We couldn’t sync your finance data. Check your connection and try again.');
+      }
     } finally {
-      if (requestId === financeRequestId.current) setLoading(false);
+      if (requestId === financeRequestId.current && !silent) setLoading(false);
     }
   }
   async function restoreWallet(wallet: Wallet) {
@@ -150,6 +155,24 @@ export default function HomePage() {
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not delete this transaction.');
     }
+  }
+
+  async function bulkDeleteTransactions(ids: string[]) {
+    if (!ids.length) return;
+    if (!window.confirm(`Delete ${ids.length} selected transaction(s)? Each wallet balance and ledger entry will be reversed.`)) return;
+    const results = await Promise.allSettled(ids.map(async id => {
+      const response = await fetch('/api/transactions/' + id, {
+        method: 'DELETE',
+        headers: { 'x-workspace-id': activeWorkspaceId },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not delete transaction.');
+      return id;
+    }));
+    const deleted = results.filter(result => result.status === 'fulfilled').length;
+    const failed = results.length - deleted;
+    setNotice(failed ? `Deleted ${deleted}; ${failed} could not be deleted. Review those records and retry.` : `Deleted ${deleted} transactions. Wallet balances and ledger are syncing.`);
+    if (deleted) void loadFinanceData(activeWorkspaceId, true);
   }
 
   async function loadMoreTransactions() {
@@ -292,7 +315,7 @@ export default function HomePage() {
           )}
 
           {activeView === 'wallets' && <WalletsView wallets={wallets} onAdd={() => setShowWalletForm(true)} onEdit={(wallet) => setEditingWallet(wallet)} onArchive={(wallet) => void archiveWallet(wallet)} onRestore={(wallet) => void restoreWallet(wallet)} />}
-          {activeView === 'transactions' && <TransactionsView workspaceId={activeWorkspaceId} transactions={transactions} wallets={wallets} categories={categories} onAdd={() => setShowTransactionForm(true)} onEdit={(transaction) => setEditingTransaction(transaction)} onDelete={(transaction) => void deleteTransaction(transaction)} onLoadMore={loadMoreTransactions} hasMore={hasMoreTransactions} />}
+          {activeView === 'transactions' && <TransactionsView key={activeWorkspaceId} workspaceId={activeWorkspaceId} transactions={transactions} wallets={wallets} categories={categories} onAdd={() => setShowTransactionForm(true)} onEdit={(transaction) => setEditingTransaction(transaction)} onDelete={(transaction) => void deleteTransaction(transaction)} onBulkDelete={bulkDeleteTransactions} onLoadMore={loadMoreTransactions} hasMore={hasMoreTransactions} />}
           {activeView === 'intelligence' && <FinancialIntelligenceView wallets={wallets} transactions={transactions} monthlyIncomeMinor={monthlyIncome} monthlyExpenseMinor={monthlyExpense} workspaceId={activeWorkspaceId} />}
           {activeView === 'due-debt' && <DueDebtView workspaceId={activeWorkspaceId} />}
           {activeView === 'savings' && <SavingsGoalsView workspaceId={activeWorkspaceId} wallets={wallets} />}
@@ -304,8 +327,8 @@ export default function HomePage() {
       <nav className="mobile-nav">{navItems.map(({ key, label, icon: Icon }) => <button key={key} className={activeView === key ? 'active' : ''} onClick={() => setActiveView(key)}><Icon size={20} /><span>{label}</span></button>)}</nav>
       {showWalletForm && <WalletModal workspaceId={activeWorkspaceId} onClose={() => setShowWalletForm(false)} onSaved={async (message) => { setShowWalletForm(false); setNotice(message); await loadFinanceData(); }} />}
       {editingWallet && <WalletModal workspaceId={activeWorkspaceId} initialWallet={editingWallet} onClose={() => setEditingWallet(null)} onSaved={async (message) => { setEditingWallet(null); setNotice(message); await loadFinanceData(); }} />}
-      {showTransactionForm && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={async (message) => { setShowTransactionForm(false); setNotice(message); await loadFinanceData(); }} />}
-      {editingTransaction && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} initialTransaction={editingTransaction} onClose={() => setEditingTransaction(null)} onSaved={async (message) => { setEditingTransaction(null); setNotice(message); await loadFinanceData(); }} />}
+      {showTransactionForm && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={(message) => { setShowTransactionForm(false); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
+      {editingTransaction && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} initialTransaction={editingTransaction} onClose={() => setEditingTransaction(null)} onSaved={(message) => { setEditingTransaction(null); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       <FloatingCalculator />
     </main>
   );
@@ -315,12 +338,12 @@ function EmptyState({ icon, title, text, action, onClick }: { icon: React.ReactN
   return <div className="empty-state"><div className="empty-icon">{icon}</div><h3>{title}</h3><p>{text}</p>{action && onClick && <button className="text-action" onClick={onClick}>{action}<ChevronRight size={15} /></button>}</div>;
 }
 
-function TransactionRow({ transaction, wallets, categories, onEdit, onDelete }: { transaction: Transaction; wallets: Wallet[]; categories: Category[]; onEdit: () => void; onDelete: () => void }) {
+function TransactionRow({ transaction, wallets, categories, selected, onToggleSelected, onEdit, onDelete }: { transaction: Transaction; wallets: Wallet[]; categories: Category[]; selected: boolean; onToggleSelected: () => void; onEdit: () => void; onDelete: () => void }) {
   const wallet = wallets.find((w) => w.id === transaction.walletId);
   const category = categories.find((c) => c.id === transaction.categoryId);
   const positive = transaction.transactionType === 'income';
   const transfer = transaction.transactionType === 'transfer';
-  return <div className="transaction-row"><span className={`transaction-icon ${positive ? 'income' : transfer ? 'transfer' : 'expense'}`}>{positive ? <ArrowDownLeft size={18} /> : transfer ? <ArrowRight size={18} /> : <ArrowUpRight size={18} />}</span><span className="transaction-main"><b>{transaction.description}</b><small>{category?.name || transaction.transactionType} <i /> {wallet?.name || 'Wallet'} {transfer && transaction.destinationWalletId ? <> <i /> To {wallets.find((w) => w.id === transaction.destinationWalletId)?.name || 'another wallet'}</> : null} <i /> {dateLabel(transaction.occurredAt)}</small></span><b className={`transaction-amount ${positive ? 'positive' : transfer ? 'neutral' : ''}`}>{positive ? '+' : transfer ? '' : '−'}{money(Number(transaction.amountMinor), wallet?.currency || 'BDT')}</b><span className="transaction-actions"><button type="button" onClick={onEdit} aria-label="Edit transaction" title="Edit"><Pencil size={14}/></button><button type="button" onClick={onDelete} aria-label="Delete transaction" title="Delete"><Trash2 size={14}/></button></span></div>;
+  return <div className={`transaction-row ${selected ? 'is-selected' : ''}`}><label className="transaction-select"><input type="checkbox" checked={selected} onChange={onToggleSelected} aria-label={'Select ' + transaction.description}/></label><span className={`transaction-icon ${positive ? 'income' : transfer ? 'transfer' : 'expense'}`}>{positive ? <ArrowDownLeft size={18} /> : transfer ? <ArrowRight size={18} /> : <ArrowUpRight size={18} />}</span><span className="transaction-main"><b>{transaction.description}</b><small>{category?.name || transaction.transactionType} <i /> {wallet?.name || 'Wallet'} {transfer && transaction.destinationWalletId ? <> <i /> To {wallets.find((w) => w.id === transaction.destinationWalletId)?.name || 'another wallet'}</> : null} <i /> {dateLabel(transaction.occurredAt)}</small></span><b className={`transaction-amount ${positive ? 'positive' : transfer ? 'neutral' : ''}`}>{positive ? '+' : transfer ? '' : '−'}{money(Number(transaction.amountMinor), wallet?.currency || 'BDT')}</b><span className="transaction-actions"><button type="button" onClick={onEdit} aria-label="Edit transaction" title="Edit"><Pencil size={14}/></button><button type="button" onClick={onDelete} aria-label="Delete transaction" title="Delete"><Trash2 size={14}/></button></span></div>;
 }
 
 function WalletsView({ wallets, onAdd, onEdit, onArchive, onRestore }: { wallets: Wallet[]; onAdd: () => void; onEdit: (wallet: Wallet) => void; onArchive: (wallet: Wallet) => void; onRestore: (wallet: Wallet) => void }) {
@@ -329,7 +352,7 @@ function WalletsView({ wallets, onAdd, onEdit, onArchive, onRestore }: { wallets
   </div>;
 }
 
-function TransactionsView({ workspaceId, transactions, wallets, categories, onAdd, onEdit, onDelete, onLoadMore, hasMore }: { workspaceId: string; transactions: Transaction[]; wallets: Wallet[]; categories: Category[]; onAdd: () => void; onEdit: (transaction: Transaction) => void; onDelete: (transaction: Transaction) => void; onLoadMore: () => Promise<void>; hasMore: boolean }) {
+function TransactionsView({ workspaceId, transactions, wallets, categories, onAdd, onEdit, onDelete, onBulkDelete, onLoadMore, hasMore }: { workspaceId: string; transactions: Transaction[]; wallets: Wallet[]; categories: Category[]; onAdd: () => void; onEdit: (transaction: Transaction) => void; onDelete: (transaction: Transaction) => void; onBulkDelete: (ids: string[]) => Promise<void>; onLoadMore: () => Promise<void>; hasMore: boolean }) {
   const [query, setQuery] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -339,6 +362,8 @@ function TransactionsView({ workspaceId, transactions, wallets, categories, onAd
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   const filtered = transactions.filter((t) => {
     const localDate = new Date(t.occurredAt);
     const transactionDate = localDate.getFullYear() + '-' + String(localDate.getMonth() + 1).padStart(2, '0') + '-' + String(localDate.getDate()).padStart(2, '0');
@@ -348,6 +373,19 @@ function TransactionsView({ workspaceId, transactions, wallets, categories, onAd
       (categoryFilter === 'all' || t.categoryId === categoryFilter) &&
       (!fromDate || transactionDate >= fromDate) && (!toDate || transactionDate <= toDate);
   });
+
+  const visibleIds = filtered.map(transaction => transaction.id);
+  const selectedVisibleCount = visibleIds.filter(id => selectedIds.has(id)).length;
+  function toggleSelected(id: string) { setSelectedIds(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
+  function selectAllVisible() { setSelectedIds(current => new Set([...current, ...visibleIds])); }
+  function invertVisible() { setSelectedIds(current => { const next = new Set(current); visibleIds.forEach(id => next.has(id) ? next.delete(id) : next.add(id)); return next; }); }
+  async function deleteSelected() {
+    if (!selectedIds.size || bulkBusy) return;
+    setBulkBusy(true);
+    const ids = Array.from(selectedIds);
+    try { await onBulkDelete(ids); setSelectedIds(new Set()); }
+    finally { setBulkBusy(false); }
+  }
 
   async function exportTransactions() {
     setExporting(true); setExportError('');
@@ -383,7 +421,12 @@ function TransactionsView({ workspaceId, transactions, wallets, categories, onAd
         {(walletFilter !== 'all' || categoryFilter !== 'all' || fromDate || toDate || query) && <button type="button" onClick={() => {setWalletFilter('all');setCategoryFilter('all');setFromDate('');setToDate('');setQuery('');setFilter('all');}}>Clear filters</button>}
       </div>
       {exportError && <p className="form-error">{exportError}</p>}
-      {filtered.length === 0 ? <EmptyState icon={<Search size={22} />} title="Nothing matches" text="Try a different search, date range or filter." /> : <div className="transaction-list">{filtered.map((t) => <TransactionRow key={t.id} transaction={t} wallets={wallets} categories={categories} onEdit={() => onEdit(t)} onDelete={() => onDelete(t)} />)}</div>}
+      {filtered.length > 0 && <div className="bulk-select-toolbar">
+        <label className="bulk-select-all"><input type="checkbox" checked={visibleIds.length > 0 && selectedVisibleCount === visibleIds.length} ref={element => { if (element) element.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length; }} onChange={event => event.target.checked ? selectAllVisible() : setSelectedIds(current => { const next = new Set(current); visibleIds.forEach(id => next.delete(id)); return next; })}/> <span>Select all <small>({visibleIds.length} shown)</small></span></label>
+        <button type="button" onClick={invertVisible}>Invert selection</button>
+        {selectedIds.size > 0 && <><span className="bulk-selected-count">{selectedIds.size} selected</span><button type="button" onClick={() => setSelectedIds(new Set())}>Clear</button><button type="button" className="bulk-delete-btn" disabled={bulkBusy} onClick={() => void deleteSelected()}><Trash2 size={14}/>{bulkBusy ? 'Deleting…' : 'Delete selected'}</button></>}
+      </div>}
+      {filtered.length === 0 ? <EmptyState icon={<Search size={22} />} title="Nothing matches" text="Try a different search, date range or filter." /> : <div className="transaction-list">{filtered.map((t) => <TransactionRow key={t.id} transaction={t} wallets={wallets} categories={categories} selected={selectedIds.has(t.id)} onToggleSelected={() => toggleSelected(t.id)} onEdit={() => onEdit(t)} onDelete={() => onDelete(t)} />)}</div>}
       {hasMore && <button className="load-more-btn" disabled={loadingMore} onClick={async () => { setLoadingMore(true); await onLoadMore(); setLoadingMore(false); }}>{loadingMore ? 'Loading older activity…' : 'Load older transactions'} <ChevronRight size={15} /></button>}
       <p className="transaction-list-note">Search and filters apply to transactions currently loaded. Load older transactions to include more history. CSV export includes all active transactions in this workspace.</p>
     </section>
@@ -408,9 +451,12 @@ function WalletModal({ workspaceId, initialWallet, onClose, onSaved }: { workspa
 
 function TransactionModal({ workspaceId, wallets, categories, initialTransaction, onClose, onSaved }: { workspaceId: string; wallets: Wallet[]; categories: Category[]; initialTransaction?: Transaction; onClose: () => void; onSaved: (message: string) => Promise<void> }) {
   const [type, setType] = useState<TransactionType>(initialTransaction?.transactionType || 'expense'); const [wallet, setWallet] = useState(initialTransaction?.walletId || wallets.find(item => item.status === 'active')?.id || wallets[0]?.id || ''); const [destination, setDestination] = useState(initialTransaction?.destinationWalletId || wallets.find(item => item.id !== initialTransaction?.walletId && item.status === 'active')?.id || ''); const [category, setCategory] = useState(initialTransaction?.categoryId || categories.find((c) => c.categoryType === (initialTransaction?.transactionType === 'income' ? 'income' : 'expense'))?.id || ''); const [amount, setAmount] = useState(initialTransaction ? (Number(initialTransaction.amountMinor) / 100).toFixed(2) : ''); const [description, setDescription] = useState(initialTransaction?.description || ''); const [date, setDate] = useState(() => { const d = initialTransaction ? new Date(initialTransaction.occurredAt) : new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0,16); }); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const submitLockRef = useRef(false);
   const idempotencyRef = useRef<{ signature: string; key: string } | null>(null);
   async function submit(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError('');
+    event.preventDefault();
+    if (submitLockRef.current) return;
+    submitLockRef.current = true; setBusy(true); setError('');
     try {
       const amountMinor = Math.round(Number(amount) * 100);
       const endpoint = initialTransaction ? '/api/transactions/' + initialTransaction.id : (type === 'transfer' ? '/api/transfers' : '/api/transactions');
@@ -424,10 +470,10 @@ function TransactionModal({ workspaceId, wallets, categories, initialTransaction
       if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not post this activity. Check the details and try again.'); }
       else {
         idempotencyRef.current = null;
-        await onSaved(initialTransaction ? 'Transaction updated. Wallet balances and ledger are synced.' : 'Activity posted. Your balances are up to date.');
+        onSaved(initialTransaction ? 'Transaction updated. Wallet balances and ledger are syncing.' : 'Activity posted. Your balances are syncing.');
       }
     } catch { setError('Connection issue. Please try again.'); }
-    finally { setBusy(false); }
+    finally { submitLockRef.current = false; setBusy(false); }
   }
   return <Modal title={initialTransaction ? 'Edit transaction' : 'Record activity'} subtitle={initialTransaction ? 'Changes will be reflected in your wallet balances and ledger.' : 'Keep your money movement up to date.'} onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Activity type<select className="field" value={type} onChange={(e) => { const nextType = e.target.value as TransactionType; setType(nextType); if (nextType !== 'transfer') setCategory(categories.find((item) => item.categoryType === nextType)?.id || ''); }}>{(['income', 'expense', 'transfer'] as TransactionType[]).map((value) => <option key={value} value={value} disabled={value === 'transfer' && wallets.filter(wallet => wallet.status === 'active').length < 2}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label><label className="field-label">{type === 'transfer' ? 'From wallet' : 'Wallet'}<select className="field" value={wallet} onChange={(e) => { const nextWallet = e.target.value; setWallet(nextWallet); if (nextWallet === destination) setDestination(wallets.find(item => item.id !== nextWallet && item.status === 'active')?.id || ''); }} required>{wallets.filter((item) => item.status === 'active' || item.id === wallet).map((item) => <option key={item.id} value={item.id}>{item.name}{item.status !== 'active' ? ' (archived)' : ''}</option>)}</select></label>{type === 'transfer' && <label className="field-label">To wallet<select className="field" value={destination} onChange={(e) => setDestination(e.target.value)} required>{wallets.filter((item) => item.id !== wallet && (item.status === 'active' || item.id === destination)).map((item) => <option key={item.id} value={item.id}>{item.name}{item.status !== 'active' ? ' (archived)' : ''}</option>)}</select></label>}{type !== 'transfer' && <label className="field-label">Category<select className="field" value={category} onChange={(e) => setCategory(e.target.value)}><option value="">Uncategorized</option>{categories.filter((item) => item.categoryType === (type === 'income' ? 'income' : 'expense')).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<label className="field-label">Amount<input className="field" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required /></label><label className="field-label">Description<input className="field" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What was this for?" required /></label><label className="field-label">Date and time<input className="field" type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} required /></label>{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy || !wallets.some(item => item.status === 'active') || (type === 'transfer' && wallets.filter(item => item.status === 'active').length < 2)}>{busy ? 'Saving...' : initialTransaction ? 'Save changes' : 'Post activity'}</button></form></Modal>;
 }
