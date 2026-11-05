@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { FiscusMark } from '@/components/monetra/fiscus-mark';
 import {
   Activity,
@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Sun,
   Wallet,
+  Plus, Pencil, Trash2, Check, X,
 } from 'lucide-react';
 
 function ModuleIntro({ eyebrow, title, description, icon }: { eyebrow: string; title: string; description: string; icon: React.ReactNode }) {
@@ -127,7 +128,101 @@ export function FiscusView({ workspaces, activeWorkspaceId }: { workspaces: Fisc
   );
 }
 
-export function SettingsView({ dark, onToggleTheme }: { dark: boolean; onToggleTheme: () => void }) {
+function CategoryManager({ workspaceId }: { workspaceId: string }) {
+  type CategoryRow = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
+  const [items, setItems] = useState<CategoryRow[]>([]);
+  const [name, setName] = useState('');
+  const [categoryType, setCategoryType] = useState<'income' | 'expense'>('expense');
+  const [color, setColor] = useState('#0f766e');
+  const [editing, setEditing] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editType, setEditType] = useState<'income' | 'expense'>('expense');
+  const [editColor, setEditColor] = useState('#0f766e');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  async function load() {
+    const response = await fetch('/api/categories', { headers: { 'x-workspace-id': workspaceId } });
+    const data = await response.json().catch(() => []);
+    if (!response.ok) throw new Error(data.error || 'Could not load categories.');
+    setItems(Array.isArray(data) ? data : []);
+  }
+  useEffect(() => {
+    let active = true;
+    fetch('/api/categories', { headers: { 'x-workspace-id': workspaceId } })
+      .then(async response => { const data = await response.json().catch(() => []); if (!response.ok) throw new Error(data.error || 'Could not load categories.'); return data; })
+      .then(data => { if (active) setItems(Array.isArray(data) ? data : []); })
+      .catch(err => { if (active) setError(err instanceof Error ? err.message : 'Could not load categories.'); });
+    return () => { active = false; };
+  }, [workspaceId]);
+
+  async function create(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/categories', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ name, categoryType, color }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not create category.');
+      setItems(current => [...current, data]); setName(''); setNotice('Category created.');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not create category.'); }
+    finally { setBusy(false); }
+  }
+
+  function beginEdit(item: CategoryRow) { setEditing(item.id); setEditName(item.name); setEditType(item.categoryType); setEditColor(item.color); setError(''); setNotice(''); }
+  async function saveEdit(item: CategoryRow) {
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/categories/' + item.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ name: editName, categoryType: editType, color: editColor }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not update category.');
+      setItems(current => current.map(row => row.id === item.id ? data : row)); setEditing(''); setNotice('Category updated.');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not update category.'); }
+    finally { setBusy(false); }
+  }
+  async function remove(item: CategoryRow) {
+    if (!window.confirm('Delete "' + item.name + '"? Existing transactions will become Uncategorized; their amounts and balances will not change.')) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/categories/' + item.id, { method: 'DELETE', headers: { 'x-workspace-id': workspaceId } });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not delete category.');
+      setItems(current => current.filter(row => row.id !== item.id)); setNotice('Category deleted. Existing transactions were kept.');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not delete category.'); }
+    finally { setBusy(false); }
+  }
+
+  return <section className="surface-card settings-section category-manager">
+    <div className="settings-section-heading"><div><p className="eyebrow">TRANSACTION ORGANIZATION</p><h2>Categories</h2><p className="section-subtitle">Manage the labels used by income and expenses in this workspace.</p></div><span className="section-icon"><Activity size={18}/></span></div>
+    <form className="category-create-form" onSubmit={create}>
+      <input value={name} onChange={event => setName(event.target.value)} placeholder="New category name" maxLength={60} required aria-label="New category name"/>
+      <select value={categoryType} onChange={event => setCategoryType(event.target.value as 'income' | 'expense')} aria-label="Category type"><option value="expense">Expense</option><option value="income">Income</option></select>
+      <input type="color" value={color} onChange={event => setColor(event.target.value)} aria-label="Category color"/>
+      <button className="primary-btn" type="submit" disabled={busy || !name.trim()}><Plus size={14}/> Add</button>
+    </form>
+    {error && <p className="form-error">{error}</p>}
+    {notice && <p className="category-notice">{notice}</p>}
+    <div className="category-list">
+      {items.map(item => <div className="category-item" key={item.id}>
+        {editing === item.id ? <>
+          <input value={editName} onChange={event => setEditName(event.target.value)} maxLength={60} aria-label="Edit category name"/>
+          <select value={editType} onChange={event => setEditType(event.target.value as 'income' | 'expense')} aria-label="Edit category type"><option value="expense">Expense</option><option value="income">Income</option></select>
+          <input type="color" value={editColor} onChange={event => setEditColor(event.target.value)} aria-label="Edit category color"/>
+          <button type="button" disabled={busy || !editName.trim()} onClick={() => void saveEdit(item)} aria-label="Save category"><Check size={15}/></button>
+          <button type="button" disabled={busy} onClick={() => setEditing('')} aria-label="Cancel"><X size={15}/></button>
+        </> : <>
+          <span className="category-swatch" style={{ background: item.color }}/>
+          <strong>{item.name}</strong>
+          <small>{item.categoryType}</small>
+          <button type="button" disabled={busy} onClick={() => beginEdit(item)} aria-label={'Edit '+item.name}><Pencil size={14}/></button>
+          <button type="button" disabled={busy} onClick={() => void remove(item)} aria-label={'Delete '+item.name}><Trash2 size={14}/></button>
+        </>}
+      </div>)}
+      {!items.length && <p className="section-subtitle">No categories available yet.</p>}
+    </div>
+  </section>;
+}
+
+export function SettingsView({ dark, workspaceId, onToggleTheme }: { dark: boolean; workspaceId: string; onToggleTheme: () => void }) {
   return (
     <div className="page-stack module-page">
       <ModuleIntro eyebrow="MAKE MONETRA YOURS" title="Settings" description="Manage the experience and review how your financial workspace is organized." icon={<ShieldCheck size={22} />} />
@@ -148,6 +243,7 @@ export function SettingsView({ dark, onToggleTheme }: { dark: boolean; onToggleT
           <div><span className="settings-workspace-mark debt">↔</span><span><strong>Due & Debt</strong><small>Independent receivables and payables ledger</small></span></div>
         </div>
       </section>
+      <CategoryManager workspaceId={workspaceId} />
       <section className="surface-card settings-section settings-security">
         <LockKeyhole size={18} />
         <div><strong>Account security</strong><p>Sign-in and account security are managed by your Monetra authentication provider.</p></div>
