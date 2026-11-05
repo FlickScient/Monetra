@@ -157,9 +157,9 @@ export default function HomePage() {
     }
   }
 
-  async function bulkDeleteTransactions(ids: string[]) {
-    if (!ids.length) return;
-    if (!window.confirm(`Delete ${ids.length} selected transaction(s)? Each wallet balance and ledger entry will be reversed.`)) return;
+  async function bulkDeleteTransactions(ids: string[]): Promise<string[]> {
+    if (!ids.length) return [];
+    if (!window.confirm(`Delete ${ids.length} selected transaction(s)? Each wallet balance and ledger entry will be reversed.`)) return [];
     const results = await Promise.allSettled(ids.map(async id => {
       const response = await fetch('/api/transactions/' + id, {
         method: 'DELETE',
@@ -171,8 +171,10 @@ export default function HomePage() {
     }));
     const deleted = results.filter(result => result.status === 'fulfilled').length;
     const failed = results.length - deleted;
+    const deletedIds = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
     setNotice(failed ? `Deleted ${deleted}; ${failed} could not be deleted. Review those records and retry.` : `Deleted ${deleted} transactions. Wallet balances and ledger are syncing.`);
     if (deleted) void loadFinanceData(activeWorkspaceId, true);
+    return deletedIds;
   }
 
   async function loadMoreTransactions() {
@@ -352,7 +354,7 @@ function WalletsView({ wallets, onAdd, onEdit, onArchive, onRestore }: { wallets
   </div>;
 }
 
-function TransactionsView({ workspaceId, transactions, wallets, categories, onAdd, onEdit, onDelete, onBulkDelete, onLoadMore, hasMore }: { workspaceId: string; transactions: Transaction[]; wallets: Wallet[]; categories: Category[]; onAdd: () => void; onEdit: (transaction: Transaction) => void; onDelete: (transaction: Transaction) => void; onBulkDelete: (ids: string[]) => Promise<void>; onLoadMore: () => Promise<void>; hasMore: boolean }) {
+function TransactionsView({ workspaceId, transactions, wallets, categories, onAdd, onEdit, onDelete, onBulkDelete, onLoadMore, hasMore }: { workspaceId: string; transactions: Transaction[]; wallets: Wallet[]; categories: Category[]; onAdd: () => void; onEdit: (transaction: Transaction) => void; onDelete: (transaction: Transaction) => void; onBulkDelete: (ids: string[]) => Promise<string[]>; onLoadMore: () => Promise<void>; hasMore: boolean }) {
   const [query, setQuery] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -383,7 +385,7 @@ function TransactionsView({ workspaceId, transactions, wallets, categories, onAd
     if (!selectedIds.size || bulkBusy) return;
     setBulkBusy(true);
     const ids = Array.from(selectedIds);
-    try { await onBulkDelete(ids); setSelectedIds(new Set()); }
+    try { const deletedIds = await onBulkDelete(ids); if (deletedIds.length) setSelectedIds(current => { const next = new Set(current); deletedIds.forEach(id => next.delete(id)); return next; }); }
     finally { setBulkBusy(false); }
   }
 
