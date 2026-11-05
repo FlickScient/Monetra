@@ -28,10 +28,15 @@ export async function PATCH(req: Request, { params }: Params) {
   }
   try {
     const [goal] = await db.update(savingsGoals).set(values)
-      .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.status, 'active')))
+      .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.userId, context.userId), eq(savingsGoals.status, 'active')))
       .returning();
     return goal ? NextResponse.json(goal) : NextResponse.json({ error: 'Goal not found' }, { status: 404 });
-  } catch { return NextResponse.json({ error: 'Unable to update savings goal' }, { status: 500 }); }
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    if (code === 'GOAL_NOT_FOUND') return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
+    if (code === 'TARGET_BELOW_ALLOCATED') return NextResponse.json({ error: 'Target cannot be lower than the money already allocated to this goal' }, { status: 409 });
+    return NextResponse.json({ error: 'Unable to update savings goal' }, { status: 500 });
+  }
 }
 
 export async function DELETE(req: Request, { params }: Params) {
@@ -39,32 +44,28 @@ export async function DELETE(req: Request, { params }: Params) {
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
   if (!isUuid(params.id)) return NextResponse.json({ error: 'Invalid goal ID' }, { status: 400 });
   try {
-    await db.transaction(async (tx) => {
-      // Match the allocation endpoint's lock order to prevent archive/allocation races.
+    await db.transaction(async tx => {
       const [goal] = await tx.select().from(savingsGoals)
-        .where(and(
-          eq(savingsGoals.id, params.id),
-          eq(savingsGoals.workspaceId, context.workspaceId),
-          eq(savingsGoals.status, 'active'),
-        ))
+        .where(and(eq(savingsGoals.id, params.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.userId, context.userId), eq(savingsGoals.status, 'active')))
         .for('update');
       if (!goal) throw new Error('GOAL_NOT_FOUND');
-
-      const [allocation] = await tx.select({ id: goalAllocations.id }).from(goalAllocations)
-        .where(and(
-          eq(goalAllocations.goalId, goal.id),
-          eq(goalAllocations.workspaceId, context.workspaceId),
-        )).limit(1);
-      if (allocation) throw new Error('GOAL_HAS_ALLOCATIONS');
-
+      const allocations = await tx.select().from(goalAllocations)
+        .where(and(eq(goalAllocations.goalId, goal.id), eq(goalAllocations.workspaceId, context.workspaceId)));
+      if (allocations.length) {
+        await tx.insert(goalAllocationEvents).values(allocations.map(allocation => ({
+          workspaceId: context.workspaceId, goalId: goal.id, walletId: allocation.walletId,
+          userId: context.userId, action: 'release', amountMinor: allocation.amountMinor,
+        })));
+        await tx.delete(goalAllocations)
+          .where(and(eq(goalAllocations.goalId, goal.id), eq(goalAllocations.workspaceId, context.workspaceId)));
+      }
       await tx.update(savingsGoals).set({ status: 'archived', updatedAt: new Date() })
-        .where(and(eq(savingsGoals.id, goal.id), eq(savingsGoals.workspaceId, context.workspaceId)));
+        .where(and(eq(savingsGoals.id, goal.id), eq(savingsGoals.workspaceId, context.workspaceId), eq(savingsGoals.userId, context.userId)));
     });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, archived: true, allocationsReleased: true });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
     if (code === 'GOAL_NOT_FOUND') return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
-    if (code === 'GOAL_HAS_ALLOCATIONS') return NextResponse.json({ error: 'Release all wallet allocations before archiving this goal' }, { status: 409 });
     return NextResponse.json({ error: 'Unable to archive savings goal' }, { status: 500 });
   }
 }
