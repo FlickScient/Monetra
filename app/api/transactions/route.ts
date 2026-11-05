@@ -147,7 +147,10 @@ export async function POST(req: Request) {
             eq(wallets.id, walletId),
             eq(wallets.workspaceId, context.workspaceId),
             eq(wallets.status, 'active'),
-            ...(decreasesBalance ? [gte(wallets.currentBalanceMinor, amountMinor)] : []),
+            // Asset wallets may go negative: the full expense is recorded and
+            // the shortfall carries forward as a negative wallet balance.
+            // Credit-card repayments remain capped at the outstanding liability.
+            ...(isCreditCard && transactionType === 'income' ? [gte(wallets.currentBalanceMinor, amountMinor)] : []),
           ),
         )
         .returning();
