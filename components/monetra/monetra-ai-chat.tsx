@@ -66,7 +66,8 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Monetra AI could not respond. Please try again.');
       if (typeof data.answer !== 'string' || !data.answer.trim()) throw new Error('Monetra AI returned an empty response.');
-      setMessages(current => [...current, { role: 'model', content: data.answer }].slice(-40));
+      const assistantMessage: Message = { role: 'model', content: data.answer };
+      setMessages(current => [...current, assistantMessage].slice(-40));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connection issue. Please try again.');
     } finally {
