@@ -143,20 +143,109 @@ export async function POST(req: Request) {
     }
 
     if (rows.wallets.some((row) => typeof row.name !== 'string' || !row.name.trim() || typeof row.currency !== 'string') ||
-        rows.categories.some((row) => typeof row.name !== 'string' || !['income', 'expense'].includes(row.categoryType)) ||
+        rows.categories.some((row) => typeof row.name !== 'string' || !['income', 'expense'].includes(row.categoryType) ||
+          (row.parentId && !rows.categories.some((parent) => parent.id === row.parentId))) ||
         rows.transactions.some((row) => !['income', 'expense', 'transfer', 'adjustment'].includes(row.transactionType) ||
           !walletIds.has(row.walletId) || (row.destinationWalletId && !walletIds.has(row.destinationWalletId)) ||
           (row.categoryId && !categoryIds.has(row.categoryId)) || !validTimestamp(row.occurredAt) ||
-          (row.voidedAt !== null && row.voidedAt !== undefined && !validTimestamp(row.voidedAt))) ||
+          (row.voidedAt !== null && row.voidedAt !== undefined && !validTimestamp(row.voidedAt)) ||
+          (row.transactionType === 'transfer' && (!row.destinationWalletId || row.destinationWalletId === row.walletId)) ||
+          (row.transactionType !== 'transfer' && row.destinationWalletId))) ||
         rows.ledgerAccounts.some((row) => row.walletId && !walletIds.has(row.walletId)) ||
         rows.ledgerEntries.some((row) => !transactionIds.has(row.transactionId) || !accountIds.has(row.ledgerAccountId) || !safeInteger(row.debitMinor) || !safeInteger(row.creditMinor) || !((row.debitMinor > 0 && row.creditMinor === 0) || (row.creditMinor > 0 && row.debitMinor === 0))) ||
         rows.goalAllocations.some((row) => !goalIds.has(row.goalId) || !walletIds.has(row.walletId)) ||
-        rows.goalAllocationEvents.some((row) => !goalIds.has(row.goalId) || !walletIds.has(row.walletId)) ||
-        rows.dueDebtPayments.some((row) => !debtIds.has(row.dueDebtId) || !validTimestamp(row.paidAt)) ||
+        rows.goalAllocationEvents.some((row) => !goalIds.has(row.goalId) || !walletIds.has(row.walletId) || !['allocate', 'release'].includes(row.action)) ||
+        rows.dueDebts.some((row) => !['receivable', 'payable'].includes(row.direction) ||
+          typeof row.counterpartyName !== 'string' || !row.counterpartyName.trim() ||
+          typeof row.currency !== 'string' || !/^[A-Z]{3}$/.test(row.currency) ||
+          !['open', 'partially_settled', 'settled', 'archived'].includes(row.status) ||
+          !Number.isSafeInteger(row.annualRateBps) || row.annualRateBps < 0) ||
+        rows.dueDebtPayments.some((row) => !debtIds.has(row.dueDebtId) || !validTimestamp(row.paidAt) ||
+          typeof row.idempotencyKey !== 'string' || !row.idempotencyKey.trim()) ||
         rows.monthlyBudgets.some((row) => !categoryIds.has(row.categoryId) || !isDateOnly(row.monthStart)) ||
         rows.recurringTransactions.some((row) => !walletIds.has(row.walletId) || (row.categoryId && !categoryIds.has(row.categoryId)) || !isDateOnly(row.nextRun)) ||
         rows.walletReconciliations.some((row) => !walletIds.has(row.walletId))) {
       return NextResponse.json({ error: 'Backup has missing or mismatched record references' }, { status: 400 });
+    }
+
+    // The database enforces balanced journal lines. Validate the same invariant
+    // before inserting so an invalid backup fails with a clear 400 response.
+    const journalTotals = new Map<string, { debit: bigint; credit: bigint; count: number }>();
+    for (const entry of rows.ledgerEntries) {
+      const total = journalTotals.get(entry.transactionId) ?? { debit: BigInt(0), credit: BigInt(0), count: 0 };
+      total.debit += BigInt(entry.debitMinor);
+      total.credit += BigInt(entry.creditMinor);
+      total.count += 1;
+      journalTotals.set(entry.transactionId, total);
+    }
+    for (const total of journalTotals.values()) {
+      if (total.debit !== total.credit || total.count < 2) {
+        return NextResponse.json({ error: 'Backup contains an unbalanced or incomplete ledger journal' }, { status: 400 });
+      }
+    }
+
+    // Reconcile repayment history against each debt's principal and stored status.
+    const paidByDebt = new Map<string, bigint>();
+    for (const payment of rows.dueDebtPayments) {
+      const paid = (paidByDebt.get(payment.dueDebtId) ?? BigInt(0)) + BigInt(payment.amountMinor);
+      paidByDebt.set(payment.dueDebtId, paid);
+    }
+    for (const debt of rows.dueDebts) {
+      const paid = paidByDebt.get(debt.id) ?? BigInt(0);
+      const principal = BigInt(debt.principalMinor);
+      if (paid > principal) {
+        return NextResponse.json({ error: 'Backup contains repayments greater than the original debt principal' }, { status: 400 });
+      }
+      if (debt.status !== 'archived') {
+        const expected = paid === BigInt(0) ? 'open' : paid === principal ? 'settled' : 'partially_settled';
+        if (debt.status !== expected) {
+          return NextResponse.json({ error: 'Backup contains a Due & Debt status that does not match its payment history' }, { status: 400 });
+        }
+      }
+    }
+
+    // Validate current goal reservations against targets, wallet balances,
+    // and the allocation/release event history.
+    const goalById = new Map(rows.savingsGoals.map((goal) => [goal.id, goal]));
+    const walletById = new Map(rows.wallets.map((wallet) => [wallet.id, wallet]));
+    const allocationTotalsByGoal = new Map<string, bigint>();
+    const allocationTotalsByWallet = new Map<string, bigint>();
+    const allocationByPair = new Map<string, bigint>();
+    const eventTotalsByPair = new Map<string, bigint>();
+    for (const allocation of rows.goalAllocations) {
+      const goal = goalById.get(allocation.goalId);
+      const wallet = walletById.get(allocation.walletId);
+      const amount = BigInt(allocation.amountMinor);
+      if (!goal || !wallet || goal.currency !== wallet.currency || wallet.walletType === 'credit_card') {
+        return NextResponse.json({ error: 'Backup contains an allocation linked to an incompatible goal or wallet' }, { status: 400 });
+      }
+      const pair = allocation.goalId + ':' + allocation.walletId;
+      allocationByPair.set(pair, amount);
+      allocationTotalsByGoal.set(allocation.goalId, (allocationTotalsByGoal.get(allocation.goalId) ?? BigInt(0)) + amount);
+      allocationTotalsByWallet.set(allocation.walletId, (allocationTotalsByWallet.get(allocation.walletId) ?? BigInt(0)) + amount);
+    }
+    for (const event of rows.goalAllocationEvents) {
+      const pair = event.goalId + ':' + event.walletId;
+      const change = BigInt(event.amountMinor) * (event.action === 'allocate' ? BigInt(1) : BigInt(-1));
+      eventTotalsByPair.set(pair, (eventTotalsByPair.get(pair) ?? BigInt(0)) + change);
+    }
+    for (const [goalId, total] of allocationTotalsByGoal) {
+      const goal = goalById.get(goalId)!;
+      if (total > BigInt(goal.targetMinor)) {
+        return NextResponse.json({ error: 'Backup contains savings allocations above a goal target' }, { status: 400 });
+      }
+    }
+    for (const [walletId, total] of allocationTotalsByWallet) {
+      const wallet = walletById.get(walletId)!;
+      if (total > BigInt(wallet.currentBalanceMinor)) {
+        return NextResponse.json({ error: 'Backup contains savings allocations above a wallet balance' }, { status: 400 });
+      }
+    }
+    const allAllocationPairs = new Set([...allocationByPair.keys(), ...eventTotalsByPair.keys()]);
+    for (const pair of allAllocationPairs) {
+      if ((allocationByPair.get(pair) ?? BigInt(0)) !== (eventTotalsByPair.get(pair) ?? BigInt(0))) {
+        return NextResponse.json({ error: 'Backup savings allocation history does not match current allocations' }, { status: 400 });
+      }
     }
 
     const result = await db.transaction(async (tx) => {
