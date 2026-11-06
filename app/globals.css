@@ -838,3 +838,21 @@ html.reduced-motion *::after { animation-duration: .01ms !important; animation-i
 @media (prefers-reduced-motion: reduce) {
   .mobile-more-panel { animation: none; }
 }
+
+
+/* Transaction composer: quick multi-entry flow with an explicit finish action. */
+.transaction-entry-form { gap: 13px; }
+.transaction-entry-actions { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 9px; margin-top: 5px; }
+.transaction-entry-actions > button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border-radius: 11px; font-size: 11px; font-weight: 800; transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
+.transaction-entry-actions > button:active { transform: scale(.985); }
+.transaction-continue-btn { border: 1px solid var(--line); background: var(--surface-soft); color: var(--text); }
+.transaction-continue-btn:hover { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); background: var(--green-soft); }
+.transaction-save-close-btn { box-shadow: 0 5px 14px rgba(29, 94, 65, .14); }
+.transaction-entry-actions > button:disabled { cursor: wait; opacity: .65; }
+@media (max-width: 420px) {
+  .transaction-entry-actions { grid-template-columns: 1fr 1.12fr; gap: 7px; }
+  .transaction-entry-actions > button { min-height: 43px; padding-right: 8px; padding-left: 8px; font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .transaction-entry-actions > button { transition: none; }
+}
