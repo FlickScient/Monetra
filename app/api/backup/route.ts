@@ -127,6 +127,19 @@ export async function POST(req: Request) {
     const uniqueIds = TABLE_KEYS.every((key) => ids(key).size === rows[key].length);
     if (!uniqueIds) return NextResponse.json({ error: 'Backup contains duplicate record IDs' }, { status: 400 });
 
+    const hasDuplicates = (values: string[]) => new Set(values).size !== values.length;
+    const transactionKeys = rows.transactions
+      .filter((row) => row.idempotencyKey !== null && row.idempotencyKey !== undefined)
+      .map((row) => row.idempotencyKey);
+    const debtPaymentKeys = rows.dueDebtPayments.map((row) => row.idempotencyKey);
+    const budgetKeys = rows.monthlyBudgets.map((row) => row.categoryId + ':' + row.monthStart);
+    const allocationKeys = rows.goalAllocations.map((row) => row.goalId + ':' + row.walletId);
+    if (transactionKeys.some((key) => typeof key !== 'string') ||
+        hasDuplicates(transactionKeys) || hasDuplicates(debtPaymentKeys) ||
+        hasDuplicates(budgetKeys) || hasDuplicates(allocationKeys)) {
+      return NextResponse.json({ error: 'Backup contains duplicate or invalid unique finance records' }, { status: 400 });
+    }
+
     const validMoneyFields: [typeof TABLE_KEYS[number], string, boolean][] = [
       ['wallets', 'openingBalanceMinor', false], ['wallets', 'currentBalanceMinor', false], ['wallets', 'creditLimitMinor', false],
       ['transactions', 'amountMinor', true], ['ledgerEntries', 'debitMinor', false], ['ledgerEntries', 'creditMinor', false],
