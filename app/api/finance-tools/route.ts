@@ -66,6 +66,22 @@ export async function GET(req: Request) {
       eq(transactions.transactionType, 'expense'), isNull(transactions.voidedAt),
       gte(transactions.occurredAt, dhakaDateBoundary(start)), lt(transactions.occurredAt, dhakaDateBoundary(next)),
     )).groupBy(transactions.categoryId, categories.name, categories.color).orderBy(sql`sum(${transactions.amountMinor}) desc`).limit(6);
+    // These values are stored as PostgreSQL BIGINTs. Refuse unsafe JS
+    // number conversions instead of silently displaying rounded money totals.
+    const aggregateMinorValues = [
+      ...spending.map(row => BigInt(row.totalMinor)),
+      ...previousSpending.map(row => BigInt(row.totalMinor)),
+      ...trends.flatMap(row => [BigInt(row.incomeMinor), BigInt(row.expenseMinor)]),
+      ...categoryBreakdown.map(row => BigInt(row.totalMinor)),
+    ];
+    const maxSafeMinor = BigInt(Number.MAX_SAFE_INTEGER);
+    if (aggregateMinorValues.some(value => value > maxSafeMinor || value < -maxSafeMinor) ||
+        [...budgetRows, ...previousBudgets].some(row => !Number.isSafeInteger(Number(row.limitMinor))) ||
+        walletRows.some(row => !Number.isSafeInteger(Number(row.currentBalanceMinor))) ||
+        reconciliationRows.some(row => ![row.recordedMinor, row.actualMinor, row.varianceMinor].every(Number.isSafeInteger))) {
+      return NextResponse.json({ error: 'Finance totals exceed the supported safe calculation range. Review the affected records before continuing.' }, { status: 409 });
+    }
+
     const spent = new Map(spending.map(row => [row.categoryId || '', Number(row.totalMinor)]));
     const previousSpent = new Map(previousSpending.map(row => [row.categoryId || '', Number(row.totalMinor)]));
     const previousBudget = new Map(previousBudgets.map(row => [row.categoryId, row]));
