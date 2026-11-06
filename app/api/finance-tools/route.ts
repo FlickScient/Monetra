@@ -125,14 +125,18 @@ export async function POST(req: Request) {
           if (!prior) {
             const isCreditCard = walletState.walletType === 'credit_card';
             const currentBalance = Number(walletState.currentBalanceMinor);
-            if (!Number.isSafeInteger(currentBalance) || !Number.isSafeInteger(currentBalance + Number(schedule.amountMinor))) throw new Error('RECURRING_BALANCE_RANGE');
-            if (isCreditCard && schedule.transactionType === 'expense' && Number(walletState.creditLimitMinor) > 0 && currentBalance + Number(schedule.amountMinor) > Number(walletState.creditLimitMinor)) throw new Error('RECURRING_CREDIT_LIMIT');
-            if (isCreditCard && schedule.transactionType === 'income' && currentBalance < Number(schedule.amountMinor)) throw new Error('RECURRING_INSUFFICIENT');
+            if (!Number.isSafeInteger(currentBalance)) throw new Error('RECURRING_BALANCE_RANGE');
 
             const delta = isCreditCard
               ? (schedule.transactionType === 'expense' ? Number(schedule.amountMinor) : -Number(schedule.amountMinor))
               : (schedule.transactionType === 'income' ? Number(schedule.amountMinor) : -Number(schedule.amountMinor));
             const nextBalance = currentBalance + delta;
+            // Validate the actual signed result. Checking currentBalance + amount
+            // misses underflow for expenses from an already-negative asset wallet
+            // and for repayments against an invalid negative card balance.
+            if (!Number.isSafeInteger(nextBalance)) throw new Error('RECURRING_BALANCE_RANGE');
+            if (isCreditCard && schedule.transactionType === 'expense' && Number(walletState.creditLimitMinor) > 0 && nextBalance > Number(walletState.creditLimitMinor)) throw new Error('RECURRING_CREDIT_LIMIT');
+            if (isCreditCard && schedule.transactionType === 'income' && currentBalance < Number(schedule.amountMinor)) throw new Error('RECURRING_INSUFFICIENT');
             const [updatedWallet] = await tx.update(wallets).set({ currentBalanceMinor: nextBalance, updatedAt: new Date() })
               .where(and(eq(wallets.id, walletState.id), eq(wallets.workspaceId, context.workspaceId), eq(wallets.userId, context.userId), eq(wallets.status, 'active'))).returning();
             if (!updatedWallet) throw new Error('RECURRING_WALLET_UNAVAILABLE');
