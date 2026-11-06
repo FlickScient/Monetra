@@ -4,9 +4,9 @@ This is an isolated Supabase CLI workdir for Monetra's Fiscus AI backend.
 
 ## Important isolation rule
 
-The repository already contains a legacy root-level \`supabase/migrations\` directory with old Monetra finance migrations. **Do not deploy that directory to the Fiscus AI Supabase project.** All Fiscus database changes and Edge Functions live under this isolated \`fiscus-supabase/supabase\` directory.
+The repository already contains a legacy root-level `supabase/migrations` directory with old Monetra finance migrations. **Do not deploy that directory to the Fiscus AI Supabase project.** All Fiscus database changes and Edge Functions live under this isolated `fiscus-supabase/supabase` directory.
 
-Run Supabase CLI commands from the repository root with \`--workdir fiscus-supabase\`. Never run a plain root-level \`supabase db push\` for this project.
+Run Supabase CLI commands from the repository root with `--workdir fiscus-supabase`. Never run a plain root-level `supabase db push` for this project.
 
 ## Architecture
 
@@ -14,53 +14,53 @@ Run Supabase CLI commands from the repository root with \`--workdir fiscus-supab
 - Neon remains the only financial database.
 - Vercel remains the Monetra frontend and finance-context provider.
 - Supabase stores Fiscus conversations, approved memories, preferences, prompt versions, runtime configuration and AI usage logs.
-- Supabase Edge Function \`fiscus-chat\` runs AI orchestration and calls Gemini.
+- Supabase Edge Function `fiscus-chat` runs AI orchestration and calls Gemini.
 - The browser calls the Edge Function directly using its Clerk session JWT and a Supabase publishable key.
 - The Edge Function retrieves financial context from a private Vercel endpoint. That endpoint is excluded from Clerk cookie middleware but accepts only a timestamped HMAC-signed request from the Edge Function, then independently verifies that the Clerk user owns the requested Neon workspace.
-- The Edge Function creates a short-lived workspace access grant only after Vercel confirms workspace ownership. RLS uses the verified Clerk \`sub\` claim and this short-lived grant.
+- The Edge Function creates a short-lived workspace access grant only after Vercel confirms workspace ownership. RLS uses the verified Clerk `sub` claim and this short-lived grant.
 
 The browser never receives a Supabase secret key, HMAC secret or Gemini API key.
 
 ## Required dashboard setup
 
 1. In Clerk Dashboard, activate the native Supabase integration (not the deprecated JWT-template integration) and copy the Clerk domain.
-2. In Supabase Dashboard, add Clerk under Authentication → Sign In / Providers → Third-party Auth and enter the Clerk domain. Confirm Clerk session tokens contain the \`role: authenticated\` claim.
-3. In Supabase API settings, add \`fiscus\` to the exposed schemas. The local config also declares it.
+2. In Supabase Dashboard, add Clerk under Authentication → Sign In / Providers → Third-party Auth and enter the Clerk domain. Confirm Clerk session tokens contain the `role: authenticated` claim.
+3. In Supabase API settings, add `fiscus` to the exposed schemas. The local config also declares it.
 4. Confirm the project has a publishable key and a server-side secret key. Never expose the secret key.
 
 ## Deploy the isolated project
 
 Install the Supabase CLI, authenticate, and link this workdir to the Fiscus AI project:
 
-- \`supabase --workdir fiscus-supabase login\`
-- \`supabase --workdir fiscus-supabase link --project-ref YOUR_PROJECT_REF\`
+- `supabase --workdir fiscus-supabase login`
+- `supabase --workdir fiscus-supabase link --project-ref YOUR_PROJECT_REF`
 - Review the pending migration before applying it.
-- \`supabase --workdir fiscus-supabase db push\`
-- \`supabase --workdir fiscus-supabase functions deploy fiscus-chat\`
+- `supabase --workdir fiscus-supabase db push`
+- `supabase --workdir fiscus-supabase functions deploy fiscus-chat`
 
-The migration creates only the \`fiscus\` schema. It does not touch Neon or the legacy root-level Supabase migration history.
+The migration creates only the `fiscus` schema. It does not touch Neon or the legacy root-level Supabase migration history.
 
 ## Supabase Edge Function secrets
 
 Set these in the Fiscus Supabase project (never commit values):
 
-- \`GEMINI_API_KEY\`
-- \`FISCUS_EDGE_SHARED_SECRET\` — generate a random secret of at least 32 bytes; use the same value in Vercel.
-- \`MONETRA_CONTEXT_URL\` — the Monetra Vercel origin, for example \`https://monetra-4rax.vercel.app\`.
-- \`SUPABASE_PUBLISHABLE_KEY\` (or \`SUPABASE_ANON_KEY\`) if the runtime does not provide it automatically.
-- \`SUPABASE_SECRET_KEY\` (or the platform-provided \`SUPABASE_SERVICE_ROLE_KEY\`) for server-only privileged operations.
+- `GEMINI_API_KEY`
+- `FISCUS_EDGE_SHARED_SECRET` — generate a random secret of at least 32 bytes; use the same value in Vercel.
+- `MONETRA_CONTEXT_URL` — the Monetra Vercel origin, for example `https://monetra-4rax.vercel.app`.
+- `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) if the runtime does not provide it automatically.
+- `SUPABASE_SECRET_KEY` (or the platform-provided `SUPABASE_SERVICE_ROLE_KEY`) for server-only privileged operations.
 
-Supabase normally provides \`SUPABASE_URL\`, \`SUPABASE_ANON_KEY\` and \`SUPABASE_SERVICE_ROLE_KEY\` to Edge Functions. The function supports the newer publishable/secret key names as overrides.
+Supabase normally provides `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` to Edge Functions. The function supports the newer publishable/secret key names as overrides.
 
 ## Vercel environment variables
 
 Set these for the Monetra application:
 
-- \`NEXT_PUBLIC_SUPABASE_URL\`
-- \`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY\` (or \`NEXT_PUBLIC_SUPABASE_ANON_KEY\`)
-- \`FISCUS_EDGE_SHARED_SECRET\` — exactly the same secret as the Edge Function. This variable must remain server-only; do not prefix it with \`NEXT_PUBLIC_\`.
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (or `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
+- `FISCUS_EDGE_SHARED_SECRET` — exactly the same secret as the Edge Function. This variable must remain server-only; do not prefix it with `NEXT_PUBLIC_`.
 
-The existing \`GEMINI_API_KEY\` can remain in Vercel during the transition. Once the Supabase function is deployed and the new flow is verified, remove it from Vercel if no other route uses it.
+The existing `GEMINI_API_KEY` can remain in Vercel during the transition. Once the Supabase function is deployed and the new flow is verified, remove it from Vercel if no other route uses it.
 
 ## Data and privacy
 
