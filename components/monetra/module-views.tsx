@@ -179,6 +179,25 @@ function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onCh
 }
 
 export function SettingsView({ dark, workspaceId, onCategoriesChanged, onToggleTheme }: { dark: boolean; workspaceId: string; onCategoriesChanged: () => void; onToggleTheme: () => void }) {
+  const [compact, setCompact] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    try {
+      setCompact(localStorage.getItem('monetra-compact-ui') === 'true');
+      setReducedMotion(localStorage.getItem('monetra-reduced-motion') === 'true');
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('compact-ui', compact);
+    document.documentElement.classList.toggle('reduced-motion', reducedMotion);
+    try {
+      localStorage.setItem('monetra-compact-ui', String(compact));
+      localStorage.setItem('monetra-reduced-motion', String(reducedMotion));
+    } catch {}
+  }, [compact, reducedMotion]);
+
   return (
     <div className="page-stack module-page">
       <ModuleIntro eyebrow="MAKE MONETRA YOURS" title="Settings" description="Manage the experience and review how your financial workspace is organized." icon={<ShieldCheck size={22} />} />
@@ -189,6 +208,20 @@ export function SettingsView({ dark, workspaceId, onCategoriesChanged, onToggleT
           <span className="settings-option-copy"><strong>{dark ? 'Dark appearance' : 'Light appearance'}</strong><small>Your preference is saved on this device.</small></span>
           <button className="settings-toggle" type="button" role="switch" aria-checked={dark} onClick={onToggleTheme}><span /></button>
         </div>
+      </section>
+      <section className="surface-card settings-section">
+        <div className="settings-section-heading"><div><p className="eyebrow">YOUR EXPERIENCE</p><h2>Interface preferences</h2><p className="section-subtitle">Fine-tune how Monetra feels on this device.</p></div><span className="section-icon"><Activity size={18} /></span></div>
+        <div className="settings-option">
+          <span className="settings-option-icon"><Activity size={18} /></span>
+          <span className="settings-option-copy"><strong>Compact layout</strong><small>Reduce spacing to fit more information on screen.</small></span>
+          <button className="settings-toggle" type="button" role="switch" aria-label="Compact layout" aria-checked={compact} onClick={() => setCompact(value => !value)}><span /></button>
+        </div>
+        <div className="settings-option">
+          <span className="settings-option-icon"><Activity size={18} /></span>
+          <span className="settings-option-copy"><strong>Reduce motion</strong><small>Limit page transitions and interface animations.</small></span>
+          <button className="settings-toggle" type="button" role="switch" aria-label="Reduce motion" aria-checked={reducedMotion} onClick={() => setReducedMotion(value => !value)}><span /></button>
+        </div>
+        <p className="settings-local-note">Appearance and interface preferences are stored locally on this device. They do not change your financial records.</p>
       </section>
       <section className="surface-card settings-section">
         <div className="settings-section-heading"><div><p className="eyebrow">FINANCIAL STRUCTURE</p><h2>How your data is organized</h2><p className="section-subtitle">Your workspaces stay separate, with a dedicated ledger for dues and debts.</p></div><span className="section-icon"><Wallet size={18} /></span></div>

@@ -216,7 +216,7 @@ export default function HomePage() {
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
   const workspaceLabel = (workspace: Workspace) => workspace.type === 'personal' ? 'Personal' : workspace.type === 'family' ? 'Family' : 'Business';
 
-  if (!isLoaded || loading) return <div className="loading-screen"><div className="loading-mark">M</div><p>Preparing your money space</p><span className="loading-line" /></div>;
+  if (!isLoaded || loading) return <div className="loading-screen loading-screen-skeleton"><div className="loading-mark">M</div><p>Preparing your money space</p><div className="loading-skeleton-grid" aria-hidden="true"><span /><span /><span /></div><div className="loading-skeleton-panel" aria-hidden="true"><i /><i /><i /><i /></div><span className="loading-line" /></div>;
 
   const navItems = [
     { key: 'overview' as const, label: 'Overview', icon: Home },
@@ -498,5 +498,5 @@ function TransactionModal({ workspaceId, wallets, categories, initialTransaction
 }
 
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode }) {
-  return <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}><div className="modal-panel"><div className="modal-heading"><div><p className="eyebrow">MONETRA WORKSPACE</p><h2>{title}</h2><p>{subtitle}</p></div><button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button></div>{children}</div></div>;
+  return <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}><div className="modal-panel" role="dialog" aria-modal="true" aria-label={title}><div className="modal-heading"><div><p className="eyebrow">MONETRA WORKSPACE</p><h2>{title}</h2><p>{subtitle}</p></div><button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button></div>{children}</div></div>;
 }

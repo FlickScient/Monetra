@@ -747,3 +747,31 @@ a:focus-visible {
     transition-duration: .01ms !important;
   }
 }
+
+
+/* Modal, menu and loading-state refinement */
+.modal-backdrop { animation: monetra-backdrop-in 180ms ease both; backdrop-filter: blur(7px); }
+.modal-panel { transform-origin: 50% 75%; animation: monetra-modal-in 240ms cubic-bezier(.18,.8,.25,1) both; }
+@keyframes monetra-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes monetra-modal-in { from { opacity: 0; transform: translate3d(0, 14px, 0) scale(.985); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
+select, [role="listbox"] { transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
+.loading-screen-skeleton { width: min(520px, calc(100% - 36px)); }
+.loading-skeleton-grid { display: grid; width: 100%; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0 12px; }
+.loading-skeleton-grid span, .loading-skeleton-panel { border: 1px solid var(--line); border-radius: 13px; background: linear-gradient(100deg, var(--surface-soft) 20%, var(--surface) 38%, var(--surface-soft) 58%); background-size: 220% 100%; animation: monetra-skeleton-shimmer 1.5s ease-in-out infinite; }
+.loading-skeleton-grid span { height: 72px; }
+.loading-skeleton-panel { display: grid; gap: 13px; width: 100%; padding: 18px; }
+.loading-skeleton-panel i { display: block; height: 9px; border-radius: 99px; background: var(--line); }
+.loading-skeleton-panel i:nth-child(2) { width: 76%; }
+.loading-skeleton-panel i:nth-child(3) { width: 88%; }
+.loading-skeleton-panel i:nth-child(4) { width: 55%; }
+@keyframes monetra-skeleton-shimmer { to { background-position: -220% 0; } }
+.settings-local-note { margin: 12px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+html.compact-ui .surface-card { padding-top: 16px; padding-bottom: 16px; }
+html.compact-ui .settings-section { gap: 12px; }
+html.compact-ui .settings-option { padding-top: 10px; padding-bottom: 10px; }
+html.reduced-motion *,
+html.reduced-motion *::before,
+html.reduced-motion *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop, .modal-panel, .loading-skeleton-grid span, .loading-skeleton-panel { animation: none !important; }
+}
