@@ -62,6 +62,58 @@ Set these for the Monetra application:
 
 The existing `GEMINI_API_KEY` can remain in Vercel during the transition. Once the Supabase function is deployed and the new flow is verified, remove it from Vercel if no other route uses it.
 
+## Live project values
+
+- Supabase project ref: `osfitgjwkjhhexgcazwj`
+- Supabase URL: `https://osfitgjwkjhhexgcazwj.supabase.co`
+- Edge Function: `https://osfitgjwkjhhexgcazwj.supabase.co/functions/v1/fiscus-chat`
+- The database migrations and Edge Function have been applied/deployed to this project. The function is deployed with JWT verification enabled.
+
+## Dashboard-only configuration still required
+
+The management connection can deploy migrations and functions, but the remaining provider/environment settings must be completed in the dashboards:
+
+1. **Supabase → Project Settings → API → Exposed schemas:** add `fiscus` (keep existing schemas).
+2. **Supabase → Authentication → Sign In / Providers → Third-party Auth:** add Clerk using the Clerk domain. Use Clerk's native Supabase integration and ensure session tokens include `role: authenticated`.
+3. **Supabase → Edge Functions → Secrets:** set `GEMINI_API_KEY`, `FISCUS_EDGE_SHARED_SECRET`, and `MONETRA_CONTEXT_URL`. The shared secret must be a random value of at least 32 bytes and must exactly match the Vercel value. Do not paste secrets into GitHub or chat.
+4. **Vercel → Project → Settings → Environment Variables:** set `NEXT_PUBLIC_SUPABASE_URL=https://osfitgjwkjhhexgcazwj.supabase.co`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to the project's publishable key, and `FISCUS_EDGE_SHARED_SECRET` to the same value used in Supabase. Apply to the production environment and redeploy after the code is merged.
+5. **Vercel:** set `MONETRA_CONTEXT_URL` in Supabase to the exact production origin of this app (no trailing slash).
+
+## Prompt and runtime operations
+
+Prompt versions and runtime configuration are intentionally private and service-role-only. Manage them through the Supabase SQL editor or a future admin-only interface; do not grant ordinary users access.
+
+Example: switch the active prompt in a transaction (replace the prompt text and version first):
+
+```sql
+begin;
+update fiscus.prompt_versions set status = 'archived' where status = 'active';
+insert into fiscus.prompt_versions (version, prompt, status, created_by, activated_at)
+values ('1.1', 'PASTE THE NEW SYSTEM PROMPT HERE', 'active', 'admin', now());
+commit;
+```
+
+Example: inspect recent usage without exposing prompts or financial context:
+
+```sql
+select created_at, clerk_user_id, workspace_id, model, status,
+       latency_ms, input_tokens, output_tokens, fallback_used, error_code
+from fiscus.ai_usage_logs
+order by created_at desc
+limit 100;
+```
+
+Example: change the model routing:
+
+```sql
+update fiscus.runtime_config
+set primary_model = 'gemini-3.5-flash-lite',
+    fallback_model = 'gemini-3.1-flash-lite',
+    updated_by = 'admin',
+    updated_at = now()
+where id = 'default';
+```
+
 ## Data and privacy
 
 - Conversation and message rows are protected by RLS using the Clerk subject and short-lived verified workspace access.
