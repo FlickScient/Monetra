@@ -499,15 +499,14 @@ function TransactionModal({ workspaceId, wallets, categories, initialTransaction
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const submitLockRef = useRef(false);
-  const submitAndCloseRef = useRef(false);
   const idempotencyRef = useRef<{ signature: string; key: string } | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (submitLockRef.current) return;
     submitLockRef.current = true;
-    const closeAfterSave = submitAndCloseRef.current || !!initialTransaction;
-    submitAndCloseRef.current = false;
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const closeAfterSave = !!initialTransaction || submitter?.value === 'close';
     setBusy(true);
     setError('');
     try {
@@ -605,8 +604,8 @@ function TransactionModal({ workspaceId, wallets, categories, initialTransaction
           {initialTransaction
             ? <button className="primary-btn w-full" type="submit" disabled={busy || !canPost}>{busy ? 'Saving…' : 'Save changes'}</button>
             : <>
-                <button className="secondary-btn transaction-continue-btn" type="submit" disabled={busy || !canPost} onClick={() => { submitAndCloseRef.current = false; }}>{busy ? 'Saving…' : 'Continue'}</button>
-                <button className="primary-btn transaction-save-close-btn" type="submit" disabled={busy || !canPost} onClick={() => { submitAndCloseRef.current = true; }}>{busy ? 'Saving…' : 'Save & Close'}</button>
+                <button className="secondary-btn transaction-continue-btn" type="submit" name="submitIntent" value="continue" disabled={busy || !canPost}>{busy ? 'Saving…' : 'Continue'}</button>
+                <button className="primary-btn transaction-save-close-btn" type="submit" name="submitIntent" value="close" disabled={busy || !canPost}>{busy ? 'Saving…' : 'Save & Close'}</button>
               </>}
         </div>
         {!canPost && <p className="form-hint">Add an active wallet{type === 'transfer' ? ' and a second active wallet for transfers' : ''} before recording activity.</p>}
