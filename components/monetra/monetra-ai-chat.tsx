@@ -1,9 +1,11 @@
 'use client';
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { useAuth } from '@clerk/nextjs';
 import { Bot, ArrowUp, Sparkles, Trash2, ShieldCheck, LoaderCircle, UserRound } from 'lucide-react';
 
 type Message = { role: 'user' | 'model'; content: string };
+type FiscusAction = 'chat' | 'restore' | 'clear';
 
 const suggestions = [
   'Where did most of my money go this month?',
@@ -12,7 +14,43 @@ const suggestions = [
   'Find spending patterns I should pay attention to.',
 ];
 
+async function invokeFiscus(
+  getToken: () => Promise<string | null>,
+  workspaceId: string,
+  action: FiscusAction,
+  payload: Record<string, unknown> = {},
+) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !publishableKey) {
+    throw new Error('Fiscus AI is not connected yet. Supabase frontend settings are missing.');
+  }
+
+  const token = await getToken();
+  if (!token) throw new Error('Your session has expired. Please sign in again.');
+
+  const response = await fetch(supabaseUrl.replace(/\/$/, '') + '/functions/v1/fiscus-chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + token,
+      apikey: publishableKey,
+    },
+    body: JSON.stringify({ ...payload, action, workspaceId }),
+    cache: 'no-store',
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || 'Fiscus could not complete the request.');
+  }
+  return data;
+}
+
 export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
+  const { getToken, isLoaded } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,6 +59,7 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!isLoaded) return;
     let cancelled = false;
 
     async function restoreConversation() {
@@ -44,27 +83,20 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
       if (!cancelled && cachedMessages.length) setMessages(cachedMessages);
 
       try {
-        const response = await fetch('/api/ai/chat', {
-          method: 'GET',
-          headers: { 'x-workspace-id': workspaceId },
-          cache: 'no-store',
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.hasConversation && Array.isArray(data.messages)) {
-            const restored = data.messages.filter((item: Message) =>
-              item &&
-              (item.role === 'user' || item.role === 'model') &&
-              typeof item.content === 'string',
-            ).slice(-40);
-            if (!cancelled) {
-              setMessages(restored);
-              localStorage.setItem('monetra-ai-chat:' + workspaceId, JSON.stringify(restored));
-            }
+        const data = await invokeFiscus(getToken, workspaceId, 'restore');
+        if (data.hasConversation && Array.isArray(data.messages)) {
+          const restored = data.messages.filter((item: Message) =>
+            item &&
+            (item.role === 'user' || item.role === 'model') &&
+            typeof item.content === 'string',
+          ).slice(-40);
+          if (!cancelled) {
+            setMessages(restored);
+            localStorage.setItem('monetra-ai-chat:' + workspaceId, JSON.stringify(restored));
           }
         }
       } catch {
-        // Keep the local cache available if the persistent service is temporarily offline.
+        // Keep the local cache available if Supabase is temporarily unavailable.
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -74,7 +106,7 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [workspaceId]);
+  }, [workspaceId, isLoaded, getToken]);
 
   useEffect(() => {
     if (!ready) return;
@@ -100,13 +132,9 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
     setError('');
     setLoading(true);
     try {
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId },
-        body: JSON.stringify({ messages: nextMessages.slice(-12) }),
+      const data = await invokeFiscus(getToken, workspaceId, 'chat', {
+        messages: nextMessages.slice(-12),
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Fiscus could not respond. Please try again.');
       if (typeof data.answer !== 'string' || !data.answer.trim()) {
         throw new Error('Fiscus returned an empty response.');
       }
@@ -123,12 +151,7 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
     if (loading || !messages.length) return;
     setError('');
     try {
-      const response = await fetch('/api/ai/chat', {
-        method: 'DELETE',
-        headers: { 'x-workspace-id': workspaceId },
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Conversation could not be deleted.');
+      await invokeFiscus(getToken, workspaceId, 'clear');
       setMessages([]);
       localStorage.removeItem('monetra-ai-chat:' + workspaceId);
     } catch (err) {

@@ -3,11 +3,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 type IncomingMessage = { role: "user" | "model"; content: string };
 type RequestBody = {
   action?: "chat" | "restore" | "clear";
-  clerkUserId?: string;
   workspaceId?: string;
-  requestId?: string;
   messages?: unknown;
-  financeContext?: unknown;
 };
 
 const encoder = new TextEncoder();
@@ -42,7 +39,7 @@ function constantTimeEqual(left: string, right: string): boolean {
   return mismatch === 0;
 }
 
-async function verifyHmac(secret: string, timestamp: string, requestId: string, rawBody: string, supplied: string) {
+async function signHmac(secret: string, timestamp: string, requestId: string, rawBody: string) {
   const key = await crypto.subtle.importKey(
     "raw",
     encoder.encode(secret),
@@ -55,7 +52,41 @@ async function verifyHmac(secret: string, timestamp: string, requestId: string, 
     key,
     encoder.encode(timestamp + "." + requestId + "." + rawBody),
   );
-  return constantTimeEqual(toHex(new Uint8Array(signature)), supplied.toLowerCase());
+  return toHex(new Uint8Array(signature));
+}
+
+async function fetchMonetraContext(
+  baseUrl: string,
+  secret: string,
+  clerkUserId: string,
+  workspaceId: string,
+  includeFinancialContext: boolean,
+) {
+  const requestId = crypto.randomUUID();
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const body = JSON.stringify({ clerkUserId, workspaceId, requestId, includeFinancialContext });
+  const signature = await signHmac(secret, timestamp, requestId, body);
+  try {
+    const response = await fetch(baseUrl.replace(/\\/$/, "") + "/api/ai/context", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-fiscus-timestamp": timestamp,
+        "x-fiscus-request-id": requestId,
+        "x-fiscus-signature": signature,
+      },
+      body,
+      signal: AbortSignal.timeout(15000),
+      cache: "no-store",
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.authorized !== true) {
+      return { ok: false as const, status: response.status === 403 ? 403 : 503 };
+    }
+    return { ok: true as const, data };
+  } catch {
+    return { ok: false as const, status: 503 };
+  }
 }
 
 function isUuid(value: string): boolean {
@@ -126,9 +157,10 @@ Deno.serve(async (request: Request) => {
   const publishableKey = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? "";
   const secretKey = Deno.env.get("SUPABASE_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   const hmacSecret = Deno.env.get("FISCUS_EDGE_SHARED_SECRET") ?? "";
+  const monetraContextUrl = Deno.env.get("MONETRA_CONTEXT_URL") ?? "";
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
 
-  if (!supabaseUrl || !publishableKey || !secretKey || hmacSecret.length < 32 || !geminiApiKey) {
+  if (!supabaseUrl || !publishableKey || !secretKey || hmacSecret.length < 32 || !monetraContextUrl || !geminiApiKey) {
     return json({ error: "Fiscus backend is not fully configured.", code: "FISCUS_NOT_CONFIGURED" }, 503);
   }
 
@@ -150,19 +182,6 @@ Deno.serve(async (request: Request) => {
     return json({ error: "A valid Clerk session is required.", code: "UNAUTHORIZED" }, 401);
   }
 
-  const timestamp = request.headers.get("x-fiscus-timestamp") ?? "";
-  const requestId = request.headers.get("x-fiscus-request-id") ?? "";
-  const suppliedSignature = request.headers.get("x-fiscus-signature") ?? "";
-  const timestampNumber = Number(timestamp);
-  if (
-    !Number.isInteger(timestampNumber) ||
-    Math.abs(nowSeconds - timestampNumber) > 60 ||
-    !isUuid(requestId) ||
-    !/^[a-f0-9]{64}$/i.test(suppliedSignature)
-  ) {
-    return json({ error: "Invalid signed request.", code: "INVALID_SIGNATURE" }, 401);
-  }
-
   const rawBody = await request.text();
   if (rawBody.length > 1_500_000) return json({ error: "Request is too large." }, 413);
 
@@ -173,20 +192,18 @@ Deno.serve(async (request: Request) => {
     return json({ error: "Invalid request body." }, 400);
   }
 
-  if (body.requestId !== requestId || typeof body.clerkUserId !== "string" || body.clerkUserId !== claims.sub) {
-    return json({ error: "Request identity mismatch.", code: "IDENTITY_MISMATCH" }, 403);
-  }
   if (typeof body.workspaceId !== "string" || !isUuid(body.workspaceId)) {
     return json({ error: "Invalid workspace.", code: "INVALID_WORKSPACE" }, 400);
   }
 
-  let signatureValid = false;
-  try {
-    signatureValid = await verifyHmac(hmacSecret, timestamp, requestId, rawBody, suppliedSignature);
-  } catch {
-    signatureValid = false;
+  const action = body.action ?? "chat";
+  if (action !== "chat" && action !== "restore" && action !== "clear") {
+    return json({ error: "Unsupported action." }, 400);
   }
-  if (!signatureValid) return json({ error: "Invalid signed request.", code: "INVALID_SIGNATURE" }, 401);
+
+  const clerkUserId = claims.sub;
+  const workspaceId = body.workspaceId;
+  const requestId = crypto.randomUUID();
 
   const serviceClient = createClient(supabaseUrl, secretKey, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -197,13 +214,29 @@ Deno.serve(async (request: Request) => {
   });
   const adminDb = serviceClient.schema("fiscus");
   const userDb = userClient.schema("fiscus");
-  const clerkUserId = body.clerkUserId;
-  const workspaceId = body.workspaceId;
   let requestLogCreated = false;
 
   try {
-    // Vercel has already verified Clerk identity and Monetra workspace ownership.
-    // This short-lived grant lets RLS enforce the exact workspace on user-scoped queries.
+    // The gateway has verified Clerk. Monetra independently checks workspace ownership
+    // before Fiscus reads or writes workspace-scoped data.
+    const contextResult = await fetchMonetraContext(
+      monetraContextUrl,
+      hmacSecret,
+      clerkUserId,
+      workspaceId,
+      action === "chat",
+    );
+    if (!contextResult.ok) {
+      return json({
+        error: contextResult.status === 403
+          ? "You do not have access to this workspace."
+          : "Monetra's financial context service is temporarily unavailable.",
+        code: contextResult.status === 403 ? "WORKSPACE_FORBIDDEN" : "CONTEXT_UNAVAILABLE",
+      }, contextResult.status);
+    }
+    const financeContext = contextResult.data.financeContext ?? {};
+
+    // This short-lived grant lets RLS enforce the workspace Monetra just verified.
     const grantExpiry = new Date(Date.now() + 5 * 60 * 1000).toISOString();
     const { error: grantError } = await adminDb.from("workspace_access").upsert(
       {
@@ -218,8 +251,6 @@ Deno.serve(async (request: Request) => {
       console.error("FISCUS_WORKSPACE_GRANT_FAILED");
       return json({ error: "Workspace authorization could not be established.", code: "WORKSPACE_AUTH_ERROR" }, 503);
     }
-
-    const action = body.action ?? "chat";
 
     if (action === "restore") {
       const { data: conversation, error: conversationError } = await userDb
@@ -280,7 +311,6 @@ Deno.serve(async (request: Request) => {
 
     const incomingMessages = normalizeMessages(body.messages);
     if (!incomingMessages) return json({ error: "Invalid conversation messages." }, 400);
-    const financeContext = body.financeContext ?? {};
     if (JSON.stringify(financeContext).length > 900_000) {
       return json({ error: "Financial context is too large." }, 413);
     }
