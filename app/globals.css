@@ -775,3 +775,84 @@ html.reduced-motion *::after { animation-duration: .01ms !important; animation-i
 @media (prefers-reduced-motion: reduce) {
   .modal-backdrop, .modal-panel, .loading-skeleton-grid span, .loading-skeleton-panel { animation: none !important; }
 }
+
+
+/* Mobile navigation refresh: focused primary tabs, discoverable secondary sections. */
+.mobile-nav { gap: 4px; }
+.mobile-nav button { flex: 1 1 0; min-width: 0; max-width: none; }
+.mobile-nav button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-more-backdrop {
+  position: fixed;
+  inset: 0 0 calc(66px + env(safe-area-inset-bottom)) 0;
+  z-index: 38;
+  border: 0;
+  background: rgba(10, 24, 18, .34);
+  backdrop-filter: blur(2px);
+}
+.mobile-more-panel {
+  position: fixed;
+  right: 12px;
+  bottom: calc(78px + env(safe-area-inset-bottom));
+  left: 12px;
+  z-index: 40;
+  max-height: min(66dvh, 520px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  padding: 17px;
+  color: var(--text);
+  box-shadow: 0 18px 55px rgba(10, 30, 22, .2);
+  animation: monetra-more-in .2s cubic-bezier(.2,.75,.25,1) both;
+}
+.mobile-more-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.mobile-more-panel > header p { margin: 0 0 4px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: 1.1px; }
+.mobile-more-panel > header h2 { margin: 0; color: var(--text); font-size: 19px; font-weight: 800; letter-spacing: -.4px; }
+.mobile-more-panel > header > button { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); color: var(--muted); }
+.mobile-more-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.mobile-more-grid > button { display: grid; grid-template-columns: 36px minmax(0, 1fr) 14px; align-items: center; gap: 8px; min-width: 0; min-height: 60px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); padding: 9px; color: var(--text); text-align: left; }
+.mobile-more-grid > button > span { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 11px; background: var(--green-soft); color: var(--green); }
+.mobile-more-grid > button > b { overflow: hidden; font-size: 10px; font-weight: 750; text-overflow: ellipsis; }
+.mobile-more-grid > button > svg { color: var(--muted); }
+.mobile-more-grid > button.active { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); background: var(--green-soft); }
+.mobile-more-grid > button.active > span { background: var(--surface); }
+.mobile-fiscus-shortcut { display: none; }
+@keyframes monetra-more-in { from { opacity: 0; transform: translateY(9px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (max-width: 720px) {
+  .mobile-nav { z-index: 41; justify-content: stretch; padding: 7px 9px calc(7px + env(safe-area-inset-bottom)); }
+  .mobile-nav button { min-height: 48px; gap: 3px; padding: 4px 3px; font-size: 9px; }
+  .mobile-nav button svg { width: 19px; height: 19px; }
+  .mobile-fiscus-shortcut { position: fixed; right: auto; bottom: calc(84px + env(safe-area-inset-bottom)); left: 15px; z-index: 35; display: grid; width: 50px; height: 50px; place-items: center; overflow: hidden; border: 1px solid #7bd9ae55; border-radius: 17px; background: #12382e; padding: 0; box-shadow: 0 9px 25px #102b2040; }
+  .mobile-fiscus-shortcut.active { outline: 2px solid #7bd9ae; outline-offset: 3px; }
+  .mobile-fiscus-shortcut svg { display: block; }
+  .mobile-more-panel { right: 10px; left: 10px; }
+  .topbar-actions .settings-shortcut { display: grid; }
+}
+@media (max-width: 390px) {
+  .mobile-more-grid { gap: 7px; }
+  .mobile-more-grid > button { grid-template-columns: 32px minmax(0, 1fr) 12px; gap: 6px; padding: 8px 7px; }
+  .mobile-more-grid > button > span { width: 32px; height: 32px; }
+  .mobile-more-grid > button > b { font-size: 9px; }
+  .mobile-fiscus-shortcut { left: 12px; width: 47px; height: 47px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mobile-more-panel { animation: none; }
+}
+
+
+/* Transaction composer: quick multi-entry flow with an explicit finish action. */
+.transaction-entry-form { gap: 13px; }
+.transaction-entry-actions { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 9px; margin-top: 5px; }
+.transaction-entry-actions > button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border-radius: 11px; font-size: 11px; font-weight: 800; transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
+.transaction-entry-actions > button:active { transform: scale(.985); }
+.transaction-continue-btn { border: 1px solid var(--line); background: var(--surface-soft); color: var(--text); }
+.transaction-continue-btn:hover { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); background: var(--green-soft); }
+.transaction-save-close-btn { box-shadow: 0 5px 14px rgba(29, 94, 65, .14); }
+.transaction-entry-actions > button:disabled { cursor: wait; opacity: .65; }
+@media (max-width: 420px) {
+  .transaction-entry-actions { grid-template-columns: 1fr 1.12fr; gap: 7px; }
+  .transaction-entry-actions > button { min-height: 43px; padding-right: 8px; padding-left: 8px; font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .transaction-entry-actions > button { transition: none; }
+}
