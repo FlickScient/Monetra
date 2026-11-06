@@ -184,6 +184,46 @@ export async function POST(req: Request) {
       }
     }
 
+    // Wallet-linked ledger accounts must be unique and use the correct normal
+    // balance type. Their journal balance must equal the wallet's stored balance.
+    const walletLedgerAccounts = new Map<string, Record<string, any>>();
+    const ledgerAccountById = new Map(rows.ledgerAccounts.map((account) => [account.id, account]));
+    for (const account of rows.ledgerAccounts) {
+      if (account.walletId) {
+        const wallet = rows.wallets.find((item) => item.id === account.walletId);
+        const expectedType = wallet?.walletType === 'credit_card' ? 'liability' : 'asset';
+        if (!wallet || account.accountType !== expectedType || walletLedgerAccounts.has(account.walletId)) {
+          return NextResponse.json({ error: 'Backup contains an invalid or duplicate wallet ledger account' }, { status: 400 });
+        }
+        walletLedgerAccounts.set(account.walletId, account);
+      } else if (!['income', 'expense', 'equity'].includes(account.accountType)) {
+        return NextResponse.json({ error: 'Backup contains an invalid system ledger account' }, { status: 400 });
+      }
+    }
+    const walletLedgerBalances = new Map<string, { debit: bigint; credit: bigint }>();
+    for (const entry of rows.ledgerEntries) {
+      const account = ledgerAccountById.get(entry.ledgerAccountId);
+      if (!account) {
+        return NextResponse.json({ error: 'Backup contains a journal entry with a missing ledger account' }, { status: 400 });
+      }
+      if (account.walletId) {
+        const balance = walletLedgerBalances.get(account.walletId) ?? { debit: BigInt(0), credit: BigInt(0) };
+        balance.debit += BigInt(entry.debitMinor);
+        balance.credit += BigInt(entry.creditMinor);
+        walletLedgerBalances.set(account.walletId, balance);
+      }
+    }
+    for (const [walletId, account] of walletLedgerAccounts) {
+      const wallet = rows.wallets.find((item) => item.id === walletId)!;
+      const balance = walletLedgerBalances.get(walletId) ?? { debit: BigInt(0), credit: BigInt(0) };
+      const ledgerBalance = account.accountType === 'liability'
+        ? balance.credit - balance.debit
+        : balance.debit - balance.credit;
+      if (ledgerBalance !== BigInt(wallet.currentBalanceMinor)) {
+        return NextResponse.json({ error: 'Backup wallet balances do not match their ledger history' }, { status: 400 });
+      }
+    }
+
     // Reconcile repayment history against each debt's principal and stored status.
     const paidByDebt = new Map<string, bigint>();
     for (const payment of rows.dueDebtPayments) {
