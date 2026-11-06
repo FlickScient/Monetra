@@ -234,7 +234,7 @@ export default function HomePage() {
     { key: 'settings' as const, label: 'Settings', icon: SettingsIcon },
   ];
   const mobilePrimaryItems = navItems.filter(({ key }) => ['overview', 'wallets', 'transactions'].includes(key));
-  const mobileMoreItems = navItems.filter(({ key }) => ['income-expense', 'reports', 'intelligence', 'due-debt', 'savings', 'tools'].includes(key));
+  const mobileMoreItems = navItems.filter(({ key }) => ['income-expense', 'intelligence', 'due-debt', 'savings', 'tools'].includes(key));
   const isMoreViewActive = mobileMoreItems.some(({ key }) => key === activeView);
 
   return (
@@ -270,6 +270,7 @@ export default function HomePage() {
             </div>
             <button className="icon-btn" onClick={() => setDark((v) => !v)} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
             <button className="icon-btn" aria-label="Help"><CircleHelp size={18} /></button>
+            <button className="icon-btn reports-shortcut" onClick={() => { setShowMoreMenu(false); setActiveView('reports'); }} aria-label="Open reports" title="Reports"><BarChart3 size={18} /></button>
             <button className="icon-btn settings-shortcut" onClick={() => { setShowMoreMenu(false); setActiveView('settings'); }} aria-label="Open settings" title="Settings"><SettingsIcon size={18} /></button>
             <div className="topbar-user"><UserButton afterSignOutUrl="/" /></div>
           </div>
