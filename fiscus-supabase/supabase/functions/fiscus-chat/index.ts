@@ -67,7 +67,7 @@ async function fetchMonetraContext(
   const body = JSON.stringify({ clerkUserId, workspaceId, requestId, includeFinancialContext });
   const signature = await signHmac(secret, timestamp, requestId, body);
   try {
-    const response = await fetch(baseUrl.replace(/\\/$/, "") + "/api/ai/context", {
+    const response = await fetch(baseUrl.replace(/\/+$/, "") + "/api/ai/context", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
