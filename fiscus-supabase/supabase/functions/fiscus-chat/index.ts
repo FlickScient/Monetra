@@ -331,6 +331,20 @@ Deno.serve(async (request: Request) => {
       return json({ error: "Fiscus is temporarily unavailable because its AI configuration is incomplete.", code: "AI_CONFIG_ERROR" }, 503);
     }
 
+    const rateWindowStart = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { count: recentRequestCount, error: rateLimitError } = await adminDb
+      .from("ai_usage_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("clerk_user_id", clerkUserId)
+      .gte("created_at", rateWindowStart);
+    if (rateLimitError) throw new Error("rate_limit_check_failed");
+    if ((recentRequestCount ?? 0) >= 10) {
+      return json({
+        error: "Fiscus has a temporary limit of 10 messages per 10 minutes. Please wait a little and try again.",
+        code: "RATE_LIMITED",
+      }, 429);
+    }
+
     const { data: preferences } = await userDb
       .from("user_preferences")
       .select("memory_enabled,locale,currency,response_style")
@@ -466,7 +480,7 @@ Deno.serve(async (request: Request) => {
         Number(config.request_timeout_ms),
       );
 
-      const fallbackStatuses = [429, 500, 502, 503, 504];
+      const fallbackStatuses = [404, 429, 500, 502, 503, 504];
       if (
         !providerResponse.ok &&
         fallbackStatuses.includes(providerResponse.status) &&
