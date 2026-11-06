@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
-import { getOrganizationContext, canWriteOrganization } from '@/lib/organization';
+import { getWorkspaceContext } from '@/lib/workspace';
+import { recordFinanceAudit } from '@/lib/audit';
 import { db } from '@/db';
 import { wallets, transactions } from '@/db/schema';
-import { eq, sql, and, gte } from 'drizzle-orm';
+import { postFinancialJournal } from '@/lib/ledger';
+import { isUuid } from '@/lib/validation';
+import { eq, sql, and, gte, inArray, asc } from 'drizzle-orm';
 
 export async function POST(req: Request) {
-  const context = await getOrganizationContext(req);
+  const context = await getWorkspaceContext(req);
   if (!context.ok) return NextResponse.json({ error: context.error }, { status: context.status });
-  if (!canWriteOrganization(context.role)) return NextResponse.json({ error: 'Read-only organization access' }, { status: 403 });
 
   let body: Record<string, unknown>;
   try {
@@ -19,12 +21,12 @@ export async function POST(req: Request) {
   const { walletId, destinationWalletId, amountMinor, description, occurredAt } = body;
 
   if (
-    typeof walletId !== 'string' ||
-    typeof destinationWalletId !== 'string' ||
+    !isUuid(walletId) ||
+    !isUuid(destinationWalletId) ||
     typeof amountMinor !== 'number' ||
     !Number.isSafeInteger(amountMinor) ||
     amountMinor <= 0 ||
-    (description !== undefined && typeof description !== 'string')
+    (description !== undefined && (typeof description !== 'string' || description.trim().length > 500))
   ) {
     return NextResponse.json({ error: 'Invalid or missing transfer fields' }, { status: 400 });
   }
@@ -33,6 +35,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Cannot transfer to same wallet' }, { status: 400 });
   }
 
+  const idempotencyKey = req.headers.get('idempotency-key')?.trim() || (typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '');
+  if (idempotencyKey && (idempotencyKey.length < 8 || idempotencyKey.length > 128)) {
+    return NextResponse.json({ error: 'Invalid idempotency key' }, { status: 400 });
+  }
+
+  const normalizedDescription = typeof description === 'string' && description.trim() ? description.trim() : 'Transfer';
   const parsedDate = occurredAt === undefined ? new Date() : new Date(String(occurredAt));
   if (Number.isNaN(parsedDate.getTime())) {
     return NextResponse.json({ error: 'Invalid occurredAt date' }, { status: 400 });
@@ -40,12 +48,33 @@ export async function POST(req: Request) {
 
   try {
     const result = await db.transaction(async (tx) => {
-      const fromWallet = await tx.query.wallets.findFirst({
-        where: and(eq(wallets.id, walletId), eq(wallets.organizationId, context.organizationId)),
-      });
-      const toWallet = await tx.query.wallets.findFirst({
-        where: and(eq(wallets.id, destinationWalletId), eq(wallets.organizationId, context.organizationId)),
-      });
+      if (idempotencyKey) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${context.workspaceId}), hashtext(${idempotencyKey}))`);
+        const [prior] = await tx.select().from(transactions)
+          .where(and(eq(transactions.workspaceId, context.workspaceId), eq(transactions.userId, context.userId), eq(transactions.idempotencyKey, idempotencyKey)))
+          .limit(1);
+        if (prior) {
+          const sameRequest = prior.transactionType === 'transfer' && prior.walletId === walletId &&
+            prior.destinationWalletId === destinationWalletId && Number(prior.amountMinor) === amountMinor &&
+            prior.description === normalizedDescription &&
+            (occurredAt === undefined || prior.occurredAt.getTime() === parsedDate.getTime());
+          if (!sameRequest) throw new Error('IDEMPOTENCY_KEY_REUSED');
+          return { transaction: prior, replayed: true };
+        }
+      }
+
+      // Lock both wallets in a deterministic order. Opposite-direction transfers
+      // therefore cannot deadlock by each locking its source before its destination.
+      const lockedWallets = await tx.select().from(wallets)
+        .where(and(
+          eq(wallets.workspaceId, context.workspaceId),
+          eq(wallets.userId, context.userId),
+          inArray(wallets.id, [walletId, destinationWalletId]),
+        ))
+        .orderBy(asc(wallets.id))
+        .for('update');
+      const fromWallet = lockedWallets.find((wallet) => wallet.id === walletId);
+      const toWallet = lockedWallets.find((wallet) => wallet.id === destinationWalletId);
 
       if (
         !fromWallet ||
@@ -55,12 +84,23 @@ export async function POST(req: Request) {
       ) {
         throw new Error('WALLET_NOT_AVAILABLE');
       }
+      if (!Number.isSafeInteger(fromWallet.currentBalanceMinor) || !Number.isSafeInteger(toWallet.currentBalanceMinor)) {
+        throw new Error('LEDGER_BALANCE_OUT_OF_RANGE');
+      }
 
       if (fromWallet.walletType === 'credit_card') {
         throw new Error('INVALID_SOURCE_WALLET');
       }
       if (fromWallet.currency !== toWallet.currency) {
         throw new Error('CURRENCY_MISMATCH');
+      }
+
+      if (toWallet.walletType === 'credit_card' && amountMinor > Number(toWallet.currentBalanceMinor)) {
+        throw new Error('PAYMENT_EXCEEDS_CARD_BALANCE');
+      }
+      const destinationDelta = toWallet.walletType === 'credit_card' ? -amountMinor : amountMinor;
+      if (!Number.isSafeInteger(Number(toWallet.currentBalanceMinor) + destinationDelta)) {
+        throw new Error('BALANCE_LIMIT_EXCEEDED');
       }
 
       // Keep the balance check inside the UPDATE to prevent concurrent overspending.
@@ -73,7 +113,8 @@ export async function POST(req: Request) {
         .where(
           and(
             eq(wallets.id, walletId),
-            eq(wallets.organizationId, context.organizationId),
+            eq(wallets.workspaceId, context.workspaceId),
+            eq(wallets.userId, context.userId),
             gte(wallets.currentBalanceMinor, amountMinor),
           ),
         )
@@ -81,40 +122,51 @@ export async function POST(req: Request) {
 
       if (!updatedSource) throw new Error('INSUFFICIENT_FUNDS');
 
-      // A payment into a credit card reduces its outstanding balance.
-      const destinationDelta =
-        toWallet.walletType === 'credit_card' ? -amountMinor : amountMinor;
-
-      await tx
+      const [updatedDestination] = await tx
         .update(wallets)
         .set({
           currentBalanceMinor: sql`${wallets.currentBalanceMinor} + ${destinationDelta}`,
           updatedAt: new Date(),
         })
-        .where(and(eq(wallets.id, destinationWalletId), eq(wallets.organizationId, context.organizationId)));
+        .where(and(
+          eq(wallets.id, destinationWalletId),
+          eq(wallets.workspaceId, context.workspaceId),
+          eq(wallets.userId, context.userId),
+          eq(wallets.status, 'active'),
+        ))
+        .returning({ id: wallets.id });
+
+      if (!updatedDestination) throw new Error('WALLET_NOT_AVAILABLE');
 
       const [txn] = await tx
         .insert(transactions)
         .values({
           userId: context.userId,
-          organizationId: context.organizationId,
+          workspaceId: context.workspaceId,
           transactionType: 'transfer',
           walletId,
           destinationWalletId,
           amountMinor,
-          description: typeof description === 'string' && description.trim()
-            ? description.trim()
-            : 'Transfer',
+          idempotencyKey: idempotencyKey || null,
+          description: normalizedDescription,
           occurredAt: parsedDate,
         })
         .returning();
 
-      return { transaction: txn };
+      await postFinancialJournal(tx, context, txn, fromWallet, toWallet);
+      return { transaction: txn, replayed: false };
     });
 
-    return NextResponse.json(result, { status: 201 });
+    if (!result.replayed) await recordFinanceAudit(context, { entityType: 'transfer', entityId: result.transaction.id, action: 'created', summary: 'Transferred ৳' + (amountMinor / 100).toFixed(2) + ': ' + normalizedDescription });
+    return NextResponse.json(result, { status: result.replayed ? 200 : 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
+    if (code === 'IDEMPOTENCY_KEY_REUSED') {
+      return NextResponse.json({ error: 'This idempotency key was already used for a different transfer' }, { status: 409 });
+    }
+    if (code === 'LEDGER_BALANCE_OUT_OF_RANGE' || code === 'LEDGER_ACCOUNT_TYPE_MISMATCH') {
+      return NextResponse.json({ error: 'Wallet ledger needs reconciliation before this transfer can be posted' }, { status: 409 });
+    }
     if (code === 'WALLET_NOT_AVAILABLE') {
       return NextResponse.json({ error: 'Wallet not found or inactive' }, { status: 404 });
     }
@@ -123,6 +175,12 @@ export async function POST(req: Request) {
     }
     if (code === 'CURRENCY_MISMATCH') {
       return NextResponse.json({ error: 'Transfers require wallets with the same currency' }, { status: 400 });
+    }
+    if (code === 'PAYMENT_EXCEEDS_CARD_BALANCE') {
+      return NextResponse.json({ error: 'Payment cannot exceed the card outstanding balance' }, { status: 400 });
+    }
+    if (code === 'BALANCE_LIMIT_EXCEEDED') {
+      return NextResponse.json({ error: 'This balance exceeds the supported safe integer range' }, { status: 400 });
     }
     if (code === 'INSUFFICIENT_FUNDS') {
       return NextResponse.json({ error: 'Insufficient funds' }, { status: 400 });

@@ -11,7 +11,7 @@
 /out/
 /build
 
-# Misc
+#Misc
 .DS_Store
 *.pem
 
@@ -31,3 +31,5 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Deployment sync marker
