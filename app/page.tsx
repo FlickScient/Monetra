@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarDays, ArrowDownLeft, ArrowUpRight, BarChart3, Bell, ChevronRight, CreditCard,
-  Home, Moon, Plus, Receipt, Search, Sun, WalletCards, X, ArrowRight,
+  Home, Moon, Plus, Receipt, Search, Sun, WalletCards, X, ArrowRight, MoreHorizontal,
   CircleHelp, Sparkles, TrendingUp, ShieldCheck, Menu, Landmark, Activity,
   HandCoins, PiggyBank, Settings as SettingsIcon, Pencil, Trash2, Download,
 } from 'lucide-react';
@@ -52,6 +52,7 @@ export default function HomePage() {
   const [showWalletForm, setShowWalletForm] = useState(false);
   const [editingWallet, setEditingWallet] = useState<Wallet | null>(null);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [dark, setDark] = useState(false);
   const [notice, setNotice] = useState('');
@@ -232,6 +233,9 @@ export default function HomePage() {
     { key: 'vault' as const, label: 'Fiscus A.I.', icon: FiscusMark },
     { key: 'settings' as const, label: 'Settings', icon: SettingsIcon },
   ];
+  const mobilePrimaryItems = navItems.filter(({ key }) => ['overview', 'wallets', 'transactions'].includes(key));
+  const mobileMoreItems = navItems.filter(({ key }) => ['income-expense', 'reports', 'intelligence', 'due-debt', 'savings', 'tools'].includes(key));
+  const isMoreViewActive = mobileMoreItems.some(({ key }) => key === activeView);
 
   return (
     <main className="app-shell">
@@ -266,6 +270,7 @@ export default function HomePage() {
             </div>
             <button className="icon-btn" onClick={() => setDark((v) => !v)} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
             <button className="icon-btn" aria-label="Help"><CircleHelp size={18} /></button>
+            <button className="icon-btn settings-shortcut" onClick={() => { setShowMoreMenu(false); setActiveView('settings'); }} aria-label="Open settings" title="Settings"><SettingsIcon size={18} /></button>
             <div className="topbar-user"><UserButton afterSignOutUrl="/" /></div>
           </div>
         </header>
@@ -341,7 +346,20 @@ export default function HomePage() {
         </div>
       </div>
 
-      <nav className="mobile-nav">{navItems.map(({ key, label, icon: Icon }) => <button key={key} className={activeView === key ? 'active' : ''} onClick={() => setActiveView(key)}><Icon size={20} /><span>{label}</span></button>)}</nav>
+      <nav className="mobile-nav" aria-label="Primary navigation">
+        {mobilePrimaryItems.map(({ key, label, icon: Icon }) => <button key={key} type="button" className={activeView === key ? 'active' : ''} onClick={() => { setShowMoreMenu(false); setActiveView(key); }}><Icon size={20} /><span>{key === 'overview' ? 'Home' : key === 'transactions' ? 'Activity' : label}</span></button>)}
+        <button type="button" className={showMoreMenu || isMoreViewActive ? 'active' : ''} onClick={() => setShowMoreMenu((open) => !open)} aria-expanded={showMoreMenu} aria-controls="mobile-more-panel"><MoreHorizontal size={20} /><span>More</span></button>
+      </nav>
+      {showMoreMenu && <>
+        <button className="mobile-more-backdrop" type="button" aria-label="Close navigation menu" onClick={() => setShowMoreMenu(false)} />
+        <section className="mobile-more-panel" id="mobile-more-panel" aria-label="More Monetra sections">
+          <header><div><p>MORE IN MONETRA</p><h2>Explore</h2></div><button type="button" onClick={() => setShowMoreMenu(false)} aria-label="Close menu"><X size={19} /></button></header>
+          <div className="mobile-more-grid">
+            {mobileMoreItems.map(({ key, label, icon: Icon }) => <button key={key} type="button" className={activeView === key ? 'active' : ''} onClick={() => { setActiveView(key); setShowMoreMenu(false); }}><span><Icon size={19} /></span><b>{label}</b><ChevronRight size={15} /></button>)}
+          </div>
+        </section>
+      </>}
+      <button className={`mobile-fiscus-shortcut ${activeView === 'vault' ? 'active' : ''}`} type="button" onClick={() => { setShowMoreMenu(false); setActiveView('vault'); }} aria-label="Open Fiscus AI" title="Fiscus AI"><FiscusMark size={48} /></button>
       {showWalletForm && <WalletModal workspaceId={activeWorkspaceId} onClose={() => setShowWalletForm(false)} onSaved={(message) => { setShowWalletForm(false); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       {editingWallet && <WalletModal workspaceId={activeWorkspaceId} initialWallet={editingWallet} onClose={() => setEditingWallet(null)} onSaved={(message) => { setEditingWallet(null); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       {showTransactionForm && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={(message) => { setShowTransactionForm(false); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
