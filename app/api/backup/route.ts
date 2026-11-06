@@ -191,10 +191,12 @@ export async function POST(req: Request) {
       total.count += 1;
       journalTotals.set(entry.transactionId, total);
     }
-    for (const total of journalTotals.values()) {
-      if (total.debit !== total.credit || total.count < 2) {
-        return NextResponse.json({ error: 'Backup contains an unbalanced or incomplete ledger journal' }, { status: 400 });
-      }
+    let invalidJournal = false;
+    journalTotals.forEach((total) => {
+      if (total.debit !== total.credit || total.count < 2) invalidJournal = true;
+    });
+    if (invalidJournal) {
+      return NextResponse.json({ error: 'Backup contains an unbalanced or incomplete ledger journal' }, { status: 400 });
     }
 
     // Wallet-linked ledger accounts must be unique and use the correct normal
@@ -226,15 +228,17 @@ export async function POST(req: Request) {
         walletLedgerBalances.set(account.walletId, balance);
       }
     }
-    for (const [walletId, account] of walletLedgerAccounts) {
+    let invalidWalletLedgerBalance = false;
+    walletLedgerAccounts.forEach((account, walletId) => {
       const wallet = rows.wallets.find((item) => item.id === walletId)!;
       const balance = walletLedgerBalances.get(walletId) ?? { debit: BigInt(0), credit: BigInt(0) };
       const ledgerBalance = account.accountType === 'liability'
         ? balance.credit - balance.debit
         : balance.debit - balance.credit;
-      if (ledgerBalance !== BigInt(wallet.currentBalanceMinor)) {
-        return NextResponse.json({ error: 'Backup wallet balances do not match their ledger history' }, { status: 400 });
-      }
+      if (ledgerBalance !== BigInt(wallet.currentBalanceMinor)) invalidWalletLedgerBalance = true;
+    });
+    if (invalidWalletLedgerBalance) {
+      return NextResponse.json({ error: 'Backup wallet balances do not match their ledger history' }, { status: 400 });
     }
 
     // Reconcile repayment history against each debt's principal and stored status.
@@ -282,23 +286,31 @@ export async function POST(req: Request) {
       const change = BigInt(event.amountMinor) * (event.action === 'allocate' ? BigInt(1) : BigInt(-1));
       eventTotalsByPair.set(pair, (eventTotalsByPair.get(pair) ?? BigInt(0)) + change);
     }
-    for (const [goalId, total] of allocationTotalsByGoal) {
+    let allocationsExceedGoal = false;
+    allocationTotalsByGoal.forEach((total, goalId) => {
       const goal = goalById.get(goalId)!;
-      if (total > BigInt(goal.targetMinor)) {
-        return NextResponse.json({ error: 'Backup contains savings allocations above a goal target' }, { status: 400 });
-      }
+      if (total > BigInt(goal.targetMinor)) allocationsExceedGoal = true;
+    });
+    if (allocationsExceedGoal) {
+      return NextResponse.json({ error: 'Backup contains savings allocations above a goal target' }, { status: 400 });
     }
-    for (const [walletId, total] of allocationTotalsByWallet) {
+    let allocationsExceedWallet = false;
+    allocationTotalsByWallet.forEach((total, walletId) => {
       const wallet = walletById.get(walletId)!;
-      if (total > BigInt(wallet.currentBalanceMinor)) {
-        return NextResponse.json({ error: 'Backup contains savings allocations above a wallet balance' }, { status: 400 });
-      }
+      if (total > BigInt(wallet.currentBalanceMinor)) allocationsExceedWallet = true;
+    });
+    if (allocationsExceedWallet) {
+      return NextResponse.json({ error: 'Backup contains savings allocations above a wallet balance' }, { status: 400 });
     }
-    const allAllocationPairs = new Set([...allocationByPair.keys(), ...eventTotalsByPair.keys()]);
-    for (const pair of allAllocationPairs) {
-      if ((allocationByPair.get(pair) ?? BigInt(0)) !== (eventTotalsByPair.get(pair) ?? BigInt(0))) {
-        return NextResponse.json({ error: 'Backup savings allocation history does not match current allocations' }, { status: 400 });
-      }
+    let allocationHistoryMismatch = false;
+    allocationByPair.forEach((amount, pair) => {
+      if (amount !== (eventTotalsByPair.get(pair) ?? BigInt(0))) allocationHistoryMismatch = true;
+    });
+    eventTotalsByPair.forEach((amount, pair) => {
+      if (amount !== (allocationByPair.get(pair) ?? BigInt(0))) allocationHistoryMismatch = true;
+    });
+    if (allocationHistoryMismatch) {
+      return NextResponse.json({ error: 'Backup savings allocation history does not match current allocations' }, { status: 400 });
     }
 
     const result = await db.transaction(async (tx) => {
