@@ -90,7 +90,7 @@ export function FiscusView({ workspaces, activeWorkspaceId }: { workspaces: Fisc
   );
 }
 
-function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onChanged: () => void }) {
+function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onChanged: (categories: CategoryRow[]) => void }) {
   type CategoryRow = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
   const [items, setItems] = useState<CategoryRow[]>([]);
   const [name, setName] = useState('');
@@ -119,7 +119,7 @@ function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onCh
       const response = await fetch('/api/categories', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ name, categoryType, color }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not create category.');
-      setItems(current => [...current, data]); setName(''); setNotice('Category created.'); onChanged();
+      setItems(current => [...current, data]); setName(''); setNotice('Category created.'); onChanged([...items, data]);
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not create category.'); }
     finally { setBusy(false); }
   }
@@ -131,7 +131,7 @@ function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onCh
       const response = await fetch('/api/categories/' + item.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ name: editName, categoryType: editType, color: editColor }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not update category.');
-      setItems(current => current.map(row => row.id === item.id ? data : row)); setEditing(''); setNotice('Category updated.'); onChanged();
+      setItems(current => current.map(row => row.id === item.id ? data : row)); setEditing(''); setNotice('Category updated.'); onChanged(items.map(row => row.id === item.id ? data : row));
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not update category.'); }
     finally { setBusy(false); }
   }
@@ -142,7 +142,7 @@ function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onCh
       const response = await fetch('/api/categories/' + item.id, { method: 'DELETE', headers: { 'x-workspace-id': workspaceId } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not delete category.');
-      setItems(current => current.filter(row => row.id !== item.id)); setNotice('Category deleted. Existing transactions were kept.'); onChanged();
+      setItems(current => current.filter(row => row.id !== item.id)); setNotice('Category deleted. Existing transactions were kept.'); onChanged(items.filter(row => row.id !== item.id));
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not delete category.'); }
     finally { setBusy(false); }
   }

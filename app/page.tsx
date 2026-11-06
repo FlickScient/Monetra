@@ -337,7 +337,7 @@ export default function HomePage() {
           {activeView === 'savings' && <SavingsGoalsView workspaceId={activeWorkspaceId} wallets={wallets} />}
           {activeView === 'tools' && <FinanceOperationsView key={activeWorkspaceId} workspaceId={activeWorkspaceId} categories={categories} />}
           {activeView === 'vault' && <FiscusView workspaces={workspaces.map(({ id, type }) => ({ id, type }))} activeWorkspaceId={activeWorkspaceId} />}
-          {activeView === 'settings' && <SettingsView dark={dark} workspaceId={activeWorkspaceId} onCategoriesChanged={() => void loadFinanceData()} onToggleTheme={() => setDark((current) => !current)} />}
+          {activeView === 'settings' && <SettingsView dark={dark} workspaceId={activeWorkspaceId} onCategoriesChanged={(nextCategories) => setCategories(nextCategories)} onToggleTheme={() => setDark((current) => !current)} />}
         </div>
       </div>
 
