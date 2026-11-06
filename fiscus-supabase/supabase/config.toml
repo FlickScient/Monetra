@@ -1,0 +1,10 @@
+project_id = "monetra-fiscus-ai"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public", "fiscus"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[functions.fiscus-chat]
+verify_jwt = true
