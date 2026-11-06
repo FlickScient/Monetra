@@ -178,7 +178,7 @@ function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onCh
   </section>;
 }
 
-export function SettingsView({ dark, workspaceId, onCategoriesChanged, onToggleTheme }: { dark: boolean; workspaceId: string; onCategoriesChanged: () => void; onToggleTheme: () => void }) {
+export function SettingsView({ dark, workspaceId, onCategoriesChanged, onToggleTheme }: { dark: boolean; workspaceId: string; onCategoriesChanged: (categories: { id: string; name: string; categoryType: 'income' | 'expense'; color: string }[]) => void; onToggleTheme: () => void }) {
   const [compact, setCompact] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
 
