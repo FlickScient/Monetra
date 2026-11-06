@@ -363,7 +363,7 @@ export default function HomePage() {
       <button className={`mobile-fiscus-shortcut ${activeView === 'vault' ? 'active' : ''}`} type="button" onClick={() => { setShowMoreMenu(false); setActiveView('vault'); }} aria-label="Open Fiscus AI" title="Fiscus AI"><FiscusMark size={48} /></button>
       {showWalletForm && <WalletModal workspaceId={activeWorkspaceId} onClose={() => setShowWalletForm(false)} onSaved={(message) => { setShowWalletForm(false); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       {editingWallet && <WalletModal workspaceId={activeWorkspaceId} initialWallet={editingWallet} onClose={() => setEditingWallet(null)} onSaved={(message) => { setEditingWallet(null); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
-      {showTransactionForm && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={(message) => { setShowTransactionForm(false); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
+      {showTransactionForm && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={(message) => { setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       {editingTransaction && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} initialTransaction={editingTransaction} onClose={() => setEditingTransaction(null)} onSaved={(message) => { setEditingTransaction(null); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       <FloatingCalculator />
     </main>
@@ -486,36 +486,134 @@ function WalletModal({ workspaceId, initialWallet, onClose, onSaved }: { workspa
 }
 
 function TransactionModal({ workspaceId, wallets, categories, initialTransaction, onClose, onSaved }: { workspaceId: string; wallets: Wallet[]; categories: Category[]; initialTransaction?: Transaction; onClose: () => void; onSaved: (message: string) => void }) {
-  const [type, setType] = useState<TransactionType>(initialTransaction?.transactionType || 'expense'); const [wallet, setWallet] = useState(initialTransaction?.walletId || wallets.find(item => item.status === 'active')?.id || wallets[0]?.id || ''); const [destination, setDestination] = useState(initialTransaction?.destinationWalletId || wallets.find(item => item.id !== initialTransaction?.walletId && item.status === 'active')?.id || ''); const [category, setCategory] = useState(initialTransaction?.categoryId || categories.find((c) => c.categoryType === (initialTransaction?.transactionType === 'income' ? 'income' : 'expense'))?.id || ''); const [amount, setAmount] = useState(initialTransaction ? (Number(initialTransaction.amountMinor) / 100).toFixed(2) : ''); const [description, setDescription] = useState(initialTransaction?.description || ''); const [date, setDate] = useState(() => { const d = initialTransaction ? new Date(initialTransaction.occurredAt) : new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0,16); }); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const [type, setType] = useState<TransactionType>(initialTransaction?.transactionType || 'expense');
+  const [wallet, setWallet] = useState(initialTransaction?.walletId || wallets.find(item => item.status === 'active')?.id || wallets[0]?.id || '');
+  const [destination, setDestination] = useState(initialTransaction?.destinationWalletId || wallets.find(item => item.id !== initialTransaction?.walletId && item.status === 'active')?.id || '');
+  const [category, setCategory] = useState(initialTransaction?.categoryId || categories.find((c) => c.categoryType === (initialTransaction?.transactionType === 'income' ? 'income' : 'expense'))?.id || '');
+  const [amount, setAmount] = useState(initialTransaction ? (Number(initialTransaction.amountMinor) / 100).toFixed(2) : '');
+  const [description, setDescription] = useState(initialTransaction?.description || '');
+  const [date, setDate] = useState(() => {
+    const d = initialTransaction ? new Date(initialTransaction.occurredAt) : new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const submitLockRef = useRef(false);
+  const submitAndCloseRef = useRef(false);
   const idempotencyRef = useRef<{ signature: string; key: string } | null>(null);
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (submitLockRef.current) return;
-    submitLockRef.current = true; setBusy(true); setError('');
-    let savedSuccessfully = false;
+    submitLockRef.current = true;
+    const closeAfterSave = submitAndCloseRef.current || !!initialTransaction;
+    submitAndCloseRef.current = false;
+    setBusy(true);
+    setError('');
     try {
       const amountMinor = Math.round(Number(amount) * 100);
       const endpoint = initialTransaction ? '/api/transactions/' + initialTransaction.id : (type === 'transfer' ? '/api/transfers' : '/api/transactions');
-      const body = type === 'transfer' ? { walletId: wallet, destinationWalletId: destination, transactionType: 'transfer', amountMinor, description, occurredAt: new Date(date).toISOString() } : { walletId: wallet, transactionType: type, categoryId: category || null, amountMinor, description, occurredAt: new Date(date).toISOString() };
+      const body = type === 'transfer'
+        ? { walletId: wallet, destinationWalletId: destination, transactionType: 'transfer', amountMinor, description, occurredAt: new Date(date).toISOString() }
+        : { walletId: wallet, transactionType: type, categoryId: category || null, amountMinor, description, occurredAt: new Date(date).toISOString() };
       const signature = JSON.stringify({ endpoint, workspaceId, body });
       const idempotencyKey = idempotencyRef.current?.signature === signature
         ? idempotencyRef.current.key
         : crypto.randomUUID();
       idempotencyRef.current = { signature, key: idempotencyKey };
-      const res = await fetch(endpoint, { method: initialTransaction ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, ...(initialTransaction ? {} : { 'idempotency-key': idempotencyKey }) }, body: JSON.stringify(body) });
-      if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not post this activity. Check the details and try again.'); }
-      else {
-        idempotencyRef.current = null;
-        savedSuccessfully = true;
-        onSaved(initialTransaction ? 'Transaction updated. Wallet balances and ledger are syncing.' : 'Activity posted. Your balances are syncing.');
+      const res = await fetch(endpoint, {
+        method: initialTransaction ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, ...(initialTransaction ? {} : { 'idempotency-key': idempotencyKey }) },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || 'Could not post this activity. Check the details and try again.');
+        return;
       }
-    } catch { setError('Connection issue. Please try again.'); }
-    finally { if (!savedSuccessfully) submitLockRef.current = false; setBusy(false); }
-  }
-  return <Modal title={initialTransaction ? 'Edit transaction' : 'Record activity'} subtitle={initialTransaction ? 'Changes will be reflected in your wallet balances and ledger.' : 'Keep your money movement up to date.'} onClose={onClose}><form className="modal-form" onSubmit={submit}><label className="field-label">Activity type<select className="field" value={type} onChange={(e) => { const nextType = e.target.value as TransactionType; setType(nextType); if (nextType !== 'transfer') setCategory(categories.find((item) => item.categoryType === nextType)?.id || ''); }}>{(['income', 'expense', 'transfer'] as TransactionType[]).map((value) => <option key={value} value={value} disabled={value === 'transfer' && wallets.filter(wallet => wallet.status === 'active').length < 2}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label><label className="field-label">{type === 'transfer' ? 'From wallet' : 'Wallet'}<select className="field" value={wallet} onChange={(e) => { const nextWallet = e.target.value; setWallet(nextWallet); if (nextWallet === destination) setDestination(wallets.find(item => item.id !== nextWallet && item.status === 'active')?.id || ''); }} required>{wallets.filter((item) => item.status === 'active' || item.id === wallet).map((item) => <option key={item.id} value={item.id}>{item.name}{item.status !== 'active' ? ' (archived)' : ''}</option>)}</select></label>{type === 'transfer' && <label className="field-label">To wallet<select className="field" value={destination} onChange={(e) => setDestination(e.target.value)} required>{wallets.filter((item) => item.id !== wallet && (item.status === 'active' || item.id === destination)).map((item) => <option key={item.id} value={item.id}>{item.name}{item.status !== 'active' ? ' (archived)' : ''}</option>)}</select></label>}{type !== 'transfer' && <label className="field-label">Category<select className="field" value={category} onChange={(e) => setCategory(e.target.value)}><option value="">Uncategorized</option>{categories.filter((item) => item.categoryType === (type === 'income' ? 'income' : 'expense')).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<label className="field-label">Amount<input className="field" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required /></label><label className="field-label">Description<input className="field" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What was this for?" required /></label><label className="field-label">Date and time<input className="field" type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} required /></label>{error && <p className="form-error">{error}</p>}<button className="primary-btn w-full" disabled={busy || !wallets.some(item => item.status === 'active') || (type === 'transfer' && wallets.filter(item => item.status === 'active').length < 2)}>{busy ? 'Saving...' : initialTransaction ? 'Save changes' : 'Post activity'}</button></form></Modal>;
-}
 
+      idempotencyRef.current = null;
+      onSaved(initialTransaction
+        ? 'Transaction updated. Wallet balances and ledger are syncing.'
+        : 'Activity posted. Your balances are syncing.');
+
+      if (closeAfterSave) {
+        onClose();
+      } else {
+        // Keep the composer open for the next entry while retaining the useful context.
+        setAmount('');
+        setDescription('');
+        setCategory(categories.find((item) => item.categoryType === type)?.id || '');
+        const now = new Date();
+        setDate(new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+        setError('');
+      }
+    } catch {
+      setError('Connection issue. Please try again.');
+    } finally {
+      submitLockRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  const canPost = wallets.some(item => item.status === 'active')
+    && (type !== 'transfer' || wallets.filter(item => item.status === 'active').length >= 2);
+
+  return (
+    <Modal title={initialTransaction ? 'Edit transaction' : 'Record activity'} subtitle={initialTransaction ? 'Changes will be reflected in your wallet balances and ledger.' : 'Add one activity at a time. Continue to record another, or save and close when finished.'} onClose={onClose}>
+      <form className="modal-form transaction-entry-form" onSubmit={submit}>
+        <label className="field-label">Activity type
+          <select className="field" value={type} onChange={(e) => {
+            const nextType = e.target.value as TransactionType;
+            setType(nextType);
+            if (nextType !== 'transfer') setCategory(categories.find((item) => item.categoryType === nextType)?.id || '');
+          }}>
+            {(['income', 'expense', 'transfer'] as TransactionType[]).map((value) => <option key={value} value={value} disabled={value === 'transfer' && wallets.filter(wallet => wallet.status === 'active').length < 2}>{value[0].toUpperCase() + value.slice(1)}</option>)}
+          </select>
+        </label>
+        <label className="field-label">{type === 'transfer' ? 'From wallet' : 'Wallet'}
+          <select className="field" value={wallet} onChange={(e) => {
+            const nextWallet = e.target.value;
+            setWallet(nextWallet);
+            if (nextWallet === destination) setDestination(wallets.find(item => item.id !== nextWallet && item.status === 'active')?.id || '');
+          }} required>
+            {wallets.filter((item) => item.status === 'active' || item.id === wallet).map((item) => <option key={item.id} value={item.id}>{item.name}{item.status !== 'active' ? ' (archived)' : ''}</option>)}
+          </select>
+        </label>
+        {type === 'transfer' && <label className="field-label">To wallet
+          <select className="field" value={destination} onChange={(e) => setDestination(e.target.value)} required>
+            {wallets.filter((item) => item.id !== wallet && (item.status === 'active' || item.id === destination)).map((item) => <option key={item.id} value={item.id}>{item.name}{item.status !== 'active' ? ' (archived)' : ''}</option>)}
+          </select>
+        </label>}
+        {type !== 'transfer' && <label className="field-label">Category
+          <select className="field" value={category} onChange={(e) => setCategory(e.target.value)}>
+            <option value="">Uncategorized</option>
+            {categories.filter((item) => item.categoryType === (type === 'income' ? 'income' : 'expense')).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </label>}
+        <label className="field-label">Amount
+          <input className="field" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />
+        </label>
+        <label className="field-label">Description
+          <input className="field" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What was this for?" required />
+        </label>
+        <label className="field-label">Date and time
+          <input className="field" type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </label>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <div className="transaction-entry-actions">
+          {initialTransaction
+            ? <button className="primary-btn w-full" type="submit" disabled={busy || !canPost}>{busy ? 'Saving…' : 'Save changes'}</button>
+            : <>
+                <button className="secondary-btn transaction-continue-btn" type="submit" disabled={busy || !canPost} onClick={() => { submitAndCloseRef.current = false; }}>{busy ? 'Saving…' : 'Continue'}</button>
+                <button className="primary-btn transaction-save-close-btn" type="submit" disabled={busy || !canPost} onClick={() => { submitAndCloseRef.current = true; }}>{busy ? 'Saving…' : 'Save & Close'}</button>
+              </>}
+        </div>
+        {!canPost && <p className="form-hint">Add an active wallet{type === 'transfer' ? ' and a second active wallet for transfers' : ''} before recording activity.</p>}
+      </form>
+    </Modal>
+  );
+}
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode }) {
   return <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}><div className="modal-panel" role="dialog" aria-modal="true" aria-label={title}><div className="modal-heading"><div><p className="eyebrow">MONETRA WORKSPACE</p><h2>{title}</h2><p>{subtitle}</p></div><button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button></div>{children}</div></div>;
 }
