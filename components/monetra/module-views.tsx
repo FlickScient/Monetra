@@ -90,7 +90,7 @@ export function FiscusView({ workspaces, activeWorkspaceId }: { workspaces: Fisc
   );
 }
 
-function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onChanged: (categories: CategoryRow[]) => void }) {
+function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onChanged: (categories: { id: string; name: string; categoryType: 'income' | 'expense'; color: string }[]) => void }) {
   type CategoryRow = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
   const [items, setItems] = useState<CategoryRow[]>([]);
   const [name, setName] = useState('');
