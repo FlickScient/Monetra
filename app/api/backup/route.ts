@@ -163,7 +163,7 @@ export async function POST(req: Request) {
           (row.categoryId && !categoryIds.has(row.categoryId)) || !validTimestamp(row.occurredAt) ||
           (row.voidedAt !== null && row.voidedAt !== undefined && !validTimestamp(row.voidedAt)) ||
           (row.transactionType === 'transfer' && (!row.destinationWalletId || row.destinationWalletId === row.walletId)) ||
-          (row.transactionType !== 'transfer' && row.destinationWalletId))) ||
+          (row.transactionType !== 'transfer' && row.destinationWalletId)) ||
         rows.ledgerAccounts.some((row) => row.walletId && !walletIds.has(row.walletId)) ||
         rows.ledgerEntries.some((row) => !transactionIds.has(row.transactionId) || !accountIds.has(row.ledgerAccountId) || !safeInteger(row.debitMinor) || !safeInteger(row.creditMinor) || !((row.debitMinor > 0 && row.creditMinor === 0) || (row.creditMinor > 0 && row.debitMinor === 0))) ||
         rows.goalAllocations.some((row) => !goalIds.has(row.goalId) || !walletIds.has(row.walletId)) ||
