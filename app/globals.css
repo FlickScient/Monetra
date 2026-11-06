@@ -691,3 +691,59 @@ input, select, textarea { min-width: 0; }
   .report-footnote, .section-subtitle, .report-category small, .report-series-label { color: #555 !important; }
   .page-intro { margin-bottom: 18px !important; }
 }
+
+
+/* Motion polish: restrained transitions across navigation, theme and controls */
+.app-shell,
+.sidebar,
+.topbar,
+.content-wrap,
+.surface-card,
+.metric-card,
+.wallet-card,
+.settings-section,
+.settings-option,
+.mobile-nav,
+.side-nav-item,
+.icon-btn {
+  transition: background-color 220ms ease, color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+}
+.content-wrap > *:not(.notice-bar):not(.error-bar) {
+  animation: monetra-view-enter 260ms cubic-bezier(.2,.75,.25,1) both;
+}
+@keyframes monetra-view-enter {
+  from { opacity: 0; transform: translate3d(0, 9px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+button,
+input,
+select,
+textarea,
+a {
+  transition-property: background-color, color, border-color, box-shadow, transform, opacity;
+  transition-duration: 180ms;
+  transition-timing-function: ease;
+}
+button:active:not(:disabled) { transform: scale(.985); }
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--green) 65%, transparent);
+  outline-offset: 3px;
+}
+.settings-toggle,
+.settings-toggle span {
+  transition: background-color 220ms ease, transform 220ms cubic-bezier(.2,.75,.25,1);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

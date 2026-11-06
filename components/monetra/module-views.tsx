@@ -205,7 +205,6 @@ export function SettingsView({ dark, workspaceId, onCategoriesChanged, onToggleT
         <LockKeyhole size={18} />
         <div><strong>Account security</strong><p>Sign-in and account security are managed by your Monetra authentication provider.</p></div>
       </section>
-      <ModuleStatus>Settings foundation ready · Additional preferences can be added with backend contracts</ModuleStatus>
     </div>
   );
 }
