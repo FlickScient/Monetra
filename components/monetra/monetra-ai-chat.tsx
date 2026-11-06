@@ -1,9 +1,11 @@
 'use client';
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { useAuth } from '@clerk/nextjs';
 import { Bot, ArrowUp, Sparkles, Trash2, ShieldCheck, LoaderCircle, UserRound } from 'lucide-react';
 
 type Message = { role: 'user' | 'model'; content: string };
+type FiscusAction = 'chat' | 'restore' | 'clear';
 
 const suggestions = [
   'Where did most of my money go this month?',
@@ -12,7 +14,43 @@ const suggestions = [
   'Find spending patterns I should pay attention to.',
 ];
 
+async function invokeFiscus(
+  getToken: () => Promise<string | null>,
+  workspaceId: string,
+  action: FiscusAction,
+  payload: Record<string, unknown> = {},
+) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !publishableKey) {
+    throw new Error('Fiscus AI is not connected yet. Supabase frontend settings are missing.');
+  }
+
+  const token = await getToken();
+  if (!token) throw new Error('Your session has expired. Please sign in again.');
+
+  const response = await fetch(supabaseUrl.replace(/\/$/, '') + '/functions/v1/fiscus-chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + token,
+      apikey: publishableKey,
+    },
+    body: JSON.stringify({ ...payload, action, workspaceId }),
+    cache: 'no-store',
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || 'Fiscus could not complete the request.');
+  }
+  return data;
+}
+
 export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
+  const { getToken, isLoaded } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,26 +59,61 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(`monetra-ai-chat:${workspaceId}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) setMessages(parsed.filter((item) =>
-          item && (item.role === 'user' || item.role === 'model') && typeof item.content === 'string',
-        ).slice(-40));
+    if (!isLoaded) return;
+    let cancelled = false;
+
+    async function restoreConversation() {
+      let cachedMessages: Message[] = [];
+      try {
+        const saved = localStorage.getItem('monetra-ai-chat:' + workspaceId);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            cachedMessages = parsed.filter((item) =>
+              item &&
+              (item.role === 'user' || item.role === 'model') &&
+              typeof item.content === 'string',
+            ).slice(-40);
+          }
+        }
+      } catch {
+        localStorage.removeItem('monetra-ai-chat:' + workspaceId);
       }
-    } catch {
-      localStorage.removeItem(`monetra-ai-chat:${workspaceId}`);
+
+      if (!cancelled && cachedMessages.length) setMessages(cachedMessages);
+
+      try {
+        const data = await invokeFiscus(getToken, workspaceId, 'restore');
+        if (data.hasConversation && Array.isArray(data.messages)) {
+          const restored = data.messages.filter((item: Message) =>
+            item &&
+            (item.role === 'user' || item.role === 'model') &&
+            typeof item.content === 'string',
+          ).slice(-40);
+          if (!cancelled) {
+            setMessages(restored);
+            localStorage.setItem('monetra-ai-chat:' + workspaceId, JSON.stringify(restored));
+          }
+        }
+      } catch {
+        // Keep the local cache available if Supabase is temporarily unavailable.
+      } finally {
+        if (!cancelled) setReady(true);
+      }
     }
-    setReady(true);
-  }, [workspaceId]);
+
+    void restoreConversation();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, isLoaded, getToken]);
 
   useEffect(() => {
     if (!ready) return;
     try {
-      localStorage.setItem(`monetra-ai-chat:${workspaceId}`, JSON.stringify(messages.slice(-40)));
+      localStorage.setItem('monetra-ai-chat:' + workspaceId, JSON.stringify(messages.slice(-40)));
     } catch {
-      setError('Chat history could not be saved on this device.');
+      setError('Chat history could not be cached on this device.');
     }
   }, [messages, ready, workspaceId]);
 
@@ -52,22 +125,21 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
     event?.preventDefault();
     const content = (prompt ?? draft).trim();
     if (!content || loading || !ready) return;
+
     const nextMessages: Message[] = [...messages, { role: 'user', content }];
     setMessages(nextMessages);
     setDraft('');
     setError('');
     setLoading(true);
     try {
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId },
-        body: JSON.stringify({ messages: nextMessages.slice(-12) }),
+      const data = await invokeFiscus(getToken, workspaceId, 'chat', {
+        messages: nextMessages.slice(-12),
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Monetra AI could not respond. Please try again.');
-      if (typeof data.answer !== 'string' || !data.answer.trim()) throw new Error('Monetra AI returned an empty response.');
+      if (typeof data.answer !== 'string' || !data.answer.trim()) {
+        throw new Error('Fiscus returned an empty response.');
+      }
       const assistantMessage: Message = { role: 'model', content: data.answer };
-      setMessages(current => [...current, assistantMessage].slice(-40));
+      setMessages((current) => [...current, assistantMessage].slice(-40));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connection issue. Please try again.');
     } finally {
@@ -75,9 +147,16 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
     }
   }
 
-  function clearConversation() {
-    setMessages([]);
+  async function clearConversation() {
+    if (loading || !messages.length) return;
     setError('');
+    try {
+      await invokeFiscus(getToken, workspaceId, 'clear');
+      setMessages([]);
+      localStorage.removeItem('monetra-ai-chat:' + workspaceId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Conversation could not be deleted.');
+    }
   }
 
   return (
@@ -87,11 +166,17 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
           <span className="monetra-ai-mark"><Bot size={21} /></span>
           <div>
             <p className="eyebrow">GEMINI-POWERED · WORKSPACE AWARE</p>
-            <h2>Ask Monetra AI</h2>
+            <h2>Fiscus AI</h2>
             <p className="section-subtitle">Your financial records, understood in plain language.</p>
           </div>
         </div>
-        <button type="button" className="monetra-ai-clear" onClick={clearConversation} disabled={!messages.length || loading} title="Clear this workspace chat">
+        <button
+          type="button"
+          className="monetra-ai-clear"
+          onClick={clearConversation}
+          disabled={!messages.length || loading || !ready}
+          title="Delete this workspace conversation"
+        >
           <Trash2 size={14} /><span>Clear</span>
         </button>
       </div>
@@ -112,20 +197,40 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
           </div>
         )}
         {messages.map((message, index) => (
-          <div className={`monetra-ai-message ${message.role === 'user' ? 'from-user' : 'from-ai'}`} key={index}>
-            <span className="monetra-ai-avatar">{message.role === 'user' ? <UserRound size={14} /> : <Bot size={14} />}</span>
+          <div className={'monetra-ai-message ' + (message.role === 'user' ? 'from-user' : 'from-ai')} key={index}>
+            <span className="monetra-ai-avatar">
+              {message.role === 'user' ? <UserRound size={14} /> : <Bot size={14} />}
+            </span>
             <div className="monetra-ai-bubble">{message.content}</div>
           </div>
         ))}
-        {loading && <div className="monetra-ai-message from-ai"><span className="monetra-ai-avatar"><Bot size={14} /></span><div className="monetra-ai-bubble monetra-ai-thinking"><LoaderCircle size={14} /> Reviewing your workspace…</div></div>}
+        {loading && (
+          <div className="monetra-ai-message from-ai">
+            <span className="monetra-ai-avatar"><Bot size={14} /></span>
+            <div className="monetra-ai-bubble monetra-ai-thinking">
+              <LoaderCircle size={14} /> Reviewing your workspace…
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
       {error && <p className="monetra-ai-error" role="alert">{error}</p>}
       <form className="monetra-ai-composer" onSubmit={sendMessage}>
-        <textarea value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
-          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage(); }
-        }} placeholder="Ask anything about your money…" rows={2} maxLength={3000} disabled={loading || !ready} />
+        <textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              void sendMessage();
+            }
+          }}
+          placeholder="Ask anything about your money…"
+          rows={2}
+          maxLength={3000}
+          disabled={loading || !ready}
+        />
         <div className="monetra-ai-composer-footer">
           <small>Enter to send · Shift + Enter for a new line</small>
           <button type="submit" disabled={!draft.trim() || loading || !ready} aria-label="Send message">
@@ -133,7 +238,9 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
           </button>
         </div>
       </form>
-      <p className="monetra-ai-privacy"><ShieldCheck size={13} /> Read-only · Uses only this selected workspace · Chat history stays in this browser</p>
+      <p className="monetra-ai-privacy">
+        <ShieldCheck size={13} /> Read-only · Uses only this selected workspace · Chat syncs securely to your account
+      </p>
     </section>
   );
 }
