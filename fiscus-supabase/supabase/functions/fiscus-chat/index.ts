@@ -5,6 +5,7 @@ type RequestBody = {
   action?: "chat" | "restore" | "clear";
   workspaceId?: string;
   messages?: unknown;
+  conversationId?: string;
 };
 
 const encoder = new TextEncoder();
@@ -198,7 +199,7 @@ Deno.serve(async (request: Request) => {
   }
 
   const action = body.action ?? "chat";
-  if (action !== "chat" && action !== "restore" && action !== "clear") {
+  if (!["chat", "restore", "clear", "history", "new", "select", "delete"].includes(action)) {
     return json({ error: "Unsupported action." }, 400);
   }
 
@@ -253,13 +254,86 @@ Deno.serve(async (request: Request) => {
       return json({ error: "Workspace authorization could not be established.", code: "WORKSPACE_AUTH_ERROR" }, 503);
     }
 
+    if (action === "history") {
+      const { data: rows, error: historyError } = await userDb
+        .from("conversations")
+        .select("id,title,status,last_message_at,created_at")
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId)
+        .order("last_message_at", { ascending: false })
+        .limit(60);
+      if (historyError) throw new Error("conversation_history_failed");
+      return json({ conversations: rows ?? [] });
+    }
+
+    if (action === "new") {
+      const { error: archiveError } = await userDb
+        .from("conversations")
+        .update({ status: "archived" })
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId)
+        .eq("status", "active");
+      if (archiveError) throw new Error("conversation_archive_failed");
+      return json({ created: true, messages: [] });
+    }
+
+    if (action === "select") {
+      if (typeof body.conversationId !== "string" || !isUuid(body.conversationId)) {
+        return json({ error: "Choose a valid conversation.", code: "INVALID_CONVERSATION" }, 400);
+      }
+      const { data: target, error: targetError } = await userDb
+        .from("conversations")
+        .select("id")
+        .eq("id", body.conversationId)
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (targetError || !target) return json({ error: "Conversation not found.", code: "CONVERSATION_NOT_FOUND" }, 404);
+
+      const { error: archiveError } = await userDb
+        .from("conversations")
+        .update({ status: "archived" })
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId)
+        .eq("status", "active");
+      if (archiveError) throw new Error("conversation_switch_archive_failed");
+
+      const { error: activateError } = await userDb
+        .from("conversations")
+        .update({ status: "active" })
+        .eq("id", body.conversationId)
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId);
+      if (activateError) throw new Error("conversation_switch_failed");
+      return json({ selected: true, conversationId: body.conversationId });
+    }
+
+    if (action === "delete") {
+      if (typeof body.conversationId !== "string" || !isUuid(body.conversationId)) {
+        return json({ error: "Choose a valid conversation.", code: "INVALID_CONVERSATION" }, 400);
+      }
+      const { error: deleteError } = await userDb
+        .from("conversations")
+        .delete()
+        .eq("id", body.conversationId)
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId);
+      if (deleteError) throw new Error("conversation_delete_failed");
+      return json({ deleted: true });
+    }
+
     if (action === "restore") {
-      const { data: conversation, error: conversationError } = await userDb
+      let restoreQuery = userDb
         .from("conversations")
         .select("id")
         .eq("clerk_user_id", clerkUserId)
-        .eq("workspace_id", workspaceId)
-        .eq("status", "active")
+        .eq("workspace_id", workspaceId);
+      if (typeof body.conversationId === "string" && isUuid(body.conversationId)) {
+        restoreQuery = restoreQuery.eq("id", body.conversationId) as typeof restoreQuery;
+      } else {
+        restoreQuery = restoreQuery.eq("status", "active") as typeof restoreQuery;
+      }
+      const { data: conversation, error: conversationError } = await restoreQuery
         .order("last_message_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -286,25 +360,12 @@ Deno.serve(async (request: Request) => {
     }
 
     if (action === "clear") {
-      const { data: conversation, error: conversationError } = await userDb
+      const { error: deleteError } = await userDb
         .from("conversations")
-        .select("id")
+        .delete()
         .eq("clerk_user_id", clerkUserId)
-        .eq("workspace_id", workspaceId)
-        .eq("status", "active")
-        .order("last_message_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (conversationError) throw new Error("conversation_lookup_failed");
-      if (conversation) {
-        const { error: deleteError } = await userDb
-          .from("conversations")
-          .delete()
-          .eq("id", conversation.id)
-          .eq("clerk_user_id", clerkUserId)
-          .eq("workspace_id", workspaceId);
-        if (deleteError) throw new Error("conversation_delete_failed");
-      }
+        .eq("workspace_id", workspaceId);
+      if (deleteError) throw new Error("conversation_clear_failed");
       return json({ cleared: true });
     }
 
