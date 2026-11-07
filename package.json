@@ -88,7 +88,8 @@
     "zod": "^3.23.8",
     "@capacitor/core": "8.6.0",
     "@capacitor/android": "8.6.0",
-    "@capacitor-community/sqlite": "8.1.1"
+    "@capacitor-community/sqlite": "8.1.1",
+    "@clerk/clerk-react": "^5.12.0"
   },
   "devDependencies": {
     "@types/ws": "^8.18.2",
