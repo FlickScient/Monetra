@@ -103,3 +103,18 @@ export const ledgerEntries = pgTable('ledger_entries', {
   transactionIdx: index('ledger_entries_transaction_idx').on(table.transactionId),
   oneSide: check('ledger_entries_one_side_check', sql`(${table.debitMinor} > 0 AND ${table.creditMinor} = 0) OR (${table.creditMinor} > 0 AND ${table.debitMinor} = 0)`),
 }));
+
+
+/** Transactionally captured, workspace-scoped feed for reliable offline replication. */
+export const financeSyncChanges = pgTable('finance_sync_changes', {
+  cursor: bigint('cursor', { mode: 'number' }).primaryKey(),
+  workspaceId: uuid('workspace_id').notNull(),
+  userId: text('user_id').notNull(),
+  entityType: text('entity_type').notNull(),
+  entityId: uuid('entity_id').notNull(),
+  operation: text('operation').notNull(),
+  payload: text('payload'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  ownerCursorIdx: index('finance_sync_changes_owner_cursor_idx').on(table.userId, table.workspaceId, table.cursor),
+}));
