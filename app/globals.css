@@ -944,3 +944,37 @@ html.reduced-motion *::after { animation-duration: .01ms !important; animation-i
  .monetra-ai-bubble{padding:10px 12px;font-size:11px}
  .monetra-ai-composer{border-radius:14px}
 }
+
+
+/* Dedicated Fiscus chat layout: no marketing hero, no nested demo card. */
+.fiscus-dedicated-page{display:flex;flex-direction:column;gap:0;width:100%;height:calc(100dvh - 148px);min-height:620px;max-height:980px;margin:0;padding:0;overflow:hidden}
+.fiscus-dedicated-page .monetra-ai-chatgpt{display:flex;flex:1;flex-direction:column;min-height:0;height:100%;border:1px solid var(--line);border-radius:18px;background:var(--surface);box-shadow:0 10px 35px #0000000a}
+.fiscus-dedicated-page .monetra-ai-topbar{flex:none;padding:14px 19px}
+.fiscus-dedicated-page .monetra-ai-shell{flex:1;min-height:0;overflow:hidden}
+.fiscus-dedicated-page .monetra-ai-history{min-height:0}
+.fiscus-dedicated-page .monetra-ai-history-list{max-height:none}
+.fiscus-dedicated-page .monetra-ai-main{min-height:0;padding:0 22px 12px}
+.fiscus-dedicated-page .monetra-ai-conversation{flex:1;min-height:0;max-height:none;padding:24px 8px 18px}
+.fiscus-dedicated-page .monetra-ai-composer{flex:none}
+.fiscus-dedicated-page .monetra-ai-privacy{flex:none}
+.fiscus-workspace-context{flex:none;padding:7px 3px 0;color:var(--muted);font-size:9px;text-align:center}
+.fiscus-markdown{display:grid;gap:10px;min-width:0}
+.fiscus-markdown p{margin:0;white-space:normal}
+.fiscus-markdown h3{margin:7px 0 0;color:var(--text);font-size:1.04em;font-weight:750;line-height:1.45}
+.fiscus-markdown ul,.fiscus-markdown ol{display:grid;gap:5px;margin:0;padding-left:21px}
+.fiscus-markdown li{padding-left:2px}
+.fiscus-markdown strong{font-weight:750;color:var(--text)}
+.fiscus-markdown code{padding:1px 5px;border:1px solid var(--line);border-radius:5px;background:var(--surface);font-size:.92em}
+.from-user .fiscus-markdown strong{color:inherit}
+@media(max-width:700px){
+ .fiscus-dedicated-page{height:calc(100dvh - 205px);min-height:470px;max-height:none;margin:0;padding:0}
+ .fiscus-dedicated-page .monetra-ai-chatgpt{border-radius:14px}
+ .fiscus-dedicated-page .monetra-ai-topbar{padding:11px 12px}
+ .fiscus-dedicated-page .monetra-ai-shell{min-height:0}
+ .fiscus-dedicated-page .monetra-ai-history{min-height:0}
+ .fiscus-dedicated-page .monetra-ai-main{min-height:0;padding:0 10px 10px}
+ .fiscus-dedicated-page .monetra-ai-conversation{min-height:0;max-height:none;padding:17px 1px 12px}
+ .fiscus-dedicated-page .monetra-ai-composer{padding:9px 10px 8px}
+ .fiscus-dedicated-page .monetra-ai-privacy{font-size:8px}
+ .fiscus-workspace-context{padding-top:5px}
+}
