@@ -339,7 +339,8 @@ export default function App() {
     event.preventDefault();
     const content = fiscusDraft.trim();
     if (!content || !workspace || !isSignedIn || fiscusLoading) return;
-    const next: FiscusMessage[] = [...fiscusMessages, { role: 'user', content }].slice(-12);
+    const newUserMessage: FiscusMessage = { role: 'user', content };
+    const next = [...fiscusMessages, newUserMessage].slice(-12);
     setFiscusMessages((current) => [...current, { role: 'user' as const, content }].slice(-40));
     setFiscusDraft(''); setFiscusError(''); setFiscusLoading(true);
     try {
