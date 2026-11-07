@@ -150,7 +150,7 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
       : crypto.randomUUID();
     paymentKeyRef.current = { signature, key: idempotencyKey };
     try {
-      let payment: { id: string; amountMinor: number; paidAt: string; note?: string | null };
+      let payment: { id: string; amountMinor: number; paidAt: string; note?: string | null } | null = null;
       let response: Response | null = null;
       try {
         response = await fetch('/api/due-debt/' + repayId + '/payments', {
@@ -174,8 +174,10 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
       if (response) {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || 'Could not record this payment.');
+        if (!data.payment || typeof data.payment.id !== 'string') throw new Error('The server returned an invalid payment.');
         payment = data.payment;
       }
+      if (!payment) throw new Error('Could not record this payment.');
       setEntries(current => current.map(item => item.id === repayId ? {
         ...item,
         repayments: item.repayments.some(existing => existing.id === payment.id)
