@@ -1,15 +1,15 @@
 # Monetra Android Sync Contract
 
-Status: server-side sync foundation implemented on the isolated Android branch; local SQLite/outbox, push, and APK are not implemented yet.
+Status: server-side sync foundation implemented on the isolated Android branch. Local SQLite/outbox, push, and APK are not implemented yet.
 
 ## Goals and invariants
 
 - The web application remains online-first and continues using its existing authenticated API routes.
-- The Android application uses a persistent SQLite database as its read model and durable offline outbox.
+- The Android application will use persistent SQLite as its local read model and durable offline outbox.
 - Neon remains the cloud source of truth. Clerk remains the identity provider.
 - Fiscus AI is online-only; finance capture, browsing, and editing must not require a network connection.
 - Every local record and queued command is scoped to the authenticated owner and one of the owner's Personal, Family, or Business workspaces.
-- A client must never write directly to Neon, embed database credentials, or bypass the existing finance rules.
+- A client must never write directly to Neon, embed database credentials, or bypass existing finance rules.
 - A successful local save means the command is durably committed to SQLite. It does not mean the cloud has accepted it.
 - A command must be applied at most once to financial state, even if the device retries after a timeout.
 
@@ -17,49 +17,43 @@ Status: server-side sync foundation implemented on the isolated Android branch; 
 
 The existing `finance_audit_events` table is best-effort logging written after some mutations. It is not transactionally coupled to every financial write, and it stores summaries rather than complete current entity state. It must not be used as a replication cursor.
 
-Some tables are append-only event histories, while others are mutable current-state records. Some tables have no `updated_at` column. Therefore, timestamp polling is not a safe incremental-sync strategy.
+Some tables are append-only event histories, while others are mutable current-state records. Some tables have no `updated_at` column. Timestamp polling is therefore not a safe incremental-sync strategy.
 
 ## Server change feed
 
-Implement a dedicated append-only `finance_sync_changes` table with:
+Implemented in `drizzle/0008_finance_sync_change_log.sql`:
 
-- monotonically increasing per-workspace database cursor allocated under the workspace row lock;
-- `workspace_id` and owner `user_id`;
-- entity/table key and entity UUID;
-- operation (`upsert` or `delete`);
-- full post-write row JSON for upserts and a tombstone for deletes;
-- server creation timestamp.
+- `finance_sync_changes` stores a monotonically increasing per-workspace cursor, workspace and owner IDs, entity type/ID, operation, full post-write JSON for upserts, and tombstones for deletes.
+- Database triggers append each change in the same Postgres transaction as the source-table INSERT, UPDATE, or DELETE.
+- The owning workspace row is locked while allocating each cursor. This serializes cursor allocation per workspace and avoids clients skipping a transaction that commits out of order.
+- Trigger coverage includes 14 tables: wallets, categories, transactions, ledger accounts/entries, savings goals, goal allocations/events, due debts/payments, monthly budgets, recurring transactions, wallet reconciliations, and finance audit events.
+- Tables with a row-level `user_id` use it; `goal_allocations` resolves its owner through the workspace.
 
-The `0008_finance_sync_change_log.sql` migration adds the change table and a database trigger that appends a change row in the same Postgres transaction as each source-table INSERT, UPDATE, or DELETE. The trigger increments the workspace cursor under a row lock so committed cursors cannot be observed out of order. This makes a failed finance transaction and its feed entry roll back together. The trigger must derive the owner from the row's `user_id` when present, or from the owning workspace for tables such as `goal_allocations`. It must reject or safely skip rows without a valid workspace/owner rather than emit cross-tenant data.
-
-Initial trigger coverage to verify against the live schema:
-
-- Core: `workspaces`, `wallets`, `categories`, `transactions`, `ledger_accounts`, `ledger_entries`.
-- Modules: `savings_goals`, `goal_allocations`, `goal_allocation_events`, `due_debts`, `due_debt_payments`, `monthly_budgets`, `recurring_transactions`, `wallet_reconciliations`, `finance_audit_events`.
-
-Do not include `profiles` in the workspace feed without a separate user-profile sync contract. Never publish Clerk secrets, API keys, or server-only fields.
+The trigger does not cover `profiles` or `workspaces` themselves. Clerk secrets and server-only keys are never part of the feed. Migration 0008 has not been applied to production.
 
 ## API contract
 
 ### Bootstrap
 
-Authenticated request, one workspace at a time. Return a consistent snapshot of all syncable entities plus a high-water cursor captured from the same database snapshot. The response must include schema version and server timestamp. Large datasets need pagination or a bounded snapshot token; never silently truncate.
+Implemented as authenticated `GET /api/sync/bootstrap`. It returns a repeatable-read snapshot of the workspace's syncable entities and a high-water cursor captured in the same transaction. The response includes schema version and server timestamp.
+
+The current implementation returns the full workspace snapshot in one response. Pagination or a bounded snapshot token is still needed before supporting very large workspaces.
 
 ### Pull
 
-Authenticated request with workspace ID and last acknowledged cursor. Return ordered changes strictly after the cursor, a next cursor, and `hasMore`. Enforce owner/workspace membership on every request. A cursor from another workspace or user must reveal no data.
+Implemented as authenticated `GET /api/sync/changes?after=<cursor>&limit=<1..500>`. It returns ordered changes strictly after the cursor, a next cursor, and `hasMore`. Both workspace ID and Clerk owner are enforced in the query.
 
 ### Push
 
-Authenticated batch of commands. Every command carries a client-generated stable UUID operation ID, workspace ID, command type, payload, and client creation time. Persist an operation receipt with a unique constraint on (workspace, operation ID). A repeated identical command returns its prior result; reusing an operation ID with a different payload returns a conflict. Apply the business operation and its receipt in one database transaction.
+Not implemented yet. It must accept stable client operation IDs, persist operation receipts with a unique constraint on (workspace, operation ID), return the prior result for an identical retry, and reject reuse of an operation ID with a different payload.
 
-Push must call the same validated domain operations used by the web API, not duplicate wallet or journal arithmetic in a second implementation. In particular, transaction edits/deletes, transfers, credit-card liability handling, debt payments, goal allocations, and wallet archive behavior must retain their existing ledger and validation semantics.
+Push must call the same validated domain operations used by the web API, not duplicate wallet or journal arithmetic. Transaction edits/deletes, transfers, credit-card liability handling, debt payments, goal allocations, and wallet archive behavior must retain existing ledger and validation semantics.
 
 ## Conflict policy
 
 - Financial commands are immutable intents, not blind row overwrites.
 - New offline transactions use stable operation IDs and server idempotency.
-- For edits to records that changed on the server after the device's base version, return a conflict with the current server row; do not silently last-write-wins.
+- For edits to records changed on the server after the device's base version, return a conflict with the current server row; do not silently last-write-wins.
 - Deletes are explicit commands and produce tombstones.
 - The client keeps rejected/conflicted commands visible for user resolution; it must never discard them silently.
 - Pull applies only rows from the selected workspace and advances the cursor only after the local SQLite transaction commits.
@@ -74,17 +68,20 @@ Authentication tokens belong in platform secure storage, never SQLite plaintext 
 
 ## Rollout sequence
 
-1. Complete mutation-route audit and identify every operation that needs an idempotency receipt.
-2. Add the change-log table, trigger function, and trigger coverage in a reviewed migration.
-3. Add bootstrap and pull endpoints with strict owner/workspace checks and integration tests.
-4. Add durable push receipts and route all supported commands through shared domain logic.
+1. Run the read-only sync migration preflight against staging and review its findings.
+2. Apply migration 0008 to staging, then verify trigger behavior for inserts, updates, deletes, rollback, and cursor ordering.
+3. Add durable push receipts and route supported commands through shared domain logic.
+4. Complete mutation-route idempotency and conflict handling.
 5. Add a typed client repository boundary; web keeps using the API adapter, Android uses SQLite/outbox.
-6. Add Capacitor Android shell and SQLite plugin only after the repository boundary is in place.
+6. Add the Capacitor Android shell and SQLite plugin only after the repository boundary is in place.
 7. Add CI builds for debug APK and signed release APK/AAB. Keep signing keystore and passwords in protected CI secrets.
 8. Run airplane-mode, process-death, duplicate-retry, conflict, workspace-isolation, and ledger-reconciliation tests before calling offline mode production-ready.
 
 ## Current implementation status
 
-- Architecture and finance API audit documents are committed on `feat/android-local-first`.
-- The existing finance API routes have been inspected for core transaction and module behavior.
-- Implemented: migration `0008_finance_sync_change_log.sql`, transactional change triggers across 14 finance tables, authenticated bootstrap endpoint, and authenticated incremental pull endpoint.\n- Added: read-only sync migration preflight script (not yet run against staging or production).\n- CI: latest run on this branch passed TypeScript check and production build.\n- Not implemented: push endpoint/operation receipts, local SQLite repository/outbox, Capacitor Android project, APK/AAB, release signing, and end-to-end offline tests.\n- Migration 0008 has NOT been applied to production.
+- Architecture, finance API audit, and sync contract are committed on `feat/android-local-first`.
+- Implemented: migration 0008, transactional change triggers across 14 finance tables, authenticated bootstrap endpoint, and authenticated incremental pull endpoint.
+- Added: read-only sync migration preflight script. It has not been run against staging or production.
+- CI: an earlier commit passed TypeScript check and production build; the latest changes are awaiting CI.
+- Not implemented: push endpoint/operation receipts, local SQLite repository/outbox, Capacitor Android project, APK/AAB, release signing, and end-to-end offline tests.
+- No production database migration has been applied as part of this work.
