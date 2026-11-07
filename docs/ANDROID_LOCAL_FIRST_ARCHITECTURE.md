@@ -69,3 +69,16 @@ Do not publish an APK as "offline capable" until:
 - Workspace switching never leaks data.
 - Cloud failures do not erase local writes.
 - Existing production data and server ledger balances remain unchanged by migration.
+
+
+## Local SQLite schema draft
+
+The Android database schema is now defined in `android/database/001_initial.sql`. It includes:
+- Per-owner workspace metadata and per-workspace pull cursors.
+- A workspace-partitioned record cache with indexed entity, parent, amount and activity fields.
+- A durable outbox keyed by stable operation UUID, with pending/processing/conflict/rejected states, retry counts, errors and server receipts.
+- Local session/lock metadata and schema migration tracking.
+
+The shared wire types are in `lib/offline/sync-contract.ts`. These define bootstrap, pull, push and the currently supported offline command types.
+
+**Important:** this is a checked-in schema and contract, not a running SQLite implementation yet. The Capacitor SQLite driver, encrypted database key handling, repository adapters and UI integration still need to be installed and tested on an actual Android device.
