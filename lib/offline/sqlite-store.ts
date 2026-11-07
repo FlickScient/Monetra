@@ -78,6 +78,43 @@ function mapOutbox(row: OutboxRow): OfflineCommand {
   } as OfflineCommand;
 }
 
+async function rollbackOptimisticTransaction(
+  tx: LocalSqliteConnection,
+  operationId: string,
+): Promise<void> {
+  const row = await tx.get<OutboxRow>(
+    `SELECT operation_id, workspace_id, operation_type, payload_json, state,
+            attempt_count, created_at, last_attempt_at, last_error, server_result_json
+     FROM sync_outbox WHERE operation_id = ?`,
+    [operationId],
+  );
+  if (!row) return;
+  const command = mapOutbox(row);
+  if (command.type === 'transaction.create') {
+    const walletRow = await tx.get<{ record_json: string }>(
+      `SELECT record_json FROM local_records
+       WHERE workspace_id = ? AND entity_type = 'wallets' AND entity_id = ?`,
+      [row.workspace_id, command.payload.walletId],
+    );
+    if (walletRow) {
+      const wallet = JSON.parse(walletRow.record_json) as Record<string, unknown>;
+      const isCreditCard = wallet.walletType === 'credit_card';
+      const increased = isCreditCard
+        ? command.payload.transactionType === 'expense'
+        : command.payload.transactionType === 'income';
+      const current = Number(wallet.currentBalanceMinor ?? 0);
+      const restored = current + (increased ? -command.payload.amountMinor : command.payload.amountMinor);
+      await tx.run(
+        `UPDATE local_records SET record_json = ?,
+           local_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE workspace_id = ? AND entity_type = 'wallets' AND entity_id = ?`,
+        [asJson({ ...wallet, currentBalanceMinor: restored }), row.workspace_id, command.payload.walletId],
+      );
+    }
+    await tx.run('DELETE FROM local_records WHERE local_operation_id = ?', [operationId]);
+  }
+}
+
 /**
  * SQLite-backed implementation of the sync-engine persistence contract.
  *
@@ -206,12 +243,15 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
     reason: string,
     result: OfflineCommandResult,
   ): Promise<void> {
-    await this.database.run(
-      `UPDATE sync_outbox
-       SET state = 'conflict', last_error = ?, server_result_json = ?
-       WHERE operation_id = ? AND state = 'processing'`,
-      [reason.slice(0, 1000), asJson(result), operationId],
-    );
+    await this.database.transaction(async (tx) => {
+      await rollbackOptimisticTransaction(tx, operationId);
+      await tx.run(
+        `UPDATE sync_outbox
+         SET state = 'conflict', last_error = ?, server_result_json = ?
+         WHERE operation_id = ? AND state = 'processing'`,
+        [reason.slice(0, 1000), asJson(result), operationId],
+      );
+    });
   }
 
   async markCommandRejected(
@@ -219,12 +259,15 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
     reason: string,
     result: OfflineCommandResult,
   ): Promise<void> {
-    await this.database.run(
-      `UPDATE sync_outbox
-       SET state = 'rejected', last_error = ?, server_result_json = ?
-       WHERE operation_id = ? AND state = 'processing'`,
-      [reason.slice(0, 1000), asJson(result), operationId],
-    );
+    await this.database.transaction(async (tx) => {
+      await rollbackOptimisticTransaction(tx, operationId);
+      await tx.run(
+        `UPDATE sync_outbox
+         SET state = 'rejected', last_error = ?, server_result_json = ?
+         WHERE operation_id = ? AND state = 'processing'`,
+        [reason.slice(0, 1000), asJson(result), operationId],
+      );
+    });
   }
 
   async getPullCursor(workspaceId: string): Promise<string> {
