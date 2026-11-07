@@ -9,7 +9,7 @@ export const workspaces = pgTable('workspaces', {
   name: text('name').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  syncVersion: bigint('sync_version', { mode: 'number' }).notNull().default(0),
+  syncVersion: bigint('sync_version', { mode: 'bigint' }).notNull().default(0n),
 }, (table) => ({
   ownerTypeUnique: uniqueIndex('workspaces_user_type_unique').on(table.userId, table.workspaceType),
   ownerIdx: index('workspaces_user_idx').on(table.userId),
@@ -108,7 +108,7 @@ export const ledgerEntries = pgTable('ledger_entries', {
 
 /** Transactionally captured, workspace-scoped feed for reliable offline replication. */
 export const financeSyncChanges = pgTable('finance_sync_changes', {
-  cursor: bigint('cursor', { mode: 'number' }).notNull(),
+  cursor: bigint('cursor', { mode: 'bigint' }).notNull(),
   workspaceId: uuid('workspace_id').notNull(),
   userId: text('user_id').notNull(),
   entityType: text('entity_type').notNull(),
