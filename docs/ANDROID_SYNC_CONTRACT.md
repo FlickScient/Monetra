@@ -1,13 +1,13 @@
 # Monetra Android Sync Contract
 
-Status: server-side sync foundation implemented on the isolated Android branch. Local SQLite/outbox, push, and APK are not implemented yet.
+Status: the server-side bootstrap, pull, and limited push foundation is implemented on the isolated Android branch. The SQLite schema and client wire helpers are checked in, but the native SQLite driver, local repository/outbox runtime, and APK are not implemented.
 
 ## Goals and invariants
 
 - The web application remains online-first and continues using its existing authenticated API routes.
 - The Android application will use persistent SQLite as its local read model and durable offline outbox.
 - Neon remains the cloud source of truth. Clerk remains the identity provider.
-- Fiscus AI is online-only; finance capture, browsing, and editing must not require a network connection.
+- Fiscus AI is online-only; finance capture and browsing must not require a network connection after initial sign-in/bootstrap.
 - Every local record and queued command is scoped to the authenticated owner and one of the owner's Personal, Family, or Business workspaces.
 - A client must never write directly to Neon, embed database credentials, or bypass existing finance rules.
 - A successful local save means the command is durably committed to SQLite. It does not mean the cloud has accepted it.
@@ -28,14 +28,15 @@ Implemented in `drizzle/0008_finance_sync_change_log.sql`:
 - The owning workspace row is locked while allocating each cursor. This serializes cursor allocation per workspace and avoids clients skipping a transaction that commits out of order.
 - Trigger coverage includes 14 tables: wallets, categories, transactions, ledger accounts/entries, savings goals, goal allocations/events, due debts/payments, monthly budgets, recurring transactions, wallet reconciliations, and finance audit events.
 - Tables with a row-level `user_id` use it; `goal_allocations` resolves its owner through the workspace.
+- The Drizzle schema declares the same composite primary key as the SQL migration.
 
-The trigger does not cover `profiles` or `workspaces` themselves. Clerk secrets and server-only keys are never part of the feed. Migration 0008 has not been applied to production.
+The trigger does not cover `profiles` or `workspaces` themselves. Migration 0008 has NOT been applied to production.
 
 ## API contract
 
 ### Bootstrap
 
-Implemented as authenticated `GET /api/sync/bootstrap`. It returns a repeatable-read snapshot of the workspace's syncable entities and a high-water cursor captured in the same transaction. The response includes schema version and server timestamp.
+Implemented as authenticated `GET /api/sync/bootstrap`. It returns a repeatable-read snapshot of the workspace's syncable entities and a high-water cursor captured in the same transaction. The response includes schema version, export timestamp, workspace metadata, and the complete initial entity snapshot.
 
 The current implementation returns the full workspace snapshot in one response. Pagination or a bounded snapshot token is still needed before supporting very large workspaces.
 
@@ -45,43 +46,62 @@ Implemented as authenticated `GET /api/sync/changes?after=<cursor>&limit=<1..500
 
 ### Push
 
-Not implemented yet. It must accept stable client operation IDs, persist operation receipts with a unique constraint on (workspace, operation ID), return the prior result for an identical retry, and reject reuse of an operation ID with a different payload.
+Implemented as authenticated `POST /api/sync/push` for three supported commands:
+- `transaction.create`
+- `transfer.create`
+- `debt.payment`
 
-Push must call the same validated domain operations used by the web API, not duplicate wallet or journal arithmetic. Transaction edits/deletes, transfers, credit-card liability handling, debt payments, goal allocations, and wallet archive behavior must retain existing ledger and validation semantics.
+The endpoint accepts 1–25 operations per batch, each with a stable UUID `operationId`. Duplicate IDs inside one batch are rejected. Results are returned per operation; a batch can partially succeed and uses HTTP 207 in that case.
 
-## Conflict policy
+The push endpoint dispatches into the existing finance route handlers rather than duplicating wallet or journal arithmetic. Transaction and transfer operations use the existing transaction idempotency key; debt payments use the existing debt-payment idempotency key. The handlers retain their current row locks, workspace authorization, validation, ledger posting, and outstanding-debt checks. Retrying an operation with the same ID and same payload returns its prior result; reusing an ID with a different payload is rejected by the underlying handler.
+
+Not yet supported for offline push: transaction edit/delete, wallet/category mutations, debt creation/editing, savings allocations, budgets, recurring transactions, and other module commands. These require separately reviewed idempotency and conflict semantics.
+
+### Client wire helpers
+
+`lib/offline/sync-contract.ts` defines the wire types and supported command union. `lib/offline/sync-client.ts` provides typed bootstrap, pull, and push HTTP helpers. These helpers do not themselves persist outbox operations or apply pulled changes to local storage.
+
+## Conflict and retry policy
 
 - Financial commands are immutable intents, not blind row overwrites.
-- New offline transactions use stable operation IDs and server idempotency.
+- The local client must persist an operation ID and payload before sending it.
+- A timeout or uncertain response must be retried with exactly the same operation ID and payload.
+- The push endpoint may return partial results; successful commands must be acknowledged locally, while failed or uncertain commands remain in the outbox.
 - For edits to records changed on the server after the device's base version, return a conflict with the current server row; do not silently last-write-wins.
 - Deletes are explicit commands and produce tombstones.
 - The client keeps rejected/conflicted commands visible for user resolution; it must never discard them silently.
-- Pull applies only rows from the selected workspace and advances the cursor only after the local SQLite transaction commits.
+- Pull applies a page and advances the local cursor only after the same SQLite transaction commits.
 
 ## Android local database
 
-Use SQLite with migrations and foreign keys enabled. Store a separate workspace partition for each fixed workspace. Required tables include cached workspace metadata, wallets, categories, transactions, ledger entities needed by screens, debts/payments, goals/allocations, budgets/recurring records where supported, sync cursor state, and durable outbox commands.
+A draft SQLite v1 schema is checked in at `android/database/001_initial.sql`. It creates:
+- Per-owner workspace metadata.
+- A workspace-partitioned local record cache.
+- Durable outbox rows keyed by stable operation UUID.
+- Per-workspace pull cursors.
+- Local session/lock metadata and schema migration tracking.
 
-Store money as integer minor units. Preserve server IDs after acknowledgement. For a newly created offline record, use a client UUID as the record ID where the server schema and API support client-provided IDs; otherwise persist the operation-to-server-ID mapping. Do not use floating-point currency values.
+The schema uses integer minor units for money, foreign keys for workspace partitioning, JSON validity checks, and explicit outbox states. `scripts/verify-android-sqlite-schema.py` executes the migration in SQLite and tests key constraints in CI.
 
-Authentication tokens belong in platform secure storage, never SQLite plaintext or source code. Offline access must be gated by a previously authenticated local session and device lock policy; signing out must not expose another account's cached data.
+**Important:** this is a checked-in schema, not a running SQLite implementation. The Capacitor SQLite driver, encrypted database key handling, repository adapters, atomic pull application, durable outbox worker, and UI integration still need to be installed and tested on an actual Android device.
 
 ## Rollout sequence
 
-1. Run the read-only sync migration preflight against staging and review its findings.
+1. Run the read-only sync migration preflight against staging and review its findings. It checks table/column presence, UUID/text types, workspace ownership, and goal-allocation references.
 2. Apply migration 0008 to staging, then verify trigger behavior for inserts, updates, deletes, rollback, and cursor ordering.
-3. Add durable push receipts and route supported commands through shared domain logic.
-4. Complete mutation-route idempotency and conflict handling.
-5. Add a typed client repository boundary; web keeps using the API adapter, Android uses SQLite/outbox.
-6. Add the Capacitor Android shell and SQLite plugin only after the repository boundary is in place.
+3. Complete durable outbox receipt semantics and expand idempotent push only for operations with safe server behavior.
+4. Add the Capacitor Android shell, native SQLite driver, and secure credential/database-key storage.
+5. Implement a typed repository boundary; web keeps using the API adapter, Android uses SQLite/outbox.
+6. Implement snapshot bootstrap, atomic pull application, outbox push/acknowledgement, restart recovery, and visible conflict states.
 7. Add CI builds for debug APK and signed release APK/AAB. Keep signing keystore and passwords in protected CI secrets.
 8. Run airplane-mode, process-death, duplicate-retry, conflict, workspace-isolation, and ledger-reconciliation tests before calling offline mode production-ready.
 
 ## Current implementation status
 
-- Architecture, finance API audit, and sync contract are committed on `feat/android-local-first`.
-- Implemented: migration 0008, transactional change triggers across 14 finance tables, authenticated bootstrap and incremental pull endpoints, and a first push slice for transaction creation, transfers, and debt payments using existing server handlers and idempotency keys.
+- Implemented: migration 0008, transactional change triggers across 14 finance tables, authenticated bootstrap and incremental pull endpoints, and the limited push endpoint for transaction creation, transfers, and debt payments.
+- Implemented: typed wire contracts and HTTP helpers.
+- Added: draft Android SQLite v1 schema and a Python SQLite validation step in CI.
 - Added: read-only sync migration preflight script. It has not been run against staging or production.
-- CI: an earlier commit passed TypeScript check and production build; the latest changes are awaiting CI.
-- Not implemented: durable local SQLite repository/outbox, conflict-aware edit/delete and module-command push, Capacitor Android project, APK/AAB, release signing, and end-to-end offline tests.
+- CI: latest full branch run is still pending/running; an earlier commit passed TypeScript check and production build.
+- Not implemented: native SQLite driver, local repository/outbox runtime, pull application, Capacitor Android project, APK/AAB, release signing, and end-to-end offline tests.
 - No production database migration has been applied as part of this work.
