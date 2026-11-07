@@ -305,7 +305,7 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
               typeof value.walletId === 'string' ? value.walletId : typeof value.dueDebtId === 'string' ? value.dueDebtId : null,
               typeof value.amountMinor === 'number' ? value.amountMinor : null,
               typeof value.occurredAt === 'string' ? value.occurredAt : typeof value.paidAt === 'string' ? value.paidAt : null,
-              asJson(record),
+              asJson(value),
               snapshot.cursor,
               now,
             ],
