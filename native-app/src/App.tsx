@@ -283,7 +283,6 @@ export default function App() {
   if (mode === 'unlock') {
     return <main className="screen center"><div className="brand-mark">M</div><h1>Unlock Monetra</h1><p>{workspace?.name || 'Your saved workspace'} · Enter your device PIN to view local finance data.</p><form className="pin-form" onSubmit={unlock}><input aria-label="Six-digit PIN" autoFocus inputMode="numeric" maxLength={6} pattern="[0-9]{6}" type="password" value={pin} onChange={(e) => setPin(e.target.value.replace(/\\D/g, '').slice(0,6))} placeholder="••••••" /><button disabled={busy || pin.length !== 6}>{busy ? 'Unlocking…' : 'Unlock'}</button></form>{error && <p className="error">{error}</p>}</main>;
   }
-  if (mode === 'sign-in') return <main className="screen center"><SignIn routing="hash" /></main>;
   if (mode === 'error') return <main className="screen center"><div className="brand-mark">M</div><h1>Monetra couldn’t open</h1><p>{error}</p>{isLoaded && !isSignedIn && navigator.onLine && <button onClick={() => setMode('sign-in')}>Sign in</button>}<button className="secondary" onClick={() => window.location.reload()}>Try again</button></main>;
 
   const transactionWallet = (id?: string) => wallets.find((item) => item.id === id)?.name || 'Wallet';
