@@ -18,10 +18,12 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const rawCursor = url.searchParams.get('after') ?? '0';
   const rawLimit = Number(url.searchParams.get('limit') ?? 200);
-  const after = Number(rawCursor);
-  const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 500) : 200;
-
-  if (!/^\d+$/.test(rawCursor) || !Number.isSafeInteger(after) || after < 0) {
+  let after: bigint;
+  try {
+    if (!/^\d+$/.test(rawCursor)) throw new Error('invalid');
+    after = BigInt(rawCursor);
+    if (after < 0n) throw new Error('invalid');
+  } catch {
     return NextResponse.json({ error: 'Invalid sync cursor' }, { status: 400 });
   }
 
