@@ -58,7 +58,7 @@ async function invokeFiscus(
 }
 
 function renderInlineMarkdown(value: string) {
-  return value.split(/(\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|\x60[^\x60]+\x60)/g).map((part, index) => {
+  return value.split(/(\*\*[^*]+\*\*|\*[^*]+\*|\x60[^\x60]+\x60)/g).map((part, index) => {
     if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
     if (part.startsWith('*') && part.endsWith('*')) return <em key={index}>{part.slice(1, -1)}</em>;
     if (part.startsWith('`') && part.endsWith('`')) return <code key={index}>{part.slice(1, -1)}</code>;
@@ -67,17 +67,17 @@ function renderInlineMarkdown(value: string) {
 }
 
 function MessageMarkdown({ content }: { content: string }) {
-  const blocks = content.trim().split(/\\n\\s*\\n/);
+  const blocks = content.trim().split(/\n\s*\n/);
   return <div className="fiscus-markdown">
     {blocks.map((block, index) => {
-      const lines = block.split('\\n');
-      const heading = lines[0].match(/^(#{1,3})\\s+(.+)$/);
+      const lines = block.split('\n');
+      const heading = lines[0].match(/^(#{1,3})\s+(.+)$/);
       if (heading) return <h3 key={index}>{renderInlineMarkdown(heading[2])}</h3>;
-      if (lines.every(line => /^\\s*[-*]\\s+/.test(line))) {
-        return <ul key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(line.replace(/^\\s*[-*]\\s+/, ''))}</li>)}</ul>;
+      if (lines.every(line => /^\s*[-*]\s+/.test(line))) {
+        return <ul key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(line.replace(/^\s*[-*]\s+/, ''))}</li>)}</ul>;
       }
-      if (lines.every(line => /^\\s*\\d+[.)]\\s+/.test(line))) {
-        return <ol key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(line.replace(/^\\s*\\d+[.)]\\s+/, ''))}</li>)}</ol>;
+      if (lines.every(line => /^\s*\d+[.)]\s+/.test(line))) {
+        return <ol key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(line.replace(/^\s*\d+[.)]\s+/, ''))}</li>)}</ol>;
       }
       return <p key={index}>{lines.map((line, lineIndex) => <span key={lineIndex}>{lineIndex > 0 && <br />}{renderInlineMarkdown(line)}</span>)}</p>;
     })}
