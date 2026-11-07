@@ -105,6 +105,7 @@ export async function queueNativeTransaction(
     },
   };
   await store.enqueueCommand(workspaceId, command);
+}
 
 /** Queue a wallet-to-wallet transfer locally for retry-safe background sync. */
 export async function queueNativeTransfer(
@@ -160,5 +161,4 @@ export async function queueNativeDebtPayment(
     },
   };
   await store.enqueueCommand(workspaceId, command);
-}
 }
