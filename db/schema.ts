@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, bigint, timestamp, index, uniqueIndex, check } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, bigint, timestamp, index, uniqueIndex, check, jsonb } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 /** A private finance workspace owned directly by one Clerk user. */
@@ -9,6 +9,7 @@ export const workspaces = pgTable('workspaces', {
   name: text('name').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  syncVersion: bigint('sync_version', { mode: 'number' }).notNull().default(0),
 }, (table) => ({
   ownerTypeUnique: uniqueIndex('workspaces_user_type_unique').on(table.userId, table.workspaceType),
   ownerIdx: index('workspaces_user_idx').on(table.userId),
@@ -107,14 +108,15 @@ export const ledgerEntries = pgTable('ledger_entries', {
 
 /** Transactionally captured, workspace-scoped feed for reliable offline replication. */
 export const financeSyncChanges = pgTable('finance_sync_changes', {
-  cursor: bigint('cursor', { mode: 'number' }).primaryKey(),
+  cursor: bigint('cursor', { mode: 'number' }).notNull(),
   workspaceId: uuid('workspace_id').notNull(),
   userId: text('user_id').notNull(),
   entityType: text('entity_type').notNull(),
   entityId: uuid('entity_id').notNull(),
   operation: text('operation').notNull(),
-  payload: text('payload'),
+  payload: jsonb('payload'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
+  workspaceCursorUnique: uniqueIndex('finance_sync_changes_workspace_cursor_unique').on(table.workspaceId, table.cursor),
   ownerCursorIdx: index('finance_sync_changes_owner_cursor_idx').on(table.userId, table.workspaceId, table.cursor),
 }));
