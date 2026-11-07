@@ -69,7 +69,7 @@ export async function openNativeFinanceDatabase(): Promise<LocalSqliteConnection
 
       const response = await fetch('/sqlite/001_initial.sql', { cache: 'no-store' });
       if (!response.ok) throw new Error('The Monetra local database schema could not be loaded.');
-      await connection.execute(await response.text());
+      await connection.execute(await response.text(), false);
 
       return new CapacitorSqliteConnection(connection);
     })().catch((error) => {
