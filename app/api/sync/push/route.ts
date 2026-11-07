@@ -74,6 +74,11 @@ export async function POST(req: Request) {
     });
     const cookie = req.headers.get('cookie');
     if (cookie) headers.set('cookie', cookie);
+    // The native Capacitor client authenticates with a short-lived Clerk session
+    // bearer token rather than a website cookie. Forward it to the existing
+    // finance handlers so they independently enforce the same authenticated owner.
+    const authorization = req.headers.get('authorization');
+    if (authorization) headers.set('authorization', authorization);
 
     const debtId = operation.type === 'debt.payment' ? operation.payload.dueDebtId : null;
     if (operation.type === 'debt.payment' && (typeof debtId !== 'string' || !OPERATION_ID.test(debtId))) {
