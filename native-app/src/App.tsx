@@ -21,7 +21,7 @@ const API_BASE = (import.meta.env.VITE_MONETRA_API_URL || 'https://monetra-4rax.
 type Wallet = { id: string; name: string; walletType?: string; currentBalanceMinor?: number; currency?: string; status?: string };
 type Category = { id: string; name: string; categoryType: 'income' | 'expense' };
 type Transaction = { id: string; transactionType: string; amountMinor: number; description?: string; occurredAt?: string; walletId?: string; pendingSync?: boolean };
-type Debt = { id: string; title?: string; name?: string; principalMinor?: number; status?: string };
+type Debt = { id: string; title?: string; name?: string; principalMinor?: number; paidMinor?: number; status?: string };
 type Mode = 'checking' | 'sign-in' | 'prepare' | 'setup-pin' | 'unlock' | 'dashboard' | 'error';
 type AppView = 'home' | 'activity' | 'insights' | 'debts' | 'settings';
 
