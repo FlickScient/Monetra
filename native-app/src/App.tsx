@@ -23,11 +23,13 @@ type Category = { id: string; name: string; categoryType: 'income' | 'expense' }
 type Transaction = { id: string; transactionType: string; amountMinor: number; description?: string; occurredAt?: string; walletId?: string; pendingSync?: boolean };
 type Debt = { id: string; title?: string; name?: string; principalMinor?: number; status?: string };
 type Mode = 'checking' | 'sign-in' | 'prepare' | 'setup-pin' | 'unlock' | 'dashboard' | 'error';
+type AppView = 'home' | 'activity' | 'insights' | 'debts' | 'settings';
 
 function money(minor: number): string {
   return new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 2 }).format((minor || 0) / 100);
 }
 function asRows<T>(value: unknown): T[] { return Array.isArray(value) ? value as T[] : []; }
+function transactionWalletLabel(wallets: Wallet[], id?: string): string { return wallets.find((item) => item.id === id)?.name || 'Wallet'; }
 
 export default function App() {
   const { isLoaded, isSignedIn, userId, getToken } = useAuth();
@@ -47,6 +49,9 @@ export default function App() {
   const [categoryId, setCategoryId] = useState('');
   const [debtId, setDebtId] = useState('');
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<AppView>('home');
+  const [activitySearch, setActivitySearch] = useState('');
+  const [activityFilter, setActivityFilter] = useState<'all' | 'income' | 'expense' | 'transfer'>('all');
   const initialized = useRef(false);
 
   const wallets = useMemo(() => asRows<Wallet>(data?.wallets).filter((item) => item.status !== 'inactive'), [data]);
@@ -54,6 +59,17 @@ export default function App() {
   const transactions = useMemo(() => asRows<Transaction>(data?.transactions).slice().sort((a,b) => String(b.occurredAt || '').localeCompare(String(a.occurredAt || ''))), [data]);
   const debts = useMemo(() => asRows<Debt>(data?.dueDebts).filter((item) => item.status !== 'settled' && item.status !== 'archived'), [data]);
   const totalBalance = wallets.reduce((sum, item) => sum + Number(item.currentBalanceMinor || 0), 0);
+  const filteredTransactions = transactions.filter((item) => {
+    const matchesType = activityFilter === 'all' || item.transactionType === activityFilter;
+    const needle = activitySearch.trim().toLowerCase();
+    const matchesSearch = !needle || [item.description, item.transactionType, transactionWalletLabel(wallets, item.walletId)].some((value) => String(value || '').toLowerCase().includes(needle));
+    return matchesType && matchesSearch;
+  });
+  const monthKey = new Date().toISOString().slice(0, 7);
+  const monthTransactions = transactions.filter((item) => String(item.occurredAt || '').slice(0, 7) === monthKey);
+  const monthIncome = monthTransactions.filter((item) => item.transactionType === 'income').reduce((sum, item) => sum + Number(item.amountMinor || 0), 0);
+  const monthExpense = monthTransactions.filter((item) => item.transactionType === 'expense').reduce((sum, item) => sum + Number(item.amountMinor || 0), 0);
+  const openDebtTotal = debts.reduce((sum, item) => sum + Math.max(0, Number(item.principalMinor || 0) - Number(item.paidMinor || 0)), 0);
 
   const configureSync = useCallback(() => {
     configureFinanceSyncClient({
@@ -291,6 +307,8 @@ export default function App() {
       <header className="topbar"><div className="brand"><div className="brand-mark small">M</div><div><b>Monetra</b><small>{workspace?.name || 'Personal'} space</small></div></div><button className="sync-button" onClick={() => void refresh()} disabled={busy}>{busy ? 'Working…' : navigator.onLine ? 'Sync now' : 'Offline'}</button></header>
       <section className="hero"><span className="eyebrow">TOTAL WALLET BALANCE</span><h1>{money(totalBalance)}</h1><p>{navigator.onLine ? 'Your local vault is ready to sync.' : 'Saved on this device · no internet required.'}</p></section>
       {message && <p className="notice">{message}</p>}{error && <p className="error notice">{error}</p>}
+      <nav className="native-nav" aria-label="Main navigation">{([['home','Home'],['activity','Activity'],['insights','Insights'],['debts','Due'],['settings','Settings']] as const).map(([key,label]) => <button key={key} type="button" className={view===key?'active':''} onClick={() => setView(key)}>{label}</button>)}</nav>
+      {view === 'home' && <>
       <section className="panel"><div className="section-heading"><div><span className="eyebrow">QUICK ENTRY</span><h2>Record activity</h2></div></div>
         <form className="entry-form" onSubmit={saveEntry}>
           <div className="segmented">{(['expense','income','transfer','debt'] as const).map((item) => <button type="button" key={item} className={kind===item?'selected':''} onClick={() => setKind(item)}>{item === 'debt' ? 'Debt payment' : item[0].toUpperCase()+item.slice(1)}</button>)}</div>
@@ -309,6 +327,11 @@ export default function App() {
       <section className="panel"><div className="section-heading"><div><span className="eyebrow">RECENT ACTIVITY</span><h2>Transactions</h2></div></div>
         {transactions.length ? transactions.slice(0,40).map((item) => <div className="transaction-row" key={item.id}><div><b>{item.description || item.transactionType}</b><small>{new Date(item.occurredAt || Date.now()).toLocaleString()} · {transactionWallet(item.walletId)}{item.pendingSync ? ' · Pending sync' : ''}</small></div><strong className={item.transactionType==='income'?'positive':item.transactionType==='expense'?'negative':''}>{item.transactionType==='income'?'+':item.transactionType==='expense'?'-':''}{money(Number(item.amountMinor || 0))}</strong></div>) : <p className="empty">Your local transaction list will appear here.</p>}
       </section>
+      </>}
+      {view === 'activity' && <section className="panel"><div className="section-heading"><div><span className="eyebrow">LEDGER</span><h2>All activity</h2></div><strong>{transactions.length}</strong></div><input className="search-input" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} placeholder="Search descriptions or wallets" aria-label="Search activity"/><div className="filter-row">{(['all','income','expense','transfer'] as const).map((filter) => <button type="button" key={filter} className={activityFilter===filter?'active':''} onClick={() => setActivityFilter(filter)}>{filter[0].toUpperCase()+filter.slice(1)}</button>)}</div>{filteredTransactions.length ? filteredTransactions.map((item) => <div className="transaction-row" key={item.id}><div><b>{item.description || item.transactionType}</b><small>{new Date(item.occurredAt || Date.now()).toLocaleString()} · {transactionWallet(item.walletId)}{item.pendingSync ? ' · Pending sync' : ''}</small></div><strong className={item.transactionType==='income'?'positive':item.transactionType==='expense'?'negative':''}>{item.transactionType==='income'?'+':item.transactionType==='expense'?'-':''}{money(Number(item.amountMinor || 0))}</strong></div>) : <p className="empty">No matching activity in this local snapshot.</p>}</section>}
+      {view === 'insights' && <><section className="panel"><span className="eyebrow">THIS MONTH</span><h2>{new Date().toLocaleDateString('en', {month:'long',year:'numeric'})}</h2><div className="metric-grid"><div><small>Income</small><strong className="positive">{money(monthIncome)}</strong></div><div><small>Expenses</small><strong className="negative">{money(monthExpense)}</strong></div><div><small>Net cash flow</small><strong>{money(monthIncome-monthExpense)}</strong></div><div><small>Transactions</small><strong>{monthTransactions.length}</strong></div></div></section><section className="panel"><span className="eyebrow">SPENDING SNAPSHOT</span><h2>Where things stand</h2><div className="metric-line"><span>Wallet balance</span><b>{money(totalBalance)}</b></div><div className="metric-line"><span>Outstanding due</span><b>{money(openDebtTotal)}</b></div><div className="metric-line"><span>Average expense / entry</span><b>{money(monthTransactions.filter((item) => item.transactionType === 'expense').length ? monthExpense / monthTransactions.filter((item) => item.transactionType === 'expense').length : 0)}</b></div><p className="empty">Insights are calculated from the transactions currently stored on this device. Sync to refresh the snapshot.</p></section></>}
+      {view === 'debts' && <section className="panel"><div className="section-heading"><div><span className="eyebrow">DUE & DEBT</span><h2>Outstanding balances</h2></div><strong>{money(openDebtTotal)}</strong></div>{debts.length ? debts.map((item) => {const principal=Number(item.principalMinor||0);const paid=Number(item.paidMinor||0);const remaining=Math.max(0,principal-paid);return <div className="debt-row" key={item.id}><div><b>{item.title||item.name||'Due'}</b><small>{paid>0?'Partially paid':'Unpaid'} · {money(paid)} paid</small><div className="debt-track"><span style={{width:`${principal>0?Math.min(100,paid/principal*100):0}%`}}/></div></div><strong>{money(remaining)}</strong></div>}) : <p className="empty">No outstanding debts in this local snapshot.</p>}<p className="empty">Debt creation and editing will be enabled after the local ledger operations are implemented.</p></section>}
+      {view === 'settings' && <section className="panel"><span className="eyebrow">DEVICE & ACCOUNT</span><h2>Settings</h2><div className="metric-line"><span>Workspace</span><b>{workspace?.name||'Personal'}</b></div><div className="metric-line"><span>Connection</span><b>{navigator.onLine?'Online':'Offline'}</b></div><div className="metric-line"><span>Local database</span><b>Encrypted SQLite</b></div><div className="metric-line"><span>Sync</span><b>{busy?'In progress':'Manual / reconnect'}</b></div><button className="primary settings-action" type="button" onClick={() => void refresh()} disabled={busy}>{busy?'Working…':'Sync now'}</button><p className="empty">Your six-digit device PIN protects local access. Fiscus AI is an online feature and is not available while offline.</p></section>}
       <footer>Encrypted local database · {navigator.onLine ? 'Online' : 'Offline'} · Fiscus AI requires internet</footer>
     </main>
   );
