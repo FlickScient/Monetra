@@ -29,3 +29,20 @@ The debug APK is generated at `android-native/app/build/outputs/apk/debug/app-de
 Add `capacitor://localhost` and `https://localhost` to the Clerk instance's allowed origins. The Vercel middleware also explicitly allows these origins for API CORS. Native API requests use short-lived Clerk session bearer tokens; the secret key is never bundled into the app.
 
 The first online sign-in downloads the selected workspace and asks the user to create a six-digit local unlock PIN. Offline launch requires that PIN. The PIN is PBKDF2-hashed and stored inside the encrypted local SQLite database; it is never sent to the server.
+
+
+## Signed release APK (GitHub Actions)
+
+The repository includes `.github/workflows/android-release.yml`. It builds a release APK, signs it with Android `apksigner`, verifies the signature, and uploads `Monetra-release-signed.apk`.
+
+Before running **Actions → Monetra Signed Android Release → Run workflow**, add these repository Actions secrets:
+
+- `VITE_CLERK_PUBLISHABLE_KEY`: the real Clerk publishable key for the Monetra production instance.
+- `ANDROID_KEYSTORE_BASE64`: base64-encoded contents of your release JKS/keystore file.
+- `ANDROID_KEYSTORE_PASSWORD`: keystore password.
+- `ANDROID_KEY_ALIAS`: signing key alias.
+- `ANDROID_KEY_PASSWORD`: signing key password.
+
+Keep the keystore and passwords private. Back up the keystore securely: future Android updates must be signed with the same app-signing identity. The workflow intentionally fails instead of producing a misleading unsigned "release" APK when any required secret is missing.
+
+The existing pull-request workflow produces a **debug** APK only. A successful debug build does not mean release signing, Clerk production login, or on-device offline behavior has been verified.
