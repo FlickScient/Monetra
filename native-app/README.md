@@ -35,10 +35,13 @@ The first online sign-in downloads the selected workspace and asks the user to c
 
 The repository includes `.github/workflows/android-release.yml`. It builds a release APK, signs it with Android `apksigner`, verifies the signature, and uploads `Monetra-release-signed.apk`.
 
-Before running **Actions → Monetra Signed Android Release → Run workflow**, add these repository Actions secrets:
+Before building any APK, add these repository Actions secrets (the debug and release workflows both require them):
 
 - `VITE_CLERK_PUBLISHABLE_KEY`: the real Clerk publishable key for the Monetra production instance.
 - `VITE_SUPABASE_PUBLISHABLE_KEY`: the Fiscus Supabase project's publishable key (safe to bundle in the client app).
+
+For a **signed release APK**, also add:
+
 - `ANDROID_KEYSTORE_BASE64`: base64-encoded contents of your release JKS/keystore file.
 - `ANDROID_KEYSTORE_PASSWORD`: keystore password.
 - `ANDROID_KEY_ALIAS`: signing key alias.
@@ -46,6 +49,6 @@ Before running **Actions → Monetra Signed Android Release → Run workflow**, 
 
 Keep the keystore and passwords private. Back up the keystore securely: future Android updates must be signed with the same app-signing identity. The workflow intentionally fails instead of producing a misleading unsigned "release" APK when any required secret is missing.
 
-The native app includes Fiscus chat. Its API URL and publishable key are supplied to the Vite build as `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`; do not use the Supabase secret/service-role key in the app.
+The native app includes Fiscus chat. Its Supabase project URL is fixed to the configured Fiscus project, and only the public publishable key is supplied to the Vite build as `VITE_SUPABASE_PUBLISHABLE_KEY`; do not use the Supabase secret/service-role key in the app.
 
 The existing pull-request workflow produces a **debug** APK only. A successful debug build does not mean release signing, Clerk production login, or on-device offline behavior has been verified.
