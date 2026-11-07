@@ -73,6 +73,12 @@ export default function App() {
   }, [ownerId, userId]);
 
   useEffect(() => {
+    if (isLoaded && !isSignedIn && navigator.onLine && mode === 'checking') {
+      setMode('sign-in');
+    }
+  }, [isLoaded, isSignedIn, mode]);
+
+  useEffect(() => {
     if (!isNativeFinanceApp()) {
       setError('This screen is designed for the installed Monetra Android app.');
       setMode('error');
