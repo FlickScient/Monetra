@@ -29,6 +29,8 @@ jobs:
           node --check scripts/ensure-workspace-migrations.mjs
           node --check scripts/diagnose-database.mjs
           node --check scripts/preflight-finance-sync-migration.mjs
+      - name: Validate Android SQLite schema
+        run: python3 scripts/verify-android-sqlite-schema.py
       - name: TypeScript check
         run: npm run typecheck
       - name: Production build
