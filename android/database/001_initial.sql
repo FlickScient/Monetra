@@ -33,10 +33,12 @@ CREATE TABLE IF NOT EXISTS local_records (
   record_json TEXT NOT NULL CHECK (json_valid(record_json)),
   is_deleted INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0, 1)),
   server_cursor TEXT NOT NULL DEFAULT '0',
+  local_operation_id TEXT,
   local_updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   PRIMARY KEY (workspace_id, entity_type, entity_id),
   FOREIGN KEY (workspace_id) REFERENCES local_workspaces(id) ON DELETE CASCADE
 );
+CREATE UNIQUE INDEX IF NOT EXISTS local_records_operation_idx ON local_records(local_operation_id) WHERE local_operation_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS local_records_type_idx
   ON local_records(workspace_id, entity_type, is_deleted);
 CREATE INDEX IF NOT EXISTS local_records_parent_idx
