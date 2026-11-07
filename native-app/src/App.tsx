@@ -17,7 +17,7 @@ import {
 } from '@/lib/offline/native-finance';
 import { configureFinanceSyncClient } from '@/lib/offline/sync-client';
 
-const API_BASE = (import.meta.env.VITE_MONETRA_API_URL || 'https://monetra-4rax.vercel.app').replace(/\\/+$/, '');
+const API_BASE = (import.meta.env.VITE_MONETRA_API_URL || 'https://monetra-4rax.vercel.app').replace(/\/+$/, '');
 type Wallet = { id: string; name: string; walletType?: string; currentBalanceMinor?: number; currency?: string; status?: string };
 type Category = { id: string; name: string; categoryType: 'income' | 'expense' };
 type Transaction = { id: string; transactionType: string; amountMinor: number; description?: string; occurredAt?: string; walletId?: string; pendingSync?: boolean };
