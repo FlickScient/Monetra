@@ -21,7 +21,7 @@ import { MoneyAlerts } from '@/components/monetra/money-alerts';
 import { ReportsView } from '@/components/monetra/reports-view';
 import {
   isNativeFinanceApp, listCachedNativeWorkspaces, readCachedNativeWorkspace,
-  queueNativeTransaction, syncNativeWorkspace,
+  queueNativeTransaction, queueNativeTransfer, syncNativeWorkspace,
 } from '@/lib/offline/native-finance';
 
 type WalletType = 'cash' | 'bkash' | 'nagad' | 'rocket' | 'bank' | 'savings' | 'debit_card' | 'credit_card' | 'custom';
@@ -605,18 +605,29 @@ function TransactionModal({ workspaceId, wallets, categories, initialTransaction
         : crypto.randomUUID();
       idempotencyRef.current = { signature, key: idempotencyKey };
       const saveOffline = async () => {
-        if (initialTransaction || type === 'transfer' || !isNativeFinanceApp()) {
+        if (initialTransaction || !isNativeFinanceApp()) {
           throw new Error('This action needs an internet connection.');
         }
-        await queueNativeTransaction(workspaceId, {
-          operationId: idempotencyKey,
-          walletId: wallet,
-          transactionType: type,
-          categoryId: category || null,
-          amountMinor,
-          description,
-          occurredAt: new Date(date).toISOString(),
-        });
+        if (type === 'transfer') {
+          await queueNativeTransfer(workspaceId, {
+            operationId: idempotencyKey,
+            walletId: wallet,
+            destinationWalletId: destination,
+            amountMinor,
+            description,
+            occurredAt: new Date(date).toISOString(),
+          });
+        } else {
+          await queueNativeTransaction(workspaceId, {
+            operationId: idempotencyKey,
+            walletId: wallet,
+            transactionType: type,
+            categoryId: category || null,
+            amountMinor,
+            description,
+            occurredAt: new Date(date).toISOString(),
+          });
+        }
         idempotencyRef.current = null;
         onSaved('Saved securely on this device. It will sync when you reconnect.');
         if (closeAfterSave) {
@@ -640,7 +651,7 @@ function TransactionModal({ workspaceId, wallets, categories, initialTransaction
         return;
       }
       if (!res.ok) {
-        if ((res.status >= 500 || res.status === 429) && !initialTransaction && type !== 'transfer' && isNativeFinanceApp()) {
+        if ((res.status >= 500 || res.status === 429) && !initialTransaction && isNativeFinanceApp()) {
           await saveOffline();
           return;
         }
