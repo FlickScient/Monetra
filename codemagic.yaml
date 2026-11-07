@@ -32,10 +32,3 @@ workflows:
           ./gradlew --no-daemon assembleDebug
     artifacts:
       - android-native/app/build/outputs/apk/debug/app-debug.apk
-    publishing:
-      email:
-        recipients:
-          - monetra-builds@example.com
-        notify:
-          success: false
-          failure: true
