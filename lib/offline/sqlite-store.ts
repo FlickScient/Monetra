@@ -147,15 +147,50 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
     // The server change feed is the durable copy of the accepted financial row.
     // Remove only the matching outbox intent after a confirmed 2xx response.
     await this.database.transaction(async (tx) => {
-      // Remove the optimistic local row only after the server confirms acceptance.
-      // The subsequent pull inserts the canonical server row from the change feed.
-      await tx.run('DELETE FROM local_records WHERE local_operation_id = ?', [operationId]);
+      const response = result.result as {
+        transaction?: Record<string, unknown>;
+        wallet?: Record<string, unknown>;
+      } | undefined;
+      const transaction = response?.transaction;
+      const wallet = response?.wallet;
+
+      // Promote the optimistic row to the server-issued ID. The next pull
+      // upserts the same entity, so a successful offline save never vanishes
+      // between push and pull and never appears twice.
+      if (transaction && typeof transaction.id === 'string') {
+        await tx.run(
+          `UPDATE local_records SET entity_id = ?, parent_id = ?, amount_minor = ?,
+             occurred_at = ?, record_json = ?, local_operation_id = NULL,
+             local_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           WHERE local_operation_id = ?`,
+          [
+            transaction.id,
+            typeof transaction.walletId === 'string' ? transaction.walletId : null,
+            typeof transaction.amountMinor === 'number' ? transaction.amountMinor : null,
+            typeof transaction.occurredAt === 'string' ? transaction.occurredAt : null,
+            asJson(transaction),
+            operationId,
+          ],
+        );
+      }
+
+      if (wallet && typeof wallet.id === 'string') {
+        await tx.run(
+          `UPDATE local_records SET record_json = ?,
+             local_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           WHERE workspace_id = ? AND entity_type = 'wallets' AND entity_id = ?`,
+          [asJson(wallet), (await tx.get<{ workspace_id: string }>(
+            'SELECT workspace_id FROM sync_outbox WHERE operation_id = ?',
+            [operationId],
+          ))?.workspace_id ?? '', wallet.id],
+        );
+      }
+
       await tx.run(
         `DELETE FROM sync_outbox WHERE operation_id = ? AND state = 'processing'`,
         [operationId],
       );
     });
-    void result;
   }
 
   async markCommandForRetry(operationId: string, reason: string): Promise<void> {
