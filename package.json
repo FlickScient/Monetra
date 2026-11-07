@@ -17,7 +17,8 @@
     "db:verify:sync": "node scripts/verify-finance-sync-migration.mjs",
     "cap:sync": "cap sync android",
     "cap:android": "cap open android",
-    "cap:open": "cap open android"
+    "cap:open": "cap open android",
+    "cap:doctor": "cap doctor"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.7.6",
