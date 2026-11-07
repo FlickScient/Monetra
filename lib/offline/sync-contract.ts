@@ -7,8 +7,6 @@ export type SyncEntityOperation = 'upsert' | 'delete';
 
 export interface FinanceSyncChange<T = unknown> {
   cursor: number;
-  workspaceId: string;
-  userId: string;
   entityType: string;
   entityId: string;
   operation: SyncEntityOperation;
@@ -18,8 +16,8 @@ export interface FinanceSyncChange<T = unknown> {
 
 export interface FinanceSyncBootstrap {
   schemaVersion: number;
-  serverTime: string;
-  cursor: number;
+  exportedAt: string;
+  cursor: string;
   workspace: {
     id: string;
     type: 'personal' | 'family' | 'business';
@@ -29,8 +27,9 @@ export interface FinanceSyncBootstrap {
 }
 
 export interface FinanceSyncChangesPage {
+  workspaceId: string;
   changes: FinanceSyncChange[];
-  nextCursor: number;
+  nextCursor: string;
   hasMore: boolean;
 }
 
