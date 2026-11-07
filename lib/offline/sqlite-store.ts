@@ -90,28 +90,83 @@ async function rollbackOptimisticTransaction(
   );
   if (!row) return;
   const command = mapOutbox(row);
-  if (command.type === 'transaction.create') {
+
+  const readWallet = async (walletId: string) => {
     const walletRow = await tx.get<{ record_json: string }>(
       `SELECT record_json FROM local_records
-       WHERE workspace_id = ? AND entity_type = 'wallets' AND entity_id = ?`,
-      [row.workspace_id, command.payload.walletId],
+       WHERE workspace_id = ? AND entity_type = 'wallets' AND entity_id = ? AND is_deleted = 0`,
+      [row.workspace_id, walletId],
     );
-    if (walletRow) {
-      const wallet = JSON.parse(walletRow.record_json) as Record<string, unknown>;
+    return walletRow ? JSON.parse(walletRow.record_json) as Record<string, unknown> : null;
+  };
+  const writeWallet = async (walletId: string, delta: number) => {
+    const wallet = await readWallet(walletId);
+    if (!wallet) return;
+    const nextBalance = Number(wallet.currentBalanceMinor ?? 0) + delta;
+    await tx.run(
+      `UPDATE local_records SET record_json = ?,
+         local_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+       WHERE workspace_id = ? AND entity_type = 'wallets' AND entity_id = ?`,
+      [asJson({ ...wallet, currentBalanceMinor: nextBalance }), row.workspace_id, walletId],
+    );
+  };
+
+  if (command.type === 'transaction.create') {
+    const wallet = await readWallet(command.payload.walletId);
+    if (wallet) {
       const isCreditCard = wallet.walletType === 'credit_card';
       const increased = isCreditCard
         ? command.payload.transactionType === 'expense'
         : command.payload.transactionType === 'income';
-      const current = Number(wallet.currentBalanceMinor ?? 0);
-      const restored = current + (increased ? -command.payload.amountMinor : command.payload.amountMinor);
+      await writeWallet(command.payload.walletId, increased
+        ? -command.payload.amountMinor
+        : command.payload.amountMinor);
+    }
+    await tx.run('DELETE FROM local_records WHERE local_operation_id = ?', [operationId]);
+    return;
+  }
+
+  if (command.type === 'transfer.create') {
+    const destination = await readWallet(command.payload.destinationWalletId);
+    const destinationDelta = destination?.walletType === 'credit_card'
+      ? -command.payload.amountMinor
+      : command.payload.amountMinor;
+    await writeWallet(command.payload.walletId, command.payload.amountMinor);
+    await writeWallet(command.payload.destinationWalletId, -destinationDelta);
+    await tx.run('DELETE FROM local_records WHERE local_operation_id = ?', [operationId]);
+    return;
+  }
+
+  if (command.type === 'debt.payment') {
+    await tx.run('DELETE FROM local_records WHERE local_operation_id = ?', [operationId]);
+    const debtRow = await tx.get<{ record_json: string }>(
+      `SELECT record_json FROM local_records
+       WHERE workspace_id = ? AND entity_type = 'dueDebts' AND entity_id = ? AND is_deleted = 0`,
+      [row.workspace_id, command.payload.dueDebtId],
+    );
+    if (debtRow) {
+      const debt = JSON.parse(debtRow.record_json) as Record<string, unknown>;
+      const paymentRows = await tx.all<{ record_json: string }>(
+        `SELECT record_json FROM local_records
+         WHERE workspace_id = ? AND entity_type = 'dueDebtPayments'
+           AND parent_id = ? AND is_deleted = 0`,
+        [row.workspace_id, command.payload.dueDebtId],
+      );
+      const paid = paymentRows.reduce((total, payment) => {
+        const value = JSON.parse(payment.record_json) as Record<string, unknown>;
+        return total + Number(value.amountMinor ?? 0);
+      }, 0);
+      const principal = Number(debt.principalMinor ?? 0);
+      const status = debt.status === 'archived'
+        ? 'archived'
+        : paid >= principal ? 'settled' : paid > 0 ? 'partially_settled' : 'open';
       await tx.run(
         `UPDATE local_records SET record_json = ?,
            local_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE workspace_id = ? AND entity_type = 'wallets' AND entity_id = ?`,
-        [asJson({ ...wallet, currentBalanceMinor: restored }), row.workspace_id, command.payload.walletId],
+         WHERE workspace_id = ? AND entity_type = 'dueDebts' AND entity_id = ?`,
+        [asJson({ ...debt, status }), row.workspace_id, command.payload.dueDebtId],
       );
     }
-    await tx.run('DELETE FROM local_records WHERE local_operation_id = ?', [operationId]);
   }
 }
 
@@ -181,50 +236,67 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
   }
 
   async markCommandSynced(operationId: string, result: OfflineCommandResult): Promise<void> {
-    // The server change feed is the durable copy of the accepted financial row.
-    // Remove only the matching outbox intent after a confirmed 2xx response.
     await this.database.transaction(async (tx) => {
+      const outbox = await tx.get<{ workspace_id: string }>(
+        'SELECT workspace_id FROM sync_outbox WHERE operation_id = ?',
+        [operationId],
+      );
+      const workspaceId = outbox?.workspace_id ?? '';
       const response = result.result as {
         transaction?: Record<string, unknown>;
         wallet?: Record<string, unknown>;
+        payment?: Record<string, unknown>;
       } | undefined;
       const transaction = response?.transaction;
-      const wallet = response?.wallet;
+      const payment = response?.payment;
 
-      // Promote the optimistic row to the server-issued ID. The next pull
-      // upserts the same entity, so a successful offline save never vanishes
-      // between push and pull and never appears twice.
       if (transaction && typeof transaction.id === 'string') {
         await tx.run(
           `UPDATE local_records SET entity_id = ?, parent_id = ?, amount_minor = ?,
              occurred_at = ?, record_json = ?, local_operation_id = NULL,
              local_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-           WHERE local_operation_id = ?`,
+           WHERE workspace_id = ? AND entity_type = 'transactions' AND local_operation_id = ?`,
           [
             transaction.id,
             typeof transaction.walletId === 'string' ? transaction.walletId : null,
             typeof transaction.amountMinor === 'number' ? transaction.amountMinor : null,
             typeof transaction.occurredAt === 'string' ? transaction.occurredAt : null,
             asJson(transaction),
+            workspaceId,
             operationId,
           ],
         );
       }
 
-      if (wallet && typeof wallet.id === 'string') {
+      if (payment && typeof payment.id === 'string') {
+        await tx.run(
+          `UPDATE local_records SET entity_id = ?, parent_id = ?, amount_minor = ?,
+             occurred_at = ?, record_json = ?, local_operation_id = NULL,
+             local_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           WHERE workspace_id = ? AND entity_type = 'dueDebtPayments' AND local_operation_id = ?`,
+          [
+            payment.id,
+            typeof payment.dueDebtId === 'string' ? payment.dueDebtId : null,
+            typeof payment.amountMinor === 'number' ? payment.amountMinor : null,
+            typeof payment.paidAt === 'string' ? payment.paidAt : null,
+            asJson(payment),
+            workspaceId,
+            operationId,
+          ],
+        );
+      }
+
+      if (response?.wallet && typeof response.wallet.id === 'string') {
         await tx.run(
           `UPDATE local_records SET record_json = ?,
              local_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
            WHERE workspace_id = ? AND entity_type = 'wallets' AND entity_id = ?`,
-          [asJson(wallet), (await tx.get<{ workspace_id: string }>(
-            'SELECT workspace_id FROM sync_outbox WHERE operation_id = ?',
-            [operationId],
-          ))?.workspace_id ?? '', wallet.id],
+          [asJson(response.wallet), workspaceId, response.wallet.id],
         );
       }
 
       await tx.run(
-        `DELETE FROM sync_outbox WHERE operation_id = ? AND state = 'processing'`,
+        "DELETE FROM sync_outbox WHERE operation_id = ? AND state = 'processing'",
         [operationId],
       );
     });
@@ -470,25 +542,12 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
           throw new Error('This payment is greater than the current card balance.');
         }
 
-        const optimisticWallet = { ...wallet, currentBalanceMinor: nextBalance };
         await tx.run(
           `UPDATE local_records SET record_json = ?,
              local_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
            WHERE workspace_id = ? AND entity_type = 'wallets' AND entity_id = ?`,
-          [asJson(optimisticWallet), workspaceId, payload.walletId],
+          [asJson({ ...wallet, currentBalanceMinor: nextBalance }), workspaceId, payload.walletId],
         );
-
-        const localRecord = {
-          id: command.operationId,
-          transactionType: payload.transactionType,
-          walletId: payload.walletId,
-          destinationWalletId: null,
-          categoryId: payload.categoryId ?? null,
-          amountMinor: payload.amountMinor,
-          description: payload.description,
-          occurredAt: payload.occurredAt,
-          pendingSync: true,
-        };
         await tx.run(
           `INSERT INTO local_records (
              workspace_id, entity_type, entity_id, parent_id, amount_minor,
@@ -496,12 +555,139 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
              local_operation_id, local_updated_at
            ) VALUES (?, 'transactions', ?, ?, ?, ?, ?, 0, '0', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
           [
-            workspaceId,
-            command.operationId,
-            payload.walletId,
-            payload.amountMinor,
+            workspaceId, command.operationId, payload.walletId, payload.amountMinor,
             payload.occurredAt,
-            asJson(localRecord),
+            asJson({
+              id: command.operationId, transactionType: payload.transactionType,
+              walletId: payload.walletId, destinationWalletId: null,
+              categoryId: payload.categoryId ?? null, amountMinor: payload.amountMinor,
+              description: payload.description, occurredAt: payload.occurredAt, pendingSync: true,
+            }),
+            command.operationId,
+          ],
+        );
+        return;
+      }
+
+      if (command.type === 'transfer.create') {
+        const payload = command.payload;
+        if (payload.walletId === payload.destinationWalletId) throw new Error('Choose two different wallets for a transfer.');
+        if (!Number.isSafeInteger(payload.amountMinor) || payload.amountMinor <= 0) throw new Error('Enter a valid positive transfer amount.');
+        if (!Number.isFinite(Date.parse(payload.occurredAt))) throw new Error('The transfer date is invalid.');
+        const sourceRow = await tx.get<{ record_json: string }>(
+          `SELECT record_json FROM local_records WHERE workspace_id = ? AND entity_type = 'wallets'
+           AND entity_id = ? AND is_deleted = 0`,
+          [workspaceId, payload.walletId],
+        );
+        const destinationRow = await tx.get<{ record_json: string }>(
+          `SELECT record_json FROM local_records WHERE workspace_id = ? AND entity_type = 'wallets'
+           AND entity_id = ? AND is_deleted = 0`,
+          [workspaceId, payload.destinationWalletId],
+        );
+        if (!sourceRow || !destinationRow) throw new Error('Both transfer wallets must be available in the offline cache.');
+        const source = JSON.parse(sourceRow.record_json) as Record<string, unknown>;
+        const destination = JSON.parse(destinationRow.record_json) as Record<string, unknown>;
+        if (source.status !== 'active' || destination.status !== 'active') throw new Error('Both transfer wallets must be active.');
+        if (source.walletType === 'credit_card') throw new Error('Credit cards cannot be used as transfer sources.');
+        if (source.currency !== destination.currency) throw new Error('Transfers require wallets with the same currency.');
+        const sourceBalance = Number(source.currentBalanceMinor ?? 0);
+        const destinationBalance = Number(destination.currentBalanceMinor ?? 0);
+        if (sourceBalance < payload.amountMinor) throw new Error('Insufficient funds in the source wallet.');
+        const destinationDelta = destination.walletType === 'credit_card'
+          ? -payload.amountMinor
+          : payload.amountMinor;
+        if (destination.walletType === 'credit_card' && destinationBalance < payload.amountMinor) {
+          throw new Error('Payment cannot exceed the card outstanding balance.');
+        }
+        const nextSource = sourceBalance - payload.amountMinor;
+        const nextDestination = destinationBalance + destinationDelta;
+        if (!Number.isSafeInteger(nextSource) || !Number.isSafeInteger(nextDestination)) {
+          throw new Error('This transfer exceeds the supported balance range.');
+        }
+        await tx.run(
+          `UPDATE local_records SET record_json = ?,
+             local_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           WHERE workspace_id = ? AND entity_type = 'wallets' AND entity_id = ?`,
+          [asJson({ ...source, currentBalanceMinor: nextSource }), workspaceId, payload.walletId],
+        );
+        await tx.run(
+          `UPDATE local_records SET record_json = ?,
+             local_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           WHERE workspace_id = ? AND entity_type = 'wallets' AND entity_id = ?`,
+          [asJson({ ...destination, currentBalanceMinor: nextDestination }), workspaceId, payload.destinationWalletId],
+        );
+        await tx.run(
+          `INSERT INTO local_records (
+             workspace_id, entity_type, entity_id, parent_id, amount_minor,
+             occurred_at, record_json, is_deleted, server_cursor,
+             local_operation_id, local_updated_at
+           ) VALUES (?, 'transactions', ?, ?, ?, ?, ?, 0, '0', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
+          [
+            workspaceId, command.operationId, payload.walletId, payload.amountMinor,
+            payload.occurredAt,
+            asJson({
+              id: command.operationId, transactionType: 'transfer',
+              walletId: payload.walletId, destinationWalletId: payload.destinationWalletId,
+              categoryId: null, amountMinor: payload.amountMinor,
+              description: payload.description?.trim() || 'Transfer',
+              occurredAt: payload.occurredAt, pendingSync: true,
+            }),
+            command.operationId,
+          ],
+        );
+        return;
+      }
+
+      if (command.type === 'debt.payment') {
+        const payload = command.payload;
+        if (!Number.isSafeInteger(payload.amountMinor) || payload.amountMinor <= 0) {
+          throw new Error('Enter a valid positive debt payment.');
+        }
+        if (!Number.isFinite(Date.parse(payload.paidAt))) throw new Error('The debt payment date is invalid.');
+        const debtRow = await tx.get<{ record_json: string }>(
+          `SELECT record_json FROM local_records WHERE workspace_id = ? AND entity_type = 'dueDebts'
+           AND entity_id = ? AND is_deleted = 0`,
+          [workspaceId, payload.dueDebtId],
+        );
+        if (!debtRow) throw new Error('This debt is not available in the offline cache.');
+        const debt = JSON.parse(debtRow.record_json) as Record<string, unknown>;
+        if (debt.status === 'archived' || debt.status === 'settled') throw new Error('This debt is not open for payments.');
+        const paymentRows = await tx.all<{ record_json: string }>(
+          `SELECT record_json FROM local_records WHERE workspace_id = ? AND entity_type = 'dueDebtPayments'
+           AND parent_id = ? AND is_deleted = 0`,
+          [workspaceId, payload.dueDebtId],
+        );
+        const paid = paymentRows.reduce((total, row) => {
+          const payment = JSON.parse(row.record_json) as Record<string, unknown>;
+          return total + Number(payment.amountMinor ?? 0);
+        }, 0);
+        const outstanding = Number(debt.principalMinor ?? 0) - paid;
+        if (!Number.isSafeInteger(outstanding) || outstanding <= 0 || payload.amountMinor > outstanding) {
+          throw new Error('The payment exceeds the cached outstanding debt amount.');
+        }
+        const nextPaid = paid + payload.amountMinor;
+        const status = nextPaid >= Number(debt.principalMinor) ? 'settled' : 'partially_settled';
+        await tx.run(
+          `UPDATE local_records SET record_json = ?,
+             local_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           WHERE workspace_id = ? AND entity_type = 'dueDebts' AND entity_id = ?`,
+          [asJson({ ...debt, status }), workspaceId, payload.dueDebtId],
+        );
+        await tx.run(
+          `INSERT INTO local_records (
+             workspace_id, entity_type, entity_id, parent_id, amount_minor,
+             occurred_at, record_json, is_deleted, server_cursor,
+             local_operation_id, local_updated_at
+           ) VALUES (?, 'dueDebtPayments', ?, ?, ?, ?, ?, 0, '0', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
+          [
+            workspaceId, command.operationId, payload.dueDebtId, payload.amountMinor,
+            payload.paidAt,
+            asJson({
+              id: command.operationId, dueDebtId: payload.dueDebtId,
+              amountMinor: payload.amountMinor, paidAt: payload.paidAt,
+              paymentMethod: payload.paymentMethod ?? null, note: payload.note ?? null,
+              pendingSync: true,
+            }),
             command.operationId,
           ],
         );
