@@ -160,7 +160,11 @@ export default function HomePage() {
       setWallets(walletData); setCategories(categoryData); setTransactions(transactionData.slice(0, 50)); setHasMoreTransactions(transactionData.length > 50); setSummary(summaryData);
       setFinanceRefreshVersion(version => version + 1);
       if (isNativeFinanceApp() && user?.id && workspaceId) {
-        await syncNativeWorkspace(user.id, workspaceId);
+        try {
+          await syncNativeWorkspace(user.id, workspaceId);
+        } catch {
+          // Keep the successfully fetched server data visible; retry cache sync later.
+        }
       }
     } catch {
       if (requestId === financeRequestId.current && isNativeFinanceApp() && workspaceId) {
