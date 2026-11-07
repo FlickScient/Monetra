@@ -49,6 +49,8 @@ jobs:
         env:
           VITE_CLERK_PUBLISHABLE_KEY: pk_test_bW9uZXRyYS1jaS5jbGVyay5hY2NvdW50cy5kZXYk
           VITE_MONETRA_API_URL: https://monetra-4rax.vercel.app
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build:native
       - name: Generate Android project and sync plugins
         run: |
