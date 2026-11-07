@@ -9,7 +9,7 @@ export const workspaces = pgTable('workspaces', {
   name: text('name').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  syncVersion: bigint('sync_version', { mode: 'bigint' }).notNull().default(0n),
+  syncVersion: bigint('sync_version', { mode: 'bigint' }).notNull().default(BigInt('0')),
 }, (table) => ({
   ownerTypeUnique: uniqueIndex('workspaces_user_type_unique').on(table.userId, table.workspaceType),
   ownerIdx: index('workspaces_user_idx').on(table.userId),
