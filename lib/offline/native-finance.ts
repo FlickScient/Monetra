@@ -101,4 +101,60 @@ export async function queueNativeTransaction(
     },
   };
   await store.enqueueCommand(workspaceId, command);
+
+/** Queue a wallet-to-wallet transfer locally for retry-safe background sync. */
+export async function queueNativeTransfer(
+  workspaceId: string,
+  input: {
+    operationId: string;
+    walletId: string;
+    destinationWalletId: string;
+    amountMinor: number;
+    description?: string;
+    occurredAt: string;
+  },
+): Promise<void> {
+  if (!isNativeFinanceApp()) throw new Error('Offline transfers require the Monetra Android app.');
+  const store = await createStore();
+  const command: OfflineCommand = {
+    operationId: input.operationId,
+    type: 'transfer.create',
+    payload: {
+      walletId: input.walletId,
+      destinationWalletId: input.destinationWalletId,
+      amountMinor: input.amountMinor,
+      description: input.description,
+      occurredAt: input.occurredAt,
+    },
+  };
+  await store.enqueueCommand(workspaceId, command);
+}
+
+/** Queue a debt payment locally; the server remains authoritative after sync. */
+export async function queueNativeDebtPayment(
+  workspaceId: string,
+  input: {
+    operationId: string;
+    dueDebtId: string;
+    amountMinor: number;
+    paidAt: string;
+    paymentMethod?: string | null;
+    note?: string | null;
+  },
+): Promise<void> {
+  if (!isNativeFinanceApp()) throw new Error('Offline debt payments require the Monetra Android app.');
+  const store = await createStore();
+  const command: OfflineCommand = {
+    operationId: input.operationId,
+    type: 'debt.payment',
+    payload: {
+      dueDebtId: input.dueDebtId,
+      amountMinor: input.amountMinor,
+      paidAt: input.paidAt,
+      paymentMethod: input.paymentMethod ?? null,
+      note: input.note ?? null,
+    },
+  };
+  await store.enqueueCommand(workspaceId, command);
+}
 }
