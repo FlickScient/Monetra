@@ -68,4 +68,11 @@ CREATE TABLE IF NOT EXISTS local_session_state (
   lock_required INTEGER NOT NULL DEFAULT 1 CHECK (lock_required IN (0, 1))
 );
 
+CREATE TABLE IF NOT EXISTS local_app_lock (
+  owner_id TEXT PRIMARY KEY NOT NULL,
+  pin_salt TEXT NOT NULL,
+  pin_hash TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 INSERT OR IGNORE INTO local_schema_migrations(version) VALUES (1);
