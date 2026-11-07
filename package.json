@@ -18,7 +18,9 @@
     "cap:sync": "cap sync android",
     "cap:android": "cap open android",
     "cap:open": "cap open android",
-    "cap:doctor": "cap doctor"
+    "cap:doctor": "cap doctor",
+    "build:native": "vite build --config native-app/vite.config.ts",
+    "cap:add:android": "cap add android"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.7.6",
