@@ -162,3 +162,70 @@ export async function queueNativeDebtPayment(
   };
   await store.enqueueCommand(workspaceId, command);
 }
+
+
+const PIN_ITERATIONS = 250_000;
+const PIN_DIGITS = 6;
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function deriveLocalPinHash(pin: string, saltHex: string): Promise<string> {
+  const salt = new Uint8Array(saltHex.match(/.{2}/g)?.map((part) => Number.parseInt(part, 16)) ?? []);
+  if (salt.length !== 16) throw new Error('The local app lock is damaged. Reconnect and set it up again.');
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations: PIN_ITERATIONS, hash: 'SHA-256' },
+    key,
+    256,
+  );
+  return bytesToHex(new Uint8Array(bits));
+}
+
+/** Set a device-local six-digit PIN. The encrypted SQLite database stores only a salted PBKDF2 hash. */
+export async function setNativeAppPin(ownerId: string, pin: string): Promise<void> {
+  if (!isNativeFinanceApp()) throw new Error('The local app lock is available only in Monetra Android.');
+  if (!/^\\d{6}$/.test(pin)) throw new Error('Choose a six-digit PIN.');
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const saltHex = bytesToHex(salt);
+  const hash = await deriveLocalPinHash(pin, saltHex);
+  const database = await openNativeFinanceDatabase();
+  await database.run(
+    `INSERT INTO local_app_lock (owner_id, pin_salt, pin_hash)
+     VALUES (?, ?, ?)
+     ON CONFLICT(owner_id) DO UPDATE SET
+       pin_salt = excluded.pin_salt,
+       pin_hash = excluded.pin_hash,
+       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+    [ownerId, saltHex, hash],
+  );
+}
+
+export async function hasNativeAppPin(ownerId: string): Promise<boolean> {
+  if (!isNativeFinanceApp()) return false;
+  const database = await openNativeFinanceDatabase();
+  const row = await database.get<{ owner_id: string }>(
+    'SELECT owner_id FROM local_app_lock WHERE owner_id = ?',
+    [ownerId],
+  );
+  return Boolean(row);
+}
+
+/** Verify a PIN without ever sending it to the server. */
+export async function verifyNativeAppPin(ownerId: string, pin: string): Promise<boolean> {
+  if (!isNativeFinanceApp() || !/^\\d{6}$/.test(pin)) return false;
+  const database = await openNativeFinanceDatabase();
+  const row = await database.get<{ pin_salt: string; pin_hash: string }>(
+    'SELECT pin_salt, pin_hash FROM local_app_lock WHERE owner_id = ?',
+    [ownerId],
+  );
+  if (!row) return false;
+  const candidate = await deriveLocalPinHash(pin, row.pin_salt);
+  if (candidate.length !== row.pin_hash.length) return false;
+  let difference = 0;
+  for (let index = 0; index < candidate.length; index += 1) {
+    difference |= candidate.charCodeAt(index) ^ row.pin_hash.charCodeAt(index);
+  }
+  return difference === 0;
+}
