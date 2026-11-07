@@ -136,6 +136,18 @@ export default function App() {
         const hasPin = await hasNativeAppPin(userId);
         setMode(hasPin ? 'unlock' : 'setup-pin');
       } catch (cause) {
+        try {
+          const cached = await listCachedNativeWorkspaces(userId);
+          const selectedCached = cached.find((item) => item.type === 'personal') || cached[0];
+          if (selectedCached && await hasNativeAppPin(userId)) {
+            setWorkspace(selectedCached);
+            setMessage('Network sync is unavailable. You can still unlock your saved local workspace.');
+            setMode('unlock');
+            return;
+          }
+        } catch {
+          // Show the original preparation error if no valid local snapshot can be opened.
+        }
         setError(cause instanceof Error ? cause.message : 'Could not prepare the offline workspace.');
         setMode('error');
       }
@@ -158,9 +170,13 @@ export default function App() {
       await loadLocal(selected.id);
       if (navigator.onLine && isSignedIn) {
         configureSync();
-        await syncNativeWorkspace(ownerId, selected.id);
-        await loadLocal(selected.id);
-        setMessage('Synced with your Monetra account.');
+        try {
+          await syncNativeWorkspace(ownerId, selected.id);
+          await loadLocal(selected.id);
+          setMessage('Synced with your Monetra account.');
+        } catch {
+          setMessage('Unlocked locally. Sync is pending until your connection is stable.');
+        }
       } else {
         setMessage('Offline mode · changes stay on this device until you reconnect.');
       }
@@ -217,6 +233,7 @@ export default function App() {
     setBusy(true); setError('');
     const operationId = crypto.randomUUID();
     const occurredAt = new Date().toISOString();
+    let queuedLocally = false;
     try {
       if (kind === 'income' || kind === 'expense') {
         await queueNativeTransaction(workspace.id, {
@@ -233,17 +250,24 @@ export default function App() {
           operationId, dueDebtId: debtId, amountMinor, paidAt: occurredAt, note: description.trim() || null,
         });
       }
-      await loadLocal(workspace.id);
+      queuedLocally = true;
       setAmount(''); setDescription('');
       setMessage(navigator.onLine ? 'Saved locally. Syncing…' : 'Saved offline on this device.');
+      await loadLocal(workspace.id);
       if (navigator.onLine && isSignedIn) {
         configureSync();
-        await syncNativeWorkspace(ownerId, workspace.id);
-        await loadLocal(workspace.id);
-        setMessage('Saved and synced.');
+        try {
+          await syncNativeWorkspace(ownerId, workspace.id);
+          await loadLocal(workspace.id);
+          setMessage('Saved and synced.');
+        } catch {
+          setMessage('Saved on this device. Sync will retry when your connection is stable.');
+        }
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not save this entry.');
+      setError(queuedLocally
+        ? 'Your entry is saved locally, but the screen could not refresh. Reopen Monetra to verify it.'
+        : cause instanceof Error ? cause.message : 'Could not save this entry.');
     } finally { setBusy(false); }
   };
 
