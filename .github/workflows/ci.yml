@@ -28,6 +28,7 @@ jobs:
           node --check scripts/preflight-workspace-migration.mjs
           node --check scripts/ensure-workspace-migrations.mjs
           node --check scripts/diagnose-database.mjs
+          node --check scripts/preflight-finance-sync-migration.mjs
       - name: TypeScript check
         run: npm run typecheck
       - name: Production build
