@@ -68,10 +68,7 @@ try {
     `select count(*)::int as count
      from workspaces
      where id is null or user_id is null`,
-  ).catch(() => ({ rows: [{ count: -1 }] }));
-  if (workspace.rows[0].count === -1) {
-    throw new Error('workspaces.id/user_id are not ready. Apply and verify the workspace foundation migration first.');
-  }
+  );
   if (workspace.rows[0].count > 0) {
     throw new Error('Workspace owner fields contain NULL values. Migration was NOT started.');
   }
