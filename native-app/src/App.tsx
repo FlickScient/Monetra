@@ -348,6 +348,10 @@ export default function App() {
       if (typeof result.answer !== 'string' || !result.answer.trim()) throw new Error('Fiscus returned an empty response.');
       setFiscusMessages((current) => [...current, { role: 'model' as const, content: result.answer as string }].slice(-40));
     } catch (cause) {
+      // Keep the user's prompt recoverable when the request fails, and remove
+      // only this optimistic bubble (not an older identical message).
+      setFiscusMessages((current) => current.filter((item) => item !== newUserMessage));
+      setFiscusDraft((current) => current || content);
       setFiscusError(cause instanceof Error ? cause.message : 'Fiscus could not complete the request.');
     } finally { setFiscusLoading(false); }
   };
