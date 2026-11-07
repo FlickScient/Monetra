@@ -38,7 +38,7 @@ async function invokeNativeFiscus(getToken: () => Promise<string | null>, worksp
   if (!baseUrl || !publishableKey) throw new Error('Fiscus is not configured in this Android build yet.');
   const token = await getToken();
   if (!token) throw new Error('Sign in to use Fiscus AI.');
-  const response = await fetch(baseUrl.replace(/\\/$/, '') + '/functions/v1/fiscus-chat', {
+  const response = await fetch(baseUrl.replace(/\/+$/, '') + '/functions/v1/fiscus-chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token, apikey: publishableKey },
     body: JSON.stringify({ ...payload, action, workspaceId }),
@@ -292,7 +292,7 @@ export default function App() {
   }, [workspace, ownerId, isSignedIn, configureSync, loadLocal]);
 
   useEffect(() => {
-    if (view !== 'fiscus' || !workspace || !isSignedIn || fiscusReady || fiscusLoading) return;
+    if (view !== 'fiscus' || !workspace || !isSignedIn || fiscusReady) return;
     let cancelled = false;
     setFiscusLoading(true);
     setFiscusError('');
@@ -306,7 +306,7 @@ export default function App() {
       .catch((cause) => { if (!cancelled) { setFiscusError(cause instanceof Error ? cause.message : 'Fiscus could not load your chat.'); setFiscusReady(true); } })
       .finally(() => { if (!cancelled) setFiscusLoading(false); });
     return () => { cancelled = true; };
-  }, [view, workspace, isSignedIn, fiscusReady, fiscusLoading, getToken]);
+  }, [view, workspace, isSignedIn, fiscusReady, getToken]);
 
   const sendFiscusMessage = async (event: FormEvent) => {
     event.preventDefault();
