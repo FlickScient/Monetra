@@ -42,7 +42,7 @@ async function invokeFiscus(
   const token = await getToken();
   if (!token) throw new Error('Your session has expired. Please sign in again.');
 
-  const response = await fetch(supabaseUrl.replace(/\\/$/, '') + '/functions/v1/fiscus-chat', {
+  const response = await fetch(supabaseUrl.replace(/\/$/, '') + '/functions/v1/fiscus-chat', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
