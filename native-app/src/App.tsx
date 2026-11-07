@@ -121,6 +121,17 @@ export default function App() {
     }
   }, [isLoaded, isSignedIn, mode]);
 
+  // Never leave the native launch screen spinning forever if Clerk's Frontend
+  // API cannot be reached or its client fails to initialize inside Android WebView.
+  useEffect(() => {
+    if (mode !== 'checking' || isLoaded) return;
+    const timeout = window.setTimeout(() => {
+      setError('Sign-in could not initialize. Check your internet connection, then tap Try again. If this keeps happening, the Android authentication connection needs attention.');
+      setMode('error');
+    }, 20000);
+    return () => window.clearTimeout(timeout);
+  }, [mode, isLoaded]);
+
   useEffect(() => {
     if (!isNativeFinanceApp()) {
       setError('This screen is designed for the installed Monetra Android app.');
