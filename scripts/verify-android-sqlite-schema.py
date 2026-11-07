@@ -21,7 +21,7 @@ def verify_migration(migration: Path) -> None:
         }
         required = {
             "local_schema_migrations", "local_workspaces", "local_records",
-            "sync_outbox", "workspace_sync_state", "local_session_state",
+            "sync_outbox", "workspace_sync_state", "local_session_state", "local_app_lock",
         }
         missing = sorted(required - tables)
         if missing:
