@@ -34,7 +34,7 @@ function asRows<T>(value: unknown): T[] { return Array.isArray(value) ? value as
 function transactionWalletLabel(wallets: Wallet[], id?: string): string { return wallets.find((item) => item.id === id)?.name || 'Wallet'; }
 
 async function invokeNativeFiscus(getToken: () => Promise<string | null>, workspaceId: string, action: 'chat' | 'restore' | 'new', payload: Record<string, unknown> = {}) {
-  const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const baseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://osfitgjwkjhhexgcazwj.supabase.co';
   const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   if (!baseUrl || !publishableKey) throw new Error('Fiscus is not configured in this Android build yet.');
   const token = await getToken();
