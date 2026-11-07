@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   try {
     if (!/^\d+$/.test(rawCursor)) throw new Error('invalid');
     after = BigInt(rawCursor);
-    if (after < 0n) throw new Error('invalid');
+    if (after < BigInt('0')) throw new Error('invalid');
   } catch {
     return NextResponse.json({ error: 'Invalid sync cursor' }, { status: 400 });
   }
