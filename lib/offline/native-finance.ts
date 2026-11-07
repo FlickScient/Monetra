@@ -186,7 +186,7 @@ async function deriveLocalPinHash(pin: string, saltHex: string): Promise<string>
 /** Set a device-local six-digit PIN. The encrypted SQLite database stores only a salted PBKDF2 hash. */
 export async function setNativeAppPin(ownerId: string, pin: string): Promise<void> {
   if (!isNativeFinanceApp()) throw new Error('The local app lock is available only in Monetra Android.');
-  if (!/^\\d{6}$/.test(pin)) throw new Error('Choose a six-digit PIN.');
+  if (!/^\d{6}$/.test(pin)) throw new Error('Choose a six-digit PIN.');
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const saltHex = bytesToHex(salt);
   const hash = await deriveLocalPinHash(pin, saltHex);
@@ -214,7 +214,7 @@ export async function hasNativeAppPin(ownerId: string): Promise<boolean> {
 
 /** Verify a PIN without ever sending it to the server. */
 export async function verifyNativeAppPin(ownerId: string, pin: string): Promise<boolean> {
-  if (!isNativeFinanceApp() || !/^\\d{6}$/.test(pin)) return false;
+  if (!isNativeFinanceApp() || !/^\d{6}$/.test(pin)) return false;
   const database = await openNativeFinanceDatabase();
   const row = await database.get<{ pin_salt: string; pin_hash: string }>(
     'SELECT pin_salt, pin_hash FROM local_app_lock WHERE owner_id = ?',
