@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import {
-  ArrowUp, Bot, Check, Clock3, MessageSquare, MoreHorizontal, Plus,
+  ArrowUp, Bot, Clock3, MessageSquare, Plus,
   Search, Send, Sparkles, Trash2, UserRound, X,
 } from 'lucide-react';
 
