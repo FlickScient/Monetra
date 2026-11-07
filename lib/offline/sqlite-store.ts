@@ -380,15 +380,70 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
       );
 
       if (command.type === 'transaction.create') {
+        const payload = command.payload;
+        if (!Number.isSafeInteger(payload.amountMinor) || payload.amountMinor <= 0) {
+          throw new Error('Enter a valid positive transaction amount before saving offline.');
+        }
+        if (!Number.isFinite(Date.parse(payload.occurredAt))) {
+          throw new Error('The transaction date is invalid.');
+        }
+
+        const walletRow = await tx.get<{ record_json: string }>(
+          `SELECT record_json FROM local_records
+           WHERE workspace_id = ? AND entity_type = 'wallets'
+             AND entity_id = ? AND is_deleted = 0`,
+          [workspaceId, payload.walletId],
+        );
+        if (!walletRow) throw new Error('This wallet is not available in the offline cache. Connect once to refresh it.');
+        const wallet = JSON.parse(walletRow.record_json) as Record<string, unknown>;
+        if (wallet.status !== 'active') throw new Error('This wallet is inactive and cannot receive offline transactions.');
+
+        if (payload.categoryId) {
+          const categoryRow = await tx.get<{ record_json: string }>(
+            `SELECT record_json FROM local_records
+             WHERE workspace_id = ? AND entity_type = 'categories'
+               AND entity_id = ? AND is_deleted = 0`,
+            [workspaceId, payload.categoryId],
+          );
+          if (!categoryRow) throw new Error('This category is not available in the offline cache.');
+          const category = JSON.parse(categoryRow.record_json) as Record<string, unknown>;
+          if (category.categoryType !== payload.transactionType) {
+            throw new Error('Choose a category that matches the transaction type.');
+          }
+        }
+
+        const currentBalance = Number(wallet.currentBalanceMinor ?? 0);
+        const creditLimit = Number(wallet.creditLimitMinor ?? 0);
+        const isCreditCard = wallet.walletType === 'credit_card';
+        const increasesBalance = isCreditCard
+          ? payload.transactionType === 'expense'
+          : payload.transactionType === 'income';
+        const nextBalance = currentBalance + (increasesBalance ? payload.amountMinor : -payload.amountMinor);
+        if (!Number.isSafeInteger(nextBalance)) throw new Error('This wallet balance exceeds the supported amount range.');
+        if (isCreditCard && payload.transactionType === 'expense' && creditLimit > 0 && nextBalance > creditLimit) {
+          throw new Error('This transaction would exceed the wallet credit limit.');
+        }
+        if (isCreditCard && payload.transactionType === 'income' && currentBalance < payload.amountMinor) {
+          throw new Error('This payment is greater than the current card balance.');
+        }
+
+        const optimisticWallet = { ...wallet, currentBalanceMinor: nextBalance };
+        await tx.run(
+          `UPDATE local_records SET record_json = ?,
+             local_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           WHERE workspace_id = ? AND entity_type = 'wallets' AND entity_id = ?`,
+          [asJson(optimisticWallet), workspaceId, payload.walletId],
+        );
+
         const localRecord = {
           id: command.operationId,
-          transactionType: command.payload.transactionType,
-          walletId: command.payload.walletId,
+          transactionType: payload.transactionType,
+          walletId: payload.walletId,
           destinationWalletId: null,
-          categoryId: command.payload.categoryId ?? null,
-          amountMinor: command.payload.amountMinor,
-          description: command.payload.description,
-          occurredAt: command.payload.occurredAt,
+          categoryId: payload.categoryId ?? null,
+          amountMinor: payload.amountMinor,
+          description: payload.description,
+          occurredAt: payload.occurredAt,
           pendingSync: true,
         };
         await tx.run(
@@ -400,9 +455,9 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
           [
             workspaceId,
             command.operationId,
-            command.payload.walletId,
-            command.payload.amountMinor,
-            command.payload.occurredAt,
+            payload.walletId,
+            payload.amountMinor,
+            payload.occurredAt,
             asJson(localRecord),
             command.operationId,
           ],
