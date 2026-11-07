@@ -106,7 +106,7 @@ export async function synchronizeFinanceWorkspace(
 
       try {
         const response = await pushFinanceCommands(workspaceId, pending, signal);
-        const resultsById = new Map(response.results.map((result) => [result.operationId, result]));
+        const resultsById = new Map<string, OfflineCommandResult>();\n        for (const result of response.results) resultsById.set(result.operationId, result);
 
         for (const operation of pending) {
           const result = resultsById.get(operation.operationId);
