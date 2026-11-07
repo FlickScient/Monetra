@@ -17,7 +17,7 @@ const syncTables = {
   ledger_accounts: ['id', 'workspace_id', 'user_id'],
   ledger_entries: ['id', 'workspace_id', 'user_id'],
   savings_goals: ['id', 'workspace_id', 'user_id'],
-  goal_allocations: ['id', 'workspace_id'],
+  goal_allocations: ['id', 'workspace_id', 'goal_id'],
   goal_allocation_events: ['id', 'workspace_id', 'user_id'],
   due_debts: ['id', 'workspace_id', 'user_id'],
   due_debt_payments: ['id', 'workspace_id', 'user_id'],
@@ -47,7 +47,7 @@ try {
   const columns = new Map();
   for (const row of columnsResult.rows) {
     if (!columns.has(row.table_name)) columns.set(row.table_name, new Set());
-    columns.get(row.table_name).add(row.column_name);
+    columns.get(row.table_name).set(row.column_name, { dataType: row.data_type, udtName: row.udt_name });
   }
 
   const missing = [];
