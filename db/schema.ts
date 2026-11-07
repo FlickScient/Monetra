@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, bigint, timestamp, index, uniqueIndex, check, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, bigint, timestamp, index, uniqueIndex, check, jsonb, primaryKey } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 /** A private finance workspace owned directly by one Clerk user. */
@@ -117,6 +117,6 @@ export const financeSyncChanges = pgTable('finance_sync_changes', {
   payload: jsonb('payload'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
-  workspaceCursorUnique: uniqueIndex('finance_sync_changes_workspace_cursor_unique').on(table.workspaceId, table.cursor),
+  cursorPk: primaryKey({ columns: [table.workspaceId, table.cursor], name: 'finance_sync_changes_pkey' }),
   ownerCursorIdx: index('finance_sync_changes_owner_cursor_idx').on(table.userId, table.workspaceId, table.cursor),
 }));
