@@ -32,12 +32,36 @@ type OutboxRow = {
   server_result_json: string | null;
 };
 
-const ENTITY_TYPES = new Set([
-  'wallets', 'categories', 'transactions', 'ledgerAccounts', 'ledgerEntries',
-  'savingsGoals', 'goalAllocations', 'goalAllocationEvents', 'dueDebts',
-  'dueDebtPayments', 'monthlyBudgets', 'recurringTransactions',
-  'walletReconciliations', 'financeAuditEvents',
-]);
+const ENTITY_TYPE_MAP: Record<string, string> = {
+  wallets: 'wallets',
+  categories: 'categories',
+  transactions: 'transactions',
+  ledger_accounts: 'ledgerAccounts',
+  ledger_entries: 'ledgerEntries',
+  savings_goals: 'savingsGoals',
+  goal_allocations: 'goalAllocations',
+  goal_allocation_events: 'goalAllocationEvents',
+  due_debts: 'dueDebts',
+  due_debt_payments: 'dueDebtPayments',
+  monthly_budgets: 'monthlyBudgets',
+  recurring_transactions: 'recurringTransactions',
+  wallet_reconciliations: 'walletReconciliations',
+  finance_audit_events: 'financeAuditEvents',
+};
+
+function normalizeEntityType(entityType: string): string | null {
+  return ENTITY_TYPE_MAP[entityType] ?? (Object.values(ENTITY_TYPE_MAP).includes(entityType) ? entityType : null);
+}
+
+function normalizeRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('The server returned an invalid finance record.');
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
+    key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()),
+    entry,
+  ]));
+}
 
 function asJson(value: unknown): string {
   const serialized = JSON.stringify(value);
@@ -197,14 +221,16 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
           throw new Error('The server returned an unordered or out-of-range change page.');
         }
         previous = cursor;
-        if (!ENTITY_TYPES.has(change.entityType)) {
+        const entityType = normalizeEntityType(change.entityType);
+        if (!entityType) {
           throw new Error(`Unsupported finance sync entity: ${change.entityType}`);
         }
+        const record = change.operation === 'delete' ? null : normalizeRecord(change.payload);
         await tx.run(
           `INSERT INTO local_records (
-             workspace_id, entity_type, entity_id, record_json, is_deleted,
-             server_cursor, local_updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+             workspace_id, entity_type, entity_id, parent_id, amount_minor,
+             occurred_at, record_json, is_deleted, server_cursor, local_updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
            ON CONFLICT(workspace_id, entity_type, entity_id) DO UPDATE SET
              record_json = excluded.record_json,
              is_deleted = excluded.is_deleted,
@@ -212,9 +238,12 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
              local_updated_at = excluded.local_updated_at`,
           [
             workspaceId,
-            change.entityType,
+            entityType,
             change.entityId,
-            change.operation === 'delete' ? '{}' : asJson(change.payload),
+            typeof record?.walletId === 'string' ? record.walletId : typeof record?.dueDebtId === 'string' ? record.dueDebtId : null,
+            typeof record?.amountMinor === 'number' ? record.amountMinor : null,
+            typeof record?.occurredAt === 'string' ? record.occurredAt : typeof record?.paidAt === 'string' ? record.paidAt : null,
+            record ? asJson(record) : '{}',
             change.operation === 'delete' ? 1 : 0,
             cursor.toString(),
           ],
@@ -254,12 +283,13 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
       );
       await tx.run('DELETE FROM local_records WHERE workspace_id = ?', [snapshot.workspace.id]);
       for (const [entityType, records] of Object.entries(snapshot.data)) {
-        if (!ENTITY_TYPES.has(entityType)) continue;
-        for (const record of records) {
-          if (typeof record !== 'object' || record === null || !('id' in record) || typeof record.id !== 'string') {
+        const normalizedType = normalizeEntityType(entityType);
+        if (!normalizedType) continue;
+        for (const rawRecord of records) {
+          const value = normalizeRecord(rawRecord);
+          if (typeof value.id !== 'string') {
             throw new Error(`Bootstrap returned an invalid ${entityType} record.`);
           }
-          const value = record as Record<string, unknown>;
           await tx.run(
             `INSERT INTO local_records (
                workspace_id, entity_type, entity_id, parent_id, amount_minor,
@@ -267,7 +297,7 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               snapshot.workspace.id,
-              entityType,
+              normalizedType,
               value.id,
               typeof value.walletId === 'string' ? value.walletId : typeof value.dueDebtId === 'string' ? value.dueDebtId : null,
               typeof value.amountMinor === 'number' ? value.amountMinor : null,
