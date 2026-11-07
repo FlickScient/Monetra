@@ -376,7 +376,7 @@ export default function App() {
       if (kind === 'income' || kind === 'expense') {
         await queueNativeTransaction(workspace.id, {
           operationId, walletId, transactionType: kind, categoryId: categoryId || null,
-          amountMinor, description: description.trim(), occurredAt,
+          amountMinor, description: description.trim() || (kind === 'income' ? 'Income' : 'Expense'), occurredAt,
         });
       } else if (kind === 'transfer') {
         await queueNativeTransfer(workspace.id, {
