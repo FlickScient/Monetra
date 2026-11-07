@@ -78,6 +78,25 @@ export default function HomePage() {
     if (isLoaded && user) void initializeWorkspace();
   }, [isLoaded, user?.id]);
 
+  useEffect(() => {
+    if (!isNativeFinanceApp() || !user?.id || !activeWorkspaceId) return;
+    const syncIfOnline = () => {
+      if (!navigator.onLine) return;
+      void syncNativeWorkspace(user.id, activeWorkspaceId)
+        .then(() => loadFinanceData(activeWorkspaceId, true))
+        .catch(() => {});
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') syncIfOnline();
+    };
+    window.addEventListener('online', syncIfOnline);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('online', syncIfOnline);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [activeWorkspaceId, user?.id]);
+
   async function initializeWorkspace() {
     setLoading(true);
     setLoadError('');
@@ -141,7 +160,7 @@ export default function HomePage() {
       setWallets(walletData); setCategories(categoryData); setTransactions(transactionData.slice(0, 50)); setHasMoreTransactions(transactionData.length > 50); setSummary(summaryData);
       setFinanceRefreshVersion(version => version + 1);
       if (isNativeFinanceApp() && user?.id && workspaceId) {
-        void syncNativeWorkspace(user.id, workspaceId).catch(() => {});
+        await syncNativeWorkspace(user.id, workspaceId);
       }
     } catch {
       if (requestId === financeRequestId.current && isNativeFinanceApp() && workspaceId) {
