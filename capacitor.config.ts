@@ -6,6 +6,6 @@ const config: CapacitorConfig = {
   webDir: 'out',
   bundledWebRuntime: false,
   android: { allowMixedContent: false },
-  plugins: { CapacitorSQLite: { androidIsEncryption: false } },
 };
+
 export default config;
