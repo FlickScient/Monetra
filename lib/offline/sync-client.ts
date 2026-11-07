@@ -5,6 +5,34 @@ import type {
   OfflineCommand,
 } from './sync-contract';
 
+export type FinanceSyncClientConfig = {
+  apiBaseUrl?: string;
+  getSessionToken?: () => Promise<string | null>;
+};
+
+let syncClientConfig: FinanceSyncClientConfig = {};
+
+/** Configure the shared sync client for a native app origin. Web keeps same-origin cookies by default. */
+export function configureFinanceSyncClient(config: FinanceSyncClientConfig): void {
+  syncClientConfig = { ...config, apiBaseUrl: config.apiBaseUrl?.replace(/\\/+$/, '') };
+}
+
+async function requestHeaders(workspaceId: string, extra?: HeadersInit): Promise<Headers> {
+  if (!workspaceId.trim()) throw new Error('A workspace is required for finance sync.');
+  const headers = new Headers(extra);
+  headers.set('x-workspace-id', workspaceId);
+  if (syncClientConfig.getSessionToken) {
+    const token = await syncClientConfig.getSessionToken();
+    if (!token) throw new Error('Your Monetra session expired. Sign in again to sync.');
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return headers;
+}
+
+function apiUrl(path: string): string {
+  return syncClientConfig.apiBaseUrl ? `${syncClientConfig.apiBaseUrl}${path}` : path;
+}
+
 export class FinanceSyncHttpError extends Error {
   constructor(
     message: string,
@@ -28,19 +56,14 @@ async function readResponse<T>(response: Response): Promise<T> {
   return body as T;
 }
 
-function workspaceHeaders(workspaceId: string): HeadersInit {
-  if (!workspaceId.trim()) throw new Error('A workspace is required for finance sync.');
-  return { 'x-workspace-id': workspaceId };
-}
-
 /** Download the first consistent snapshot. Persist its cursor with the snapshot atomically. */
 export async function fetchFinanceBootstrap(
   workspaceId: string,
   signal?: AbortSignal,
 ): Promise<FinanceSyncBootstrap> {
-  const response = await fetch('/api/sync/bootstrap', {
+  const response = await fetch(apiUrl('/api/sync/bootstrap'), {
     method: 'GET',
-    headers: workspaceHeaders(workspaceId),
+    headers: await requestHeaders(workspaceId),
     cache: 'no-store',
     signal,
   });
@@ -57,10 +80,10 @@ export async function pullFinanceChanges(
   if (!/^\d+$/.test(after)) throw new Error('Invalid local finance sync cursor.');
   const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 500);
   const response = await fetch(
-    `/api/sync/changes?after=${encodeURIComponent(after)}&limit=${boundedLimit}`,
+    apiUrl(`/api/sync/changes?after=${encodeURIComponent(after)}&limit=${boundedLimit}`),
     {
       method: 'GET',
-      headers: workspaceHeaders(workspaceId),
+      headers: await requestHeaders(workspaceId),
       cache: 'no-store',
       signal,
     },
@@ -81,12 +104,9 @@ export async function pushFinanceCommands(
   if (operations.length < 1 || operations.length > 25) {
     throw new Error('A sync push must contain between 1 and 25 operations.');
   }
-  const response = await fetch('/api/sync/push', {
+  const response = await fetch(apiUrl('/api/sync/push'), {
     method: 'POST',
-    headers: {
-      ...workspaceHeaders(workspaceId),
-      'content-type': 'application/json',
-    },
+    headers: await requestHeaders(workspaceId, { 'content-type': 'application/json' }),
     body: JSON.stringify({ operations }),
     cache: 'no-store',
     signal,
