@@ -14,7 +14,9 @@ if (process.env.MONETRA_CI_BUILD === '1') {
 // Preview deployments share DATABASE_URL with production in this project.
 // Never allow a feature-branch preview build to apply database migrations.
 if (process.env.VERCEL_ENV === 'preview') {
-  console.log('WORKSPACE_MIGRATION: skipped on Vercel preview; preview builds must never mutate the finance database.');
+  console.log('WORKSPACE_MIGRATION: running read-only sync schema verification on preview; no migration will be applied.');
+  runNpmScript('db:verify:sync');
+  console.log('WORKSPACE_MIGRATION: preview schema verification passed; no database mutation performed.');
   process.exit(0);
 }
 
