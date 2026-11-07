@@ -16,6 +16,8 @@ export type CachedFinanceData = {
   wallets: Array<Record<string, unknown>>;
   categories: Array<Record<string, unknown>>;
   transactions: Array<Record<string, unknown>>;
+  dueDebts: Array<Record<string, unknown>>;
+  dueDebtPayments: Array<Record<string, unknown>>;
 };
 
 export function isNativeFinanceApp(): boolean {
@@ -65,12 +67,14 @@ export async function syncNativeWorkspace(ownerId: string, workspaceId: string):
 export async function readCachedNativeWorkspace(workspaceId: string): Promise<CachedFinanceData> {
   if (!isNativeFinanceApp()) throw new Error('Native local finance storage is unavailable.');
   const store = await createStore();
-  const [wallets, categories, transactions] = await Promise.all([
+  const [wallets, categories, transactions, dueDebts, dueDebtPayments] = await Promise.all([
     store.listLocalRecords<Record<string, unknown>>(workspaceId, 'wallets'),
     store.listLocalRecords<Record<string, unknown>>(workspaceId, 'categories'),
     store.listLocalRecords<Record<string, unknown>>(workspaceId, 'transactions'),
+    store.listLocalRecords<Record<string, unknown>>(workspaceId, 'dueDebts'),
+    store.listLocalRecords<Record<string, unknown>>(workspaceId, 'dueDebtPayments'),
   ]);
-  return { wallets, categories, transactions };
+  return { wallets, categories, transactions, dueDebts, dueDebtPayments };
 }
 
 /** Queue an income/expense locally before acknowledging the save to the UI. */
