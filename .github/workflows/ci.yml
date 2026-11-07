@@ -24,7 +24,9 @@ jobs:
         run: npm ci
       - name: Verify database scripts syntax
         run: |
-          node --check scripts/verify-organization-migration.mjs
+          node --check scripts/verify-workspace-migration.mjs
+          node --check scripts/preflight-workspace-migration.mjs
+          node --check scripts/ensure-workspace-migrations.mjs
           node --check scripts/diagnose-database.mjs
       - name: TypeScript check
         run: npm run typecheck
