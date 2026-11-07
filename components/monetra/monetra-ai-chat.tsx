@@ -158,7 +158,8 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
       if (typeof data.answer !== 'string' || !data.answer.trim()) {
         throw new Error('Fiscus returned an empty response.');
       }
-      setMessages((current) => [...current, { role: 'model', content: data.answer }].slice(-40));
+      const assistantMessage: Message = { role: 'model', content: data.answer };
+      setMessages((current) => [...current, assistantMessage].slice(-40));
       if (typeof data.conversationId === 'string') setActiveConversationId(data.conversationId);
       await refreshHistory();
     } catch (err) {
