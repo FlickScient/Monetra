@@ -217,8 +217,8 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
       let previous = currentCursor;
       for (const change of changes) {
         const cursor = BigInt(String(change.cursor));
-        if (cursor <= previous || cursor > targetCursor) {
-          throw new Error('The server returned an unordered or out-of-range change page.');
+        if (cursor !== previous + BigInt('1') || cursor > targetCursor) {
+          throw new Error('The server returned a missing, unordered, or out-of-range change cursor.');
         }
         previous = cursor;
         const entityType = normalizeEntityType(change.entityType);
@@ -251,6 +251,13 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
             cursor.toString(),
           ],
         );
+      }
+
+      if (changes.length > 0 && previous !== targetCursor) {
+        throw new Error('The server cursor does not match the final change in this page.');
+      }
+      if (changes.length === 0 && targetCursor !== currentCursor) {
+        throw new Error('The server attempted to advance the cursor without returning changes.');
       }
 
       await tx.run(
