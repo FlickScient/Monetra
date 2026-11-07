@@ -519,6 +519,24 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
     return rows.map((row) => JSON.parse(row.record_json) as T);
   }
 
+  async rememberLocalSession(ownerId: string): Promise<void> {
+    await this.database.run(
+      `INSERT INTO local_session_state (owner_id, last_authenticated_at, lock_required)
+       VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1)
+       ON CONFLICT(owner_id) DO UPDATE SET
+         last_authenticated_at = excluded.last_authenticated_at`,
+      [ownerId],
+    );
+  }
+
+  async getLastLocalSessionOwner(): Promise<string | null> {
+    const row = await this.database.get<{ owner_id: string }>(
+      `SELECT owner_id FROM local_session_state
+       ORDER BY last_authenticated_at DESC LIMIT 1`,
+    );
+    return row?.owner_id ?? null;
+  }
+
   async listLocalWorkspaces(ownerId: string): Promise<Array<{
     id: string;
     name: string;
