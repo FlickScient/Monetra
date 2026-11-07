@@ -37,7 +37,7 @@ try {
   }
   console.log(`Connected to "${identity.rows[0].database_name}" / public.`);
 
-  const names = Object.keys(syncTables);
+  const requiredTables = { ...syncTables, workspaces: ['id', 'user_id'] };\n  const names = Object.keys(syncTables);
   const columnsResult = await pool.query(
     `select table_name, column_name
      from information_schema.columns
@@ -51,7 +51,7 @@ try {
   }
 
   const missing = [];
-  for (const [table, required] of Object.entries(syncTables)) {
+  for (const [table, required] of Object.entries(requiredTables)) {
     if (!columns.has(table)) {
       missing.push(`${table} (table)`);
       continue;
@@ -105,7 +105,7 @@ try {
     throw new Error(`${orphanGoals.rows[0].count} goal allocation(s) do not match a goal in the same workspace. Migration was NOT started.`);
   }
 
-  console.log(`PASS  All ${names.length} sync source tables expose the exact ID/workspace/owner columns required by the trigger.`);
+  console.log(`PASS  All ${names.length} sync source tables expose the exact ID/workspace/owner columns and UUID/text types required by the trigger.`);
   console.log('PASS  Workspace ownership matches every sync source row; goal allocations resolve through their workspace.');
   console.log('PASS  Existing source data is structurally compatible with migration 0008.');
   console.log('This is a read-only preflight. It does not apply or modify any migration.');
