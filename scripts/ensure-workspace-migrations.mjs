@@ -4,6 +4,13 @@ import ws from 'ws';
 
 neonConfig.webSocketConstructor = ws;
 
+// GitHub CI must validate the Next.js build without connecting to or mutating
+// the user's finance database. Vercel builds do not set this CI-only flag.
+if (process.env.MONETRA_CI_BUILD === '1') {
+  console.log('WORKSPACE_MIGRATION: skipped for isolated CI build; no database was contacted.');
+  process.exit(0);
+}
+
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   console.error('WORKSPACE_MIGRATION: DATABASE_URL is missing from this Vercel build environment.');
