@@ -178,11 +178,12 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
         payment = data.payment;
       }
       if (!payment) throw new Error('Could not record this payment.');
+      const savedPayment = payment;
       setEntries(current => current.map(item => item.id === repayId ? {
         ...item,
-        repayments: item.repayments.some(existing => existing.id === payment.id)
+        repayments: item.repayments.some(existing => existing.id === savedPayment.id)
           ? item.repayments
-          : [...item.repayments, { id: payment.id, amount: Number(payment.amountMinor), date: String(payment.paidAt).slice(0, 10), note: payment.note || '' }],
+          : [...item.repayments, { id: savedPayment.id, amount: Number(savedPayment.amountMinor), date: String(savedPayment.paidAt).slice(0, 10), note: savedPayment.note || '' }],
       } : item));
       paymentKeyRef.current = null;
       setRepayAmount(''); setRepayNote(''); setRepayId('');
