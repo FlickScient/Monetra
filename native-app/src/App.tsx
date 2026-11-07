@@ -336,13 +336,13 @@ export default function App() {
     event.preventDefault();
     const content = fiscusDraft.trim();
     if (!content || !workspace || !isSignedIn || fiscusLoading) return;
-    const next = [...fiscusMessages, { role: 'user' as const, content }].slice(-12);
-    setFiscusMessages((current) => [...current, { role: 'user', content }].slice(-40));
+    const next: FiscusMessage[] = [...fiscusMessages, { role: 'user', content }].slice(-12);
+    setFiscusMessages((current) => [...current, { role: 'user' as const, content }].slice(-40));
     setFiscusDraft(''); setFiscusError(''); setFiscusLoading(true);
     try {
       const result = await invokeNativeFiscus(getToken, workspace.id, 'chat', { messages: next });
       if (typeof result.answer !== 'string' || !result.answer.trim()) throw new Error('Fiscus returned an empty response.');
-      setFiscusMessages((current) => [...current, { role: 'model', content: result.answer }].slice(-40));
+      setFiscusMessages((current) => [...current, { role: 'model' as const, content: result.answer as string }].slice(-40));
     } catch (cause) {
       setFiscusError(cause instanceof Error ? cause.message : 'Fiscus could not complete the request.');
     } finally { setFiscusLoading(false); }
