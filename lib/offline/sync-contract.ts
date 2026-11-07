@@ -6,7 +6,7 @@
 export type SyncEntityOperation = 'upsert' | 'delete';
 
 export interface FinanceSyncChange<T = unknown> {
-  cursor: number;
+  cursor: string;
   entityType: string;
   entityId: string;
   operation: SyncEntityOperation;
