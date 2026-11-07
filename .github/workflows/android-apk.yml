@@ -1,0 +1,60 @@
+name: Monetra Android Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "native-app/**"
+      - "lib/offline/**"
+      - "capacitor.config.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "android/database/**"
+      - "public/sqlite/**"
+      - ".github/workflows/android-apk.yml"
+
+concurrency:
+  group: monetra-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-debug-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Vite bundler
+        run: npm install --no-save --package-lock=false vite@6 @vitejs/plugin-react@4
+      - name: Build standalone native app bundle
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: pk_test_bW9uZXRyYS1jaS5jbGVyay5hY2NvdW50cy5kZXYk
+          VITE_MONETRA_API_URL: https://monetra-4rax.vercel.app
+        run: npm run build:native
+      - name: Generate Android project and sync plugins
+        run: |
+          npx cap add android
+          npx cap sync android
+      - name: Assemble debug APK
+        run: |
+          cd android-native
+          ./gradlew --no-daemon assembleDebug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: monetra-android-debug
+          path: android-native/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
