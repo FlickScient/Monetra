@@ -39,6 +39,12 @@ export default clerkMiddleware((auth, req) => {
     response.headers.set("Vary", "Origin");
   }
   return response;
+}, {
+  authorizedParties: [
+    "https://monetra-4rax.vercel.app",
+    "https://localhost",
+    "capacitor://localhost",
+  ],
 });
 
 export const config = {
