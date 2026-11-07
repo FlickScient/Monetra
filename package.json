@@ -15,8 +15,9 @@
     "prebuild": "node scripts/ensure-workspace-migrations.mjs",
     "db:preflight:sync": "node scripts/preflight-finance-sync-migration.mjs",
     "db:verify:sync": "node scripts/verify-finance-sync-migration.mjs",
-    "cap:sync": "cap sync",
-    "cap:android": "cap open android"
+    "cap:sync": "cap sync android",
+    "cap:android": "cap open android",
+    "cap:open": "cap open android"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.7.6",
