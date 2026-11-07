@@ -146,10 +146,15 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
   async markCommandSynced(operationId: string, result: OfflineCommandResult): Promise<void> {
     // The server change feed is the durable copy of the accepted financial row.
     // Remove only the matching outbox intent after a confirmed 2xx response.
-    await this.database.run(
-      `DELETE FROM sync_outbox WHERE operation_id = ? AND state = 'processing'`,
-      [operationId],
-    );
+    await this.database.transaction(async (tx) => {
+      // Remove the optimistic local row only after the server confirms acceptance.
+      // The subsequent pull inserts the canonical server row from the change feed.
+      await tx.run('DELETE FROM local_records WHERE local_operation_id = ?', [operationId]);
+      await tx.run(
+        `DELETE FROM sync_outbox WHERE operation_id = ? AND state = 'processing'`,
+        [operationId],
+      );
+    });
     void result;
   }
 
@@ -330,12 +335,67 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
     });
   }
 
-  /** Persist a user intent before showing the UI a successful local save. */
+  /** Persist an intent and its optimistic transaction row atomically before UI success. */
   async enqueueCommand(workspaceId: string, command: OfflineCommand): Promise<void> {
-    await this.database.run(
-      `INSERT INTO sync_outbox (operation_id, workspace_id, operation_type, payload_json)
-       VALUES (?, ?, ?, ?)`,
-      [command.operationId, workspaceId, command.type, asJson(command.payload)],
+    await this.database.transaction(async (tx) => {
+      await tx.run(
+        `INSERT INTO sync_outbox (operation_id, workspace_id, operation_type, payload_json)
+         VALUES (?, ?, ?, ?)`,
+        [command.operationId, workspaceId, command.type, asJson(command.payload)],
+      );
+
+      if (command.type === 'transaction.create') {
+        const localRecord = {
+          id: command.operationId,
+          transactionType: command.payload.transactionType,
+          walletId: command.payload.walletId,
+          destinationWalletId: null,
+          categoryId: command.payload.categoryId ?? null,
+          amountMinor: command.payload.amountMinor,
+          description: command.payload.description,
+          occurredAt: command.payload.occurredAt,
+          pendingSync: true,
+        };
+        await tx.run(
+          `INSERT INTO local_records (
+             workspace_id, entity_type, entity_id, parent_id, amount_minor,
+             occurred_at, record_json, is_deleted, server_cursor,
+             local_operation_id, local_updated_at
+           ) VALUES (?, 'transactions', ?, ?, ?, ?, ?, 0, '0', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
+          [
+            workspaceId,
+            command.operationId,
+            command.payload.walletId,
+            command.payload.amountMinor,
+            command.payload.occurredAt,
+            asJson(localRecord),
+            command.operationId,
+          ],
+        );
+      }
+    });
+  }
+
+  async listLocalRecords<T>(workspaceId: string, entityType: string): Promise<T[]> {
+    const rows = await this.database.all<{ record_json: string }>(
+      `SELECT record_json FROM local_records
+       WHERE workspace_id = ? AND entity_type = ? AND is_deleted = 0
+       ORDER BY occurred_at DESC, entity_id DESC`,
+      [workspaceId, entityType],
+    );
+    return rows.map((row) => JSON.parse(row.record_json) as T);
+  }
+
+  async listLocalWorkspaces(ownerId: string): Promise<Array<{
+    id: string;
+    name: string;
+    workspace_type: 'personal' | 'family' | 'business';
+  }>> {
+    return this.database.all(
+      `SELECT id, name, workspace_type FROM local_workspaces
+       WHERE owner_id = ? ORDER BY CASE workspace_type
+         WHEN 'personal' THEN 0 WHEN 'family' THEN 1 ELSE 2 END`,
+      [ownerId],
     );
   }
 }
