@@ -238,6 +238,36 @@ export default function App() {
     } finally { setBusy(false); }
   };
 
+  // Resume sync when Android returns to the foreground or connectivity is restored.
+  useEffect(() => {
+    if (!workspace || !ownerId || !isSignedIn) return;
+    let running = false;
+    let disposed = false;
+    const resumeSync = async () => {
+      if (running || disposed || !navigator.onLine || document.visibilityState === 'hidden') return;
+      running = true;
+      try {
+        configureSync();
+        await syncNativeWorkspace(ownerId, workspace.id);
+        if (!disposed) {
+          await loadLocal(workspace.id);
+          setMessage('Connection restored · your local changes are synced.');
+        }
+      } catch {
+        if (!disposed) setMessage('Connection restored · some changes are still waiting to sync.');
+      } finally {
+        running = false;
+      }
+    };
+    window.addEventListener('online', resumeSync);
+    document.addEventListener('visibilitychange', resumeSync);
+    return () => {
+      disposed = true;
+      window.removeEventListener('online', resumeSync);
+      document.removeEventListener('visibilitychange', resumeSync);
+    };
+  }, [workspace, ownerId, isSignedIn, configureSync, loadLocal]);
+
   const saveEntry = async (event: FormEvent) => {
     event.preventDefault();
     if (!workspace || !ownerId) return;
