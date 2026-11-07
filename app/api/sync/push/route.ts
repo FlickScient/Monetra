@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { POST as createTransaction } from '@/app/api/transactions/route';
 import { POST as createTransfer } from '@/app/api/transfers/route';
+import { POST as createDebtPayment } from '@/app/api/due-debt/[id]/payments/route';
 import { getWorkspaceContext } from '@/lib/workspace';
 
 export const runtime = 'nodejs';
@@ -8,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 type PushOperation = {
   operationId: string;
-  type: 'transaction.create' | 'transfer.create';
+  type: 'transaction.create' | 'transfer.create' | 'debt.payment';
   payload: Record<string, unknown>;
 };
 
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
   for (const value of operations) {
     if (!isRecord(value) || typeof value.operationId !== 'string' ||
         !OPERATION_ID.test(value.operationId) ||
-        (value.type !== 'transaction.create' && value.type !== 'transfer.create') ||
+        (value.type !== 'transaction.create' && value.type !== 'transfer.create' && value.type !== 'debt.payment') ||
         !isRecord(value.payload)) {
       return NextResponse.json({ error: 'Each operation needs a UUID operationId, a supported type, and an object payload' }, { status: 400 });
     }
@@ -74,8 +75,13 @@ export async function POST(req: Request) {
     const cookie = req.headers.get('cookie');
     if (cookie) headers.set('cookie', cookie);
 
+    const debtId = operation.type === 'debt.payment' ? operation.payload.dueDebtId : null;
+    if (operation.type === 'debt.payment' && (typeof debtId !== 'string' || !OPERATION_ID.test(debtId))) {
+      results.push({ operationId: operation.operationId, type: operation.type, ok: false, status: 400, error: 'debt.payment requires a valid dueDebtId' });
+      continue;
+    }
     const internalRequest = new Request(new URL(
-      operation.type === 'transaction.create' ? '/api/transactions' : '/api/transfers',
+      operation.type === 'transaction.create' ? '/api/transactions' : operation.type === 'transfer.create' ? '/api/transfers' : `/api/due-debt/${debtId}/payments`,
       req.url,
     ), {
       method: 'POST',
@@ -86,7 +92,9 @@ export async function POST(req: Request) {
     try {
       const response = operation.type === 'transaction.create'
         ? await createTransaction(internalRequest)
-        : await createTransfer(internalRequest);
+        : operation.type === 'transfer.create'
+          ? await createTransfer(internalRequest)
+          : await createDebtPayment(internalRequest, { params: { id: String(debtId) } });
       const data = await response.json().catch(() => null);
       const ok = response.status >= 200 && response.status < 300;
       results.push({
