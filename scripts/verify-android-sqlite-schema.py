@@ -35,11 +35,20 @@ def verify_migration(migration: Path) -> None:
 
         # Cursor values are decimal text so JS never rounds a 64-bit server cursor.
         cursor_columns = {
-            row[1]: row[2].upper()
-            for row in connection.execute("PRAGMA table_info(workspace_sync_state)")
+            table: {
+                row[1]: row[2].upper()
+                for row in connection.execute(f"PRAGMA table_info({table})")
+            }
+            for table in ("local_workspaces", "local_records", "workspace_sync_state")
         }
-        if cursor_columns.get("pull_cursor") != "TEXT":
+        if cursor_columns["workspace_sync_state"].get("pull_cursor") != "TEXT":
             raise RuntimeError(f"{migration}: pull_cursor must be TEXT")
+        if cursor_columns["local_workspaces"].get("snapshot_cursor") != "TEXT":
+            raise RuntimeError(f"{migration}: snapshot_cursor must be TEXT")
+        if cursor_columns["local_records"].get("server_cursor") != "TEXT":
+            raise RuntimeError(f"{migration}: server_cursor must be TEXT")
+        if "local_operation_id" not in cursor_columns["local_records"]:
+            raise RuntimeError(f"{migration}: local_operation_id is required for offline reconciliation")
 
         connection.execute(
             """INSERT INTO local_workspaces
@@ -64,6 +73,12 @@ def verify_migration(migration: Path) -> None:
                VALUES ('operation-1', 'workspace-1', 'transaction.create',
                        '{"walletId":"wallet-1","amountMinor":100}')"""
         )
+        connection.execute(
+            """INSERT INTO local_records
+               (workspace_id, entity_type, entity_id, record_json, local_operation_id)
+               VALUES ('workspace-1', 'transactions', 'local-transaction-1',
+                       '{"id":"local-transaction-1"}', 'operation-1')"""
+        )
         try:
             connection.execute(
                 """INSERT INTO sync_outbox
@@ -71,6 +86,17 @@ def verify_migration(migration: Path) -> None:
                    VALUES ('operation-1', 'workspace-1', 'transfer.create', '{}')"""
             )
             raise RuntimeError(f"{migration}: duplicate operation ID was accepted")
+        except sqlite3.IntegrityError:
+            pass
+
+        try:
+            connection.execute(
+                """INSERT INTO local_records
+                   (workspace_id, entity_type, entity_id, record_json, local_operation_id)
+                   VALUES ('workspace-1', 'transactions', 'local-transaction-2',
+                           '{"id":"local-transaction-2"}', 'operation-1')"""
+            )
+            raise RuntimeError(f"{migration}: duplicate local operation mapping was accepted")
         except sqlite3.IntegrityError:
             pass
 
