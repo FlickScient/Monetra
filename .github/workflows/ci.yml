@@ -20,8 +20,10 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - name: Install dependencies
-        run: npm ci
+      - name: Resolve dependency lock and install
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          npm ci
       - name: Verify database scripts syntax
         run: |
           node --check scripts/verify-workspace-migration.mjs
