@@ -111,6 +111,7 @@ export async function synchronizeFinanceWorkspace(
           resultsById.set(result.operationId, result);
         }
 
+        let shouldStopAfterBatch = false;
         for (const operation of pending) {
           const result = resultsById.get(operation.operationId);
           if (!result) {
@@ -119,25 +120,17 @@ export async function synchronizeFinanceWorkspace(
               'The server response omitted this operation. Retry using the same operation ID.',
             );
             summary.retried += 1;
+            shouldStopAfterBatch = true;
             continue;
           }
           const state = await settlePushResult(store, result);
           summary[state] += 1;
+          if (state === 'retried') shouldStopAfterBatch = true;
         }
 
-        // Do not hot-loop on retryable failures or incomplete server responses.
-        const allRetryable = response.results.length > 0 && response.results.every((result) =>
-          !result.ok && (
-            result.status === 0 ||
-            result.status === 401 ||
-            result.status === 408 ||
-            result.status === 429 ||
-            result.status >= 500
-          ),
-        );
-        if (allRetryable || response.results.length < pending.length || response.results.length === 0) {
-          break;
-        }
+        // Leave retryable operations durable for the next online event/run.
+        // Never spin through repeated 401/429/5xx responses in one sync attempt.
+        if (shouldStopAfterBatch) break;
       } catch (error) {
         const reason = error instanceof Error ? error.message : 'Finance sync request failed.';
         for (const operation of pending) {
