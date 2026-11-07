@@ -232,6 +232,9 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
              occurred_at, record_json, is_deleted, server_cursor, local_updated_at
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
            ON CONFLICT(workspace_id, entity_type, entity_id) DO UPDATE SET
+             parent_id = excluded.parent_id,
+             amount_minor = excluded.amount_minor,
+             occurred_at = excluded.occurred_at,
              record_json = excluded.record_json,
              is_deleted = excluded.is_deleted,
              server_cursor = excluded.server_cursor,
