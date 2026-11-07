@@ -57,6 +57,33 @@ async function invokeFiscus(
   return data;
 }
 
+function renderInlineMarkdown(value: string) {
+  return value.split(/(\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|\x60[^\x60]+\x60)/g).map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith('*') && part.endsWith('*')) return <em key={index}>{part.slice(1, -1)}</em>;
+    if (part.startsWith('`') && part.endsWith('`')) return <code key={index}>{part.slice(1, -1)}</code>;
+    return part;
+  });
+}
+
+function MessageMarkdown({ content }: { content: string }) {
+  const blocks = content.trim().split(/\\n\\s*\\n/);
+  return <div className="fiscus-markdown">
+    {blocks.map((block, index) => {
+      const lines = block.split('\\n');
+      const heading = lines[0].match(/^(#{1,3})\\s+(.+)$/);
+      if (heading) return <h3 key={index}>{renderInlineMarkdown(heading[2])}</h3>;
+      if (lines.every(line => /^\\s*[-*]\\s+/.test(line))) {
+        return <ul key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(line.replace(/^\\s*[-*]\\s+/, ''))}</li>)}</ul>;
+      }
+      if (lines.every(line => /^\\s*\\d+[.)]\\s+/.test(line))) {
+        return <ol key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(line.replace(/^\\s*\\d+[.)]\\s+/, ''))}</li>)}</ol>;
+      }
+      return <p key={index}>{lines.map((line, lineIndex) => <span key={lineIndex}>{lineIndex > 0 && <br />}{renderInlineMarkdown(line)}</span>)}</p>;
+    })}
+  </div>;
+}
+
 function formatConversationDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Earlier';
@@ -317,7 +344,7 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
                 {message.role === 'model' && <span className="monetra-ai-avatar"><Bot size={15} /></span>}
                 <div className="monetra-ai-message-content">
                   <span className="monetra-ai-message-label">{message.role === 'user' ? 'You' : 'Fiscus'}</span>
-                  <div className="monetra-ai-bubble">{message.content}</div>
+                  <div className="monetra-ai-bubble"><MessageMarkdown content={message.content} /></div>
                 </div>
                 {message.role === 'user' && <span className="monetra-ai-avatar user-avatar"><UserRound size={15} /></span>}
               </article>
