@@ -1,11 +1,26 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { withSupabase } from "npm:@supabase/server@1";
+
+const CLERK_ISSUER = "https://notable-heron-606.clerk.accounts.dev";
+const clerkJwks = await (async () => {
+  try {
+    const response = await fetch(CLERK_ISSUER + "/.well-known/jwks.json", { signal: AbortSignal.timeout(10000), cache: "no-store" });
+    if (!response.ok) throw new Error("Clerk JWKS request failed");
+    const value = await response.json();
+    if (!value || !Array.isArray(value.keys) || value.keys.length === 0) throw new Error("Clerk JWKS is invalid");
+    return value as JsonWebKeySet;
+  } catch (error) {
+    console.error("FISCUS_CLERK_JWKS_UNAVAILABLE", error instanceof Error ? error.name : "unknown");
+    return null;
+  }
+})();
 
 type IncomingMessage = { role: "user" | "model"; content: string };
 type RequestBody = {
-  action?: "chat" | "restore" | "clear";
+  action?: "chat" | "restore" | "clear" | "history" | "new" | "select" | "delete";
+  conversationId?: string;
   workspaceId?: string;
   messages?: unknown;
-  conversationId?: string;
 };
 
 const encoder = new TextEncoder();
@@ -151,8 +166,8 @@ async function callGemini(
   }
 }
 
-Deno.serve(async (request: Request) => {
-  if (request.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info" } });
+const handleAuthenticatedRequest = clerkJwks
+  ? withSupabase({ auth: "user", env: { jwks: clerkJwks } }, async (request: Request, ctx) => {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -172,11 +187,13 @@ Deno.serve(async (request: Request) => {
 
   // Supabase's gateway validates the Clerk JWT because verify_jwt remains enabled
   // and the project's native Clerk third-party auth integration is configured.
-  const claims = decodeJwtPayload(bearer);
+  // withSupabase cryptographically verifies the Clerk JWT against the configured JWKS.
+  const claims = ctx.jwtClaims as Record<string, unknown>;
   const nowSeconds = Math.floor(Date.now() / 1000);
   if (
     !claims ||
     typeof claims.sub !== "string" ||
+    claims.iss !== CLERK_ISSUER ||
     claims.role !== "authenticated" ||
     typeof claims.exp !== "number" ||
     claims.exp <= nowSeconds
@@ -329,9 +346,9 @@ Deno.serve(async (request: Request) => {
         .eq("clerk_user_id", clerkUserId)
         .eq("workspace_id", workspaceId);
       if (typeof body.conversationId === "string" && isUuid(body.conversationId)) {
-        restoreQuery = restoreQuery.eq("id", body.conversationId) as typeof restoreQuery;
+        restoreQuery = restoreQuery.eq("id", body.conversationId);
       } else {
-        restoreQuery = restoreQuery.eq("status", "active") as typeof restoreQuery;
+        restoreQuery = restoreQuery.eq("status", "active");
       }
       const { data: conversation, error: conversationError } = await restoreQuery
         .order("last_message_at", { ascending: false })
@@ -646,4 +663,7 @@ Deno.serve(async (request: Request) => {
     console.error("FISCUS_EDGE_FAILURE", requestId, error instanceof Error ? error.name : "unknown");
     return json({ error: "Fiscus encountered a temporary backend error.", code: "FISCUS_BACKEND_ERROR" }, 500);
   }
-});
+  })
+  : async (_request: Request) => json({ error: "Fiscus authentication keys are temporarily unavailable.", code: "AUTH_KEYS_UNAVAILABLE" }, 503);
+
+Deno.serve((request: Request) => handleAuthenticatedRequest(request));
