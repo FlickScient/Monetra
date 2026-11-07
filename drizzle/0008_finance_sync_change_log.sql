@@ -1,14 +1,16 @@
-CREATE SEQUENCE IF NOT EXISTS finance_sync_cursor_seq AS BIGINT;
+ALTER TABLE workspaces
+  ADD COLUMN IF NOT EXISTS sync_version BIGINT NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS finance_sync_changes (
-  cursor BIGINT PRIMARY KEY DEFAULT nextval('finance_sync_cursor_seq'),
   workspace_id UUID NOT NULL,
+  cursor BIGINT NOT NULL,
   user_id TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   entity_id UUID NOT NULL,
   operation TEXT NOT NULL CHECK (operation IN ('upsert', 'delete')),
   payload JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (workspace_id, cursor),
   CONSTRAINT finance_sync_changes_payload_check CHECK (
     (operation = 'upsert' AND payload IS NOT NULL) OR
     (operation = 'delete' AND payload IS NULL)
@@ -27,6 +29,7 @@ DECLARE
   row_workspace_id UUID;
   row_user_id TEXT;
   row_id UUID;
+  next_cursor BIGINT;
 BEGIN
   IF TG_OP = 'DELETE' THEN
     row_data := to_jsonb(OLD);
@@ -52,10 +55,22 @@ BEGIN
     RAISE EXCEPTION 'Finance sync trigger could not resolve workspace owner for %', row_workspace_id;
   END IF;
 
+  -- Updating the owning workspace row serializes cursor allocation per workspace.
+  -- This avoids sequence values being committed out of order and skipped by pull clients.
+  UPDATE workspaces
+    SET sync_version = sync_version + 1
+    WHERE id = row_workspace_id AND user_id = row_user_id
+    RETURNING sync_version INTO next_cursor;
+
+  IF next_cursor IS NULL THEN
+    RAISE EXCEPTION 'Finance sync trigger rejected an unknown workspace owner';
+  END IF;
+
   INSERT INTO finance_sync_changes (
-    workspace_id, user_id, entity_type, entity_id, operation, payload
+    workspace_id, cursor, user_id, entity_type, entity_id, operation, payload
   ) VALUES (
     row_workspace_id,
+    next_cursor,
     row_user_id,
     TG_TABLE_NAME,
     row_id,
