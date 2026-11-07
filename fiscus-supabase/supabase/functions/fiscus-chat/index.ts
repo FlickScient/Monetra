@@ -1,8 +1,24 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { withSupabase } from "npm:@supabase/server@1";
+
+const CLERK_ISSUER = "https://notable-heron-606.clerk.accounts.dev";
+const clerkJwks = await (async () => {
+  try {
+    const response = await fetch(CLERK_ISSUER + "/.well-known/jwks.json", { signal: AbortSignal.timeout(10000), cache: "no-store" });
+    if (!response.ok) throw new Error("Clerk JWKS request failed");
+    const value = await response.json();
+    if (!value || !Array.isArray(value.keys) || value.keys.length === 0) throw new Error("Clerk JWKS is invalid");
+    return value as JsonWebKeySet;
+  } catch (error) {
+    console.error("FISCUS_CLERK_JWKS_UNAVAILABLE", error instanceof Error ? error.name : "unknown");
+    return null;
+  }
+})();
 
 type IncomingMessage = { role: "user" | "model"; content: string };
 type RequestBody = {
-  action?: "chat" | "restore" | "clear";
+  action?: "chat" | "restore" | "clear" | "history" | "new" | "select" | "delete";
+  conversationId?: string;
   workspaceId?: string;
   messages?: unknown;
 };
@@ -150,8 +166,8 @@ async function callGemini(
   }
 }
 
-Deno.serve(async (request: Request) => {
-  if (request.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info" } });
+const handleAuthenticatedRequest = clerkJwks
+  ? withSupabase({ auth: "user", env: { jwks: clerkJwks } }, async (request: Request, ctx) => {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -171,11 +187,13 @@ Deno.serve(async (request: Request) => {
 
   // Supabase's gateway validates the Clerk JWT because verify_jwt remains enabled
   // and the project's native Clerk third-party auth integration is configured.
-  const claims = decodeJwtPayload(bearer);
+  // withSupabase cryptographically verifies the Clerk JWT against the configured JWKS.
+  const claims = ctx.jwtClaims as Record<string, unknown>;
   const nowSeconds = Math.floor(Date.now() / 1000);
   if (
     !claims ||
     typeof claims.sub !== "string" ||
+    claims.iss !== CLERK_ISSUER ||
     claims.role !== "authenticated" ||
     typeof claims.exp !== "number" ||
     claims.exp <= nowSeconds
@@ -198,7 +216,7 @@ Deno.serve(async (request: Request) => {
   }
 
   const action = body.action ?? "chat";
-  if (action !== "chat" && action !== "restore" && action !== "clear") {
+  if (!["chat", "restore", "clear", "history", "new", "select", "delete"].includes(action)) {
     return json({ error: "Unsupported action." }, 400);
   }
 
@@ -253,13 +271,86 @@ Deno.serve(async (request: Request) => {
       return json({ error: "Workspace authorization could not be established.", code: "WORKSPACE_AUTH_ERROR" }, 503);
     }
 
+    if (action === "history") {
+      const { data: rows, error: historyError } = await userDb
+        .from("conversations")
+        .select("id,title,status,last_message_at,created_at")
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId)
+        .order("last_message_at", { ascending: false })
+        .limit(60);
+      if (historyError) throw new Error("conversation_history_failed");
+      return json({ conversations: rows ?? [] });
+    }
+
+    if (action === "new") {
+      const { error: archiveError } = await userDb
+        .from("conversations")
+        .update({ status: "archived" })
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId)
+        .eq("status", "active");
+      if (archiveError) throw new Error("conversation_archive_failed");
+      return json({ created: true, messages: [] });
+    }
+
+    if (action === "select") {
+      if (typeof body.conversationId !== "string" || !isUuid(body.conversationId)) {
+        return json({ error: "Choose a valid conversation.", code: "INVALID_CONVERSATION" }, 400);
+      }
+      const { data: target, error: targetError } = await userDb
+        .from("conversations")
+        .select("id")
+        .eq("id", body.conversationId)
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (targetError || !target) return json({ error: "Conversation not found.", code: "CONVERSATION_NOT_FOUND" }, 404);
+
+      const { error: archiveError } = await userDb
+        .from("conversations")
+        .update({ status: "archived" })
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId)
+        .eq("status", "active");
+      if (archiveError) throw new Error("conversation_switch_archive_failed");
+
+      const { error: activateError } = await userDb
+        .from("conversations")
+        .update({ status: "active" })
+        .eq("id", body.conversationId)
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId);
+      if (activateError) throw new Error("conversation_switch_failed");
+      return json({ selected: true, conversationId: body.conversationId });
+    }
+
+    if (action === "delete") {
+      if (typeof body.conversationId !== "string" || !isUuid(body.conversationId)) {
+        return json({ error: "Choose a valid conversation.", code: "INVALID_CONVERSATION" }, 400);
+      }
+      const { error: deleteError } = await userDb
+        .from("conversations")
+        .delete()
+        .eq("id", body.conversationId)
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId);
+      if (deleteError) throw new Error("conversation_delete_failed");
+      return json({ deleted: true });
+    }
+
     if (action === "restore") {
-      const { data: conversation, error: conversationError } = await userDb
+      let restoreQuery = userDb
         .from("conversations")
         .select("id")
         .eq("clerk_user_id", clerkUserId)
-        .eq("workspace_id", workspaceId)
-        .eq("status", "active")
+        .eq("workspace_id", workspaceId);
+      if (typeof body.conversationId === "string" && isUuid(body.conversationId)) {
+        restoreQuery = restoreQuery.eq("id", body.conversationId);
+      } else {
+        restoreQuery = restoreQuery.eq("status", "active");
+      }
+      const { data: conversation, error: conversationError } = await restoreQuery
         .order("last_message_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -286,25 +377,12 @@ Deno.serve(async (request: Request) => {
     }
 
     if (action === "clear") {
-      const { data: conversation, error: conversationError } = await userDb
+      const { error: deleteError } = await userDb
         .from("conversations")
-        .select("id")
+        .delete()
         .eq("clerk_user_id", clerkUserId)
-        .eq("workspace_id", workspaceId)
-        .eq("status", "active")
-        .order("last_message_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (conversationError) throw new Error("conversation_lookup_failed");
-      if (conversation) {
-        const { error: deleteError } = await userDb
-          .from("conversations")
-          .delete()
-          .eq("id", conversation.id)
-          .eq("clerk_user_id", clerkUserId)
-          .eq("workspace_id", workspaceId);
-        if (deleteError) throw new Error("conversation_delete_failed");
-      }
+        .eq("workspace_id", workspaceId);
+      if (deleteError) throw new Error("conversation_clear_failed");
       return json({ cleared: true });
     }
 
@@ -585,4 +663,7 @@ Deno.serve(async (request: Request) => {
     console.error("FISCUS_EDGE_FAILURE", requestId, error instanceof Error ? error.name : "unknown");
     return json({ error: "Fiscus encountered a temporary backend error.", code: "FISCUS_BACKEND_ERROR" }, 500);
   }
-});
+  })
+  : async (_request: Request) => json({ error: "Fiscus authentication keys are temporarily unavailable.", code: "AUTH_KEYS_UNAVAILABLE" }, 503);
+
+Deno.serve((request: Request) => handleAuthenticatedRequest(request));
