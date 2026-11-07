@@ -38,7 +38,6 @@ The repository includes `.github/workflows/android-release.yml`. It builds a rel
 Before running **Actions → Monetra Signed Android Release → Run workflow**, add these repository Actions secrets:
 
 - `VITE_CLERK_PUBLISHABLE_KEY`: the real Clerk publishable key for the Monetra production instance.
-- `VITE_SUPABASE_URL`: `https://osfitgjwkjhhexgcazwj.supabase.co`.
 - `VITE_SUPABASE_PUBLISHABLE_KEY`: the Fiscus Supabase project's publishable key (safe to bundle in the client app).
 - `ANDROID_KEYSTORE_BASE64`: base64-encoded contents of your release JKS/keystore file.
 - `ANDROID_KEYSTORE_PASSWORD`: keystore password.
