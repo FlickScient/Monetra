@@ -1,6 +1,6 @@
 # Monetra Android Sync Contract
 
-Status: design specification only. This document does not claim that offline storage, sync endpoints, or an APK have been implemented.
+Status: server-side sync foundation implemented on the isolated Android branch; local SQLite/outbox, push, and APK are not implemented yet.
 
 ## Goals and invariants
 
@@ -23,14 +23,14 @@ Some tables are append-only event histories, while others are mutable current-st
 
 Implement a dedicated append-only `finance_sync_changes` table with:
 
-- monotonically increasing database sequence/cursor;
+- monotonically increasing per-workspace database cursor allocated under the workspace row lock;
 - `workspace_id` and owner `user_id`;
 - entity/table key and entity UUID;
 - operation (`upsert` or `delete`);
 - full post-write row JSON for upserts and a tombstone for deletes;
 - server creation timestamp.
 
-A database trigger should append a change row in the same Postgres transaction as each source-table INSERT, UPDATE, or DELETE. This makes a failed finance transaction and its feed entry roll back together. The trigger must derive the owner from the row's `user_id` when present, or from the owning workspace for tables such as `goal_allocations`. It must reject or safely skip rows without a valid workspace/owner rather than emit cross-tenant data.
+The `0008_finance_sync_change_log.sql` migration adds the change table and a database trigger that appends a change row in the same Postgres transaction as each source-table INSERT, UPDATE, or DELETE. The trigger increments the workspace cursor under a row lock so committed cursors cannot be observed out of order. This makes a failed finance transaction and its feed entry roll back together. The trigger must derive the owner from the row's `user_id` when present, or from the owning workspace for tables such as `goal_allocations`. It must reject or safely skip rows without a valid workspace/owner rather than emit cross-tenant data.
 
 Initial trigger coverage to verify against the live schema:
 
@@ -87,4 +87,4 @@ Authentication tokens belong in platform secure storage, never SQLite plaintext 
 
 - Architecture and finance API audit documents are committed on `feat/android-local-first`.
 - The existing finance API routes have been inspected for core transaction and module behavior.
-- No sync change-log table, trigger, bootstrap/pull/push endpoint, SQLite repository, Capacitor project, Android APK, or release signing configuration is implemented yet.
+- Implemented: migration `0008_finance_sync_change_log.sql`, transactional change triggers across 14 finance tables, authenticated bootstrap endpoint, and authenticated incremental pull endpoint.\n- Added: read-only sync migration preflight script (not yet run against staging or production).\n- CI: latest run on this branch passed TypeScript check and production build.\n- Not implemented: push endpoint/operation receipts, local SQLite repository/outbox, Capacitor Android project, APK/AAB, release signing, and end-to-end offline tests.\n- Migration 0008 has NOT been applied to production.
