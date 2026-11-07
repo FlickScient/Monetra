@@ -106,7 +106,10 @@ export async function synchronizeFinanceWorkspace(
 
       try {
         const response = await pushFinanceCommands(workspaceId, pending, signal);
-        const resultsById = new Map<string, OfflineCommandResult>();\n        for (const result of response.results) resultsById.set(result.operationId, result);
+        const resultsById = new Map<string, OfflineCommandResult>();
+        for (const result of response.results) {
+          resultsById.set(result.operationId, result);
+        }
 
         for (const operation of pending) {
           const result = resultsById.get(operation.operationId);
@@ -122,10 +125,19 @@ export async function synchronizeFinanceWorkspace(
           summary[state] += 1;
         }
 
-        // Avoid hot-looping on commands that remain retryable after a server
-        // outage or expired session. A later online/auth event should retry.
-        if (response.results.every((result) => !result.ok && result.status >= 500)) break;
-        if (response.results.length === 0) break;
+        // Do not hot-loop on retryable failures or incomplete server responses.
+        const allRetryable = response.results.length > 0 && response.results.every((result) =>
+          !result.ok && (
+            result.status === 0 ||
+            result.status === 401 ||
+            result.status === 408 ||
+            result.status === 429 ||
+            result.status >= 500
+          ),
+        );
+        if (allRetryable || response.results.length < pending.length || response.results.length === 0) {
+          break;
+        }
       } catch (error) {
         const reason = error instanceof Error ? error.message : 'Finance sync request failed.';
         for (const operation of pending) {
