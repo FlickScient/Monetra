@@ -360,12 +360,12 @@ export default function HomePage() {
           </div>
         </section>
       </>}
-      <button className={`mobile-fiscus-shortcut ${activeView === 'vault' ? 'active' : ''}`} type="button" onClick={() => { setShowMoreMenu(false); setActiveView('vault'); }} aria-label="Open Fiscus AI" title="Fiscus AI"><FiscusMark size={48} /></button>
+      {activeView !== 'vault' && <button className="mobile-fiscus-shortcut" type="button" onClick={() => { setShowMoreMenu(false); setActiveView('vault'); }} aria-label="Open Fiscus AI" title="Fiscus AI"><FiscusMark size={48} /></button>}
       {showWalletForm && <WalletModal workspaceId={activeWorkspaceId} onClose={() => setShowWalletForm(false)} onSaved={(message) => { setShowWalletForm(false); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       {editingWallet && <WalletModal workspaceId={activeWorkspaceId} initialWallet={editingWallet} onClose={() => setEditingWallet(null)} onSaved={(message) => { setEditingWallet(null); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       {showTransactionForm && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={(message) => { setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       {editingTransaction && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} initialTransaction={editingTransaction} onClose={() => setEditingTransaction(null)} onSaved={(message) => { setEditingTransaction(null); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
-      <FloatingCalculator />
+      {activeView !== 'vault' && <FloatingCalculator />}
     </main>
   );
 }
