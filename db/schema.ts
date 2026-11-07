@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, bigint, timestamp, index, uniqueIndex, check } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, bigint, timestamp, index, uniqueIndex, check, jsonb, primaryKey } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 /** A private finance workspace owned directly by one Clerk user. */
@@ -9,6 +9,7 @@ export const workspaces = pgTable('workspaces', {
   name: text('name').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  syncVersion: bigint('sync_version', { mode: 'bigint' }).notNull().default(BigInt('0')),
 }, (table) => ({
   ownerTypeUnique: uniqueIndex('workspaces_user_type_unique').on(table.userId, table.workspaceType),
   ownerIdx: index('workspaces_user_idx').on(table.userId),
@@ -102,4 +103,20 @@ export const ledgerEntries = pgTable('ledger_entries', {
   workspaceAccountIdx: index('ledger_entries_workspace_account_idx').on(table.workspaceId, table.ledgerAccountId),
   transactionIdx: index('ledger_entries_transaction_idx').on(table.transactionId),
   oneSide: check('ledger_entries_one_side_check', sql`(${table.debitMinor} > 0 AND ${table.creditMinor} = 0) OR (${table.creditMinor} > 0 AND ${table.debitMinor} = 0)`),
+}));
+
+
+/** Transactionally captured, workspace-scoped feed for reliable offline replication. */
+export const financeSyncChanges = pgTable('finance_sync_changes', {
+  cursor: bigint('cursor', { mode: 'bigint' }).notNull(),
+  workspaceId: uuid('workspace_id').notNull(),
+  userId: text('user_id').notNull(),
+  entityType: text('entity_type').notNull(),
+  entityId: uuid('entity_id').notNull(),
+  operation: text('operation').notNull(),
+  payload: jsonb('payload'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  cursorPk: primaryKey({ columns: [table.workspaceId, table.cursor], name: 'finance_sync_changes_pkey' }),
+  ownerCursorIdx: index('finance_sync_changes_owner_cursor_idx').on(table.userId, table.workspaceId, table.cursor),
 }));

@@ -19,6 +19,10 @@ import { IncomeExpenseView } from '@/components/monetra/income-expense-view';
 import { dhakaDateBoundary, dhakaMonthStart, shiftMonthStart } from '@/lib/dhaka-time';
 import { MoneyAlerts } from '@/components/monetra/money-alerts';
 import { ReportsView } from '@/components/monetra/reports-view';
+import {
+  isNativeFinanceApp, listCachedNativeWorkspaces, readCachedNativeWorkspace,
+  queueNativeTransaction, syncNativeWorkspace,
+} from '@/lib/offline/native-finance';
 
 type WalletType = 'cash' | 'bkash' | 'nagad' | 'rocket' | 'bank' | 'savings' | 'debit_card' | 'credit_card' | 'custom';
 type TransactionType = 'income' | 'expense' | 'transfer';
@@ -74,6 +78,25 @@ export default function HomePage() {
     if (isLoaded && user) void initializeWorkspace();
   }, [isLoaded, user?.id]);
 
+  useEffect(() => {
+    if (!isNativeFinanceApp() || !user?.id || !activeWorkspaceId) return;
+    const syncIfOnline = () => {
+      if (!navigator.onLine) return;
+      void syncNativeWorkspace(user.id, activeWorkspaceId)
+        .then(() => loadFinanceData(activeWorkspaceId, true))
+        .catch(() => {});
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') syncIfOnline();
+    };
+    window.addEventListener('online', syncIfOnline);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('online', syncIfOnline);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [activeWorkspaceId, user?.id]);
+
   async function initializeWorkspace() {
     setLoading(true);
     setLoadError('');
@@ -91,6 +114,20 @@ export default function HomePage() {
       setActiveWorkspaceId(selected.id);
       await loadFinanceData(selected.id);
     } catch (error) {
+      if (isNativeFinanceApp() && user?.id) {
+        try {
+          const cachedWorkspaces = await listCachedNativeWorkspaces(user.id);
+          if (cachedWorkspaces.length > 0) {
+            setWorkspaces(cachedWorkspaces);
+            const selected = cachedWorkspaces.find((row) => row.type === 'personal') || cachedWorkspaces[0];
+            setActiveWorkspaceId(selected.id);
+            await loadFinanceData(selected.id);
+            return;
+          }
+        } catch {
+          // Fall through to the normal workspace error when no usable local cache exists.
+        }
+      }
       setLoadError(error instanceof Error ? error.message : 'We couldn’t open your finance workspace. Please retry in a moment.');
       setLoading(false);
     }
@@ -122,7 +159,54 @@ export default function HomePage() {
       if (requestId !== financeRequestId.current) return;
       setWallets(walletData); setCategories(categoryData); setTransactions(transactionData.slice(0, 50)); setHasMoreTransactions(transactionData.length > 50); setSummary(summaryData);
       setFinanceRefreshVersion(version => version + 1);
+      if (isNativeFinanceApp() && user?.id && workspaceId) {
+        try {
+          await syncNativeWorkspace(user.id, workspaceId);
+        } catch {
+          // Keep the successfully fetched server data visible; retry cache sync later.
+        }
+      }
     } catch {
+      if (requestId === financeRequestId.current && isNativeFinanceApp() && workspaceId) {
+        try {
+          const cached = await readCachedNativeWorkspace(workspaceId);
+          const cachedTransactions = cached.transactions as unknown as Transaction[];
+          const monthStart = dhakaDateBoundary(dhakaMonthStart()).getTime();
+          const nextMonthStart = dhakaDateBoundary(shiftMonthStart(dhakaMonthStart(), 1)).getTime();
+          const monthTransactions = cachedTransactions.filter((item) => {
+            const timestamp = new Date(item.occurredAt).getTime();
+            return timestamp >= monthStart && timestamp < nextMonthStart;
+          });
+          const categoryTotals = new Map<string, number>();
+          let incomeMinor = 0;
+          let expenseMinor = 0;
+          for (const item of monthTransactions) {
+            if (item.transactionType === 'income') incomeMinor += item.amountMinor;
+            if (item.transactionType === 'expense') {
+              expenseMinor += item.amountMinor;
+              const key = item.categoryId || 'uncategorized';
+              categoryTotals.set(key, (categoryTotals.get(key) || 0) + item.amountMinor);
+            }
+          }
+          setWallets(cached.wallets as unknown as Wallet[]);
+          setCategories(cached.categories as unknown as Category[]);
+          setTransactions(cachedTransactions.slice(0, 50));
+          setHasMoreTransactions(false);
+          setSummary({
+            incomeMinor,
+            expenseMinor,
+            categorySpend: Array.from(categoryTotals, ([categoryId, totalMinor]) => ({
+              categoryId: categoryId === 'uncategorized' ? null : categoryId,
+              totalMinor,
+            })),
+          });
+          setNotice('Offline mode · changes are stored on this device and will sync when you reconnect.');
+          setFinanceRefreshVersion(version => version + 1);
+          return;
+        } catch {
+          // No local snapshot is available; report the regular sync error below.
+        }
+      }
       if (requestId === financeRequestId.current) {
         if (silent) setNotice('Saved, but the background refresh failed. Pull to refresh or reopen the workspace.');
         else setLoadError('We couldn’t sync your finance data. Check your connection and try again.');
@@ -360,12 +444,12 @@ export default function HomePage() {
           </div>
         </section>
       </>}
-      <button className={`mobile-fiscus-shortcut ${activeView === 'vault' ? 'active' : ''}`} type="button" onClick={() => { setShowMoreMenu(false); setActiveView('vault'); }} aria-label="Open Fiscus AI" title="Fiscus AI"><FiscusMark size={48} /></button>
+      {activeView !== 'vault' && <button className="mobile-fiscus-shortcut" type="button" onClick={() => { setShowMoreMenu(false); setActiveView('vault'); }} aria-label="Open Fiscus AI" title="Fiscus AI"><FiscusMark size={48} /></button>}
       {showWalletForm && <WalletModal workspaceId={activeWorkspaceId} onClose={() => setShowWalletForm(false)} onSaved={(message) => { setShowWalletForm(false); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       {editingWallet && <WalletModal workspaceId={activeWorkspaceId} initialWallet={editingWallet} onClose={() => setEditingWallet(null)} onSaved={(message) => { setEditingWallet(null); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       {showTransactionForm && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} onClose={() => setShowTransactionForm(false)} onSaved={(message) => { setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
       {editingTransaction && <TransactionModal workspaceId={activeWorkspaceId} wallets={wallets} categories={categories} initialTransaction={editingTransaction} onClose={() => setEditingTransaction(null)} onSaved={(message) => { setEditingTransaction(null); setNotice(message); void loadFinanceData(activeWorkspaceId, true); }} />}
-      <FloatingCalculator />
+      {activeView !== 'vault' && <FloatingCalculator />}
     </main>
   );
 }
@@ -520,12 +604,46 @@ function TransactionModal({ workspaceId, wallets, categories, initialTransaction
         ? idempotencyRef.current.key
         : crypto.randomUUID();
       idempotencyRef.current = { signature, key: idempotencyKey };
-      const res = await fetch(endpoint, {
-        method: initialTransaction ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, ...(initialTransaction ? {} : { 'idempotency-key': idempotencyKey }) },
-        body: JSON.stringify(body),
-      });
+      const saveOffline = async () => {
+        if (initialTransaction || type === 'transfer' || !isNativeFinanceApp()) {
+          throw new Error('This action needs an internet connection.');
+        }
+        await queueNativeTransaction(workspaceId, {
+          operationId: idempotencyKey,
+          walletId: wallet,
+          transactionType: type,
+          categoryId: category || null,
+          amountMinor,
+          description,
+          occurredAt: new Date(date).toISOString(),
+        });
+        idempotencyRef.current = null;
+        onSaved('Saved securely on this device. It will sync when you reconnect.');
+        if (closeAfterSave) {
+          onClose();
+        } else {
+          setAmount('');
+          setDescription('');
+          setCategory(categories.find((item) => item.categoryType === type)?.id || '');
+        }
+      };
+
+      let res: Response;
+      try {
+        res = await fetch(endpoint, {
+          method: initialTransaction ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, ...(initialTransaction ? {} : { 'idempotency-key': idempotencyKey }) },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        await saveOffline();
+        return;
+      }
       if (!res.ok) {
+        if ((res.status >= 500 || res.status === 429) && !initialTransaction && type !== 'transfer' && isNativeFinanceApp()) {
+          await saveOffline();
+          return;
+        }
         const data = await res.json().catch(() => ({}));
         setError(data.error || 'Could not post this activity. Check the details and try again.');
         return;
@@ -547,8 +665,8 @@ function TransactionModal({ workspaceId, wallets, categories, initialTransaction
         setDate(new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
         setError('');
       }
-    } catch {
-      setError('Connection issue. Please try again.');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Connection issue. Please try again.');
     } finally {
       submitLockRef.current = false;
       setBusy(false);

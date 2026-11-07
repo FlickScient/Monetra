@@ -11,6 +11,15 @@ if (process.env.MONETRA_CI_BUILD === '1') {
   process.exit(0);
 }
 
+// Preview deployments share DATABASE_URL with production in this project.
+// Never allow a feature-branch preview build to apply database migrations.
+if (process.env.VERCEL_ENV === 'preview') {
+  console.log('WORKSPACE_MIGRATION: running read-only sync schema verification on preview; no migration will be applied.');
+  runNpmScript('db:verify:sync');
+  console.log('WORKSPACE_MIGRATION: preview schema verification passed; no database mutation performed.');
+  process.exit(0);
+}
+
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   console.error('WORKSPACE_MIGRATION: DATABASE_URL is missing from this Vercel build environment.');
@@ -45,6 +54,7 @@ try {
     await pool.end();
     runNpmScript('db:migrate');
     runNpmScript('db:verify:workspace');
+    runNpmScript('db:verify:sync');
     console.log('WORKSPACE_MIGRATION: database migrations are current and verified.');
     process.exit(0);
   }
@@ -54,6 +64,7 @@ try {
   runNpmScript('db:preflight:workspace');
   runNpmScript('db:migrate');
   runNpmScript('db:verify:workspace');
+  runNpmScript('db:verify:sync');
   console.log('WORKSPACE_MIGRATION: migrations applied and verified successfully.');
 } catch (error) {
   try { await pool.end(); } catch {}

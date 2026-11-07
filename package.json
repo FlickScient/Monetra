@@ -12,7 +12,13 @@
     "db:verify:workspace": "node scripts/verify-workspace-migration.mjs",
     "db:diagnose": "node scripts/diagnose-database.mjs",
     "db:preflight:workspace": "node scripts/preflight-workspace-migration.mjs",
-    "prebuild": "node scripts/ensure-workspace-migrations.mjs"
+    "prebuild": "node scripts/ensure-workspace-migrations.mjs",
+    "db:preflight:sync": "node scripts/preflight-finance-sync-migration.mjs",
+    "db:verify:sync": "node scripts/verify-finance-sync-migration.mjs",
+    "cap:sync": "cap sync android",
+    "cap:android": "cap open android",
+    "cap:open": "cap open android",
+    "cap:doctor": "cap doctor"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.7.6",
@@ -77,10 +83,14 @@
     "typescript": "5.2.2",
     "vaul": "^0.9.9",
     "ws": "^8.22.1",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/android": "8.6.0",
+    "@capacitor-community/sqlite": "8.1.1"
   },
   "devDependencies": {
     "@types/ws": "^8.18.2",
-    "drizzle-kit": "^0.31.11"
+    "drizzle-kit": "^0.31.11",
+    "@capacitor/cli": "8.6.0"
   }
 }
