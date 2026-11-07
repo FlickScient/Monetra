@@ -14,7 +14,7 @@ let syncClientConfig: FinanceSyncClientConfig = {};
 
 /** Configure the shared sync client for a native app origin. Web keeps same-origin cookies by default. */
 export function configureFinanceSyncClient(config: FinanceSyncClientConfig): void {
-  syncClientConfig = { ...config, apiBaseUrl: config.apiBaseUrl?.replace(/\\/+$/, '') };
+  syncClientConfig = { ...config, apiBaseUrl: config.apiBaseUrl?.replace(/\/+$/, '') };
 }
 
 async function requestHeaders(workspaceId: string, extra?: HeadersInit): Promise<Headers> {
