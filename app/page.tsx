@@ -20,7 +20,7 @@ import { dhakaDateBoundary, dhakaMonthStart, shiftMonthStart } from '@/lib/dhaka
 import { MoneyAlerts } from '@/components/monetra/money-alerts';
 import { ReportsView } from '@/components/monetra/reports-view';
 import {
-  isNativeFinanceApp, listCachedNativeWorkspaces, readCachedNativeWorkspace,
+  getLastNativeSessionOwner, isNativeFinanceApp, listCachedNativeWorkspaces, readCachedNativeWorkspace,
   queueNativeTransaction, queueNativeTransfer, syncNativeWorkspace,
 } from '@/lib/offline/native-finance';
 
@@ -62,6 +62,7 @@ export default function HomePage() {
   const [notice, setNotice] = useState('');
   const [loadError, setLoadError] = useState('');
   const [financeRefreshVersion, setFinanceRefreshVersion] = useState(0);
+  const [nativeOfflineBooted, setNativeOfflineBooted] = useState(false);
   const financeRequestId = useRef(0);
 
   useEffect(() => {
@@ -77,6 +78,47 @@ export default function HomePage() {
   useEffect(() => {
     if (isLoaded && user) void initializeWorkspace();
   }, [isLoaded, user?.id]);
+
+  // A native install must be able to open its last local snapshot even when
+  // Clerk cannot reach the network and therefore has not finished loading.
+  useEffect(() => {
+    if (!isNativeFinanceApp() || navigator.onLine) return;
+    let cancelled = false;
+    const restoreOfflineWorkspace = async () => {
+      try {
+        const ownerId = await getLastNativeSessionOwner();
+        if (!ownerId || cancelled) {
+          if (!cancelled) {
+            setNativeOfflineBooted(true);
+            setLoading(false);
+            setLoadError('Monetra has no saved offline workspace on this device yet. Connect to the internet and sign in once to download your finance data.');
+          }
+          return;
+        }
+        const cachedWorkspaces = await listCachedNativeWorkspaces(ownerId);
+        if (cancelled) return;
+        const selected = cachedWorkspaces.find((row) => row.type === 'personal') || cachedWorkspaces[0];
+        if (!selected) {
+          setNativeOfflineBooted(true);
+          setLoading(false);
+          setLoadError('No saved workspace was found. Connect once to sync your Monetra data for offline use.');
+          return;
+        }
+        setWorkspaces(cachedWorkspaces);
+        setActiveWorkspaceId(selected.id);
+        setNativeOfflineBooted(true);
+        await loadFinanceData(selected.id);
+      } catch {
+        if (!cancelled) {
+          setNativeOfflineBooted(true);
+          setLoading(false);
+          setLoadError('Your offline workspace could not be opened. Reconnect and sync again before using offline mode.');
+        }
+      }
+    };
+    void restoreOfflineWorkspace();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!isNativeFinanceApp() || !user?.id || !activeWorkspaceId) return;
@@ -301,7 +343,8 @@ export default function HomePage() {
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
   const workspaceLabel = (workspace: Workspace) => workspace.type === 'personal' ? 'Personal' : workspace.type === 'family' ? 'Family' : 'Business';
 
-  if (!isLoaded || loading) return <div className="loading-screen loading-screen-skeleton"><div className="loading-mark">M</div><p>Preparing your money space</p><div className="loading-skeleton-grid" aria-hidden="true"><span /><span /><span /></div><div className="loading-skeleton-panel" aria-hidden="true"><i /><i /><i /><i /></div><span className="loading-line" /></div>;
+  if ((!isLoaded && !nativeOfflineBooted) || loading) return <div className="loading-screen loading-screen-skeleton"><div className="loading-mark">M</div><p>Preparing your money space</p><div className="loading-skeleton-grid" aria-hidden="true"><span /><span /><span /></div><div className="loading-skeleton-panel" aria-hidden="true"><i /><i /><i /><i /></div><span className="loading-line" /></div>;
+  if (!isLoaded && nativeOfflineBooted && !activeWorkspaceId) return <main className="loading-screen"><div className="loading-mark">M</div><h1>Offline workspace unavailable</h1><p>{loadError || 'Connect once to prepare this device for offline use.'}</p></main>;
 
   const navItems = [
     { key: 'overview' as const, label: 'Overview', icon: Home },
