@@ -80,8 +80,8 @@ Authentication tokens belong in platform secure storage, never SQLite plaintext 
 ## Current implementation status
 
 - Architecture, finance API audit, and sync contract are committed on `feat/android-local-first`.
-- Implemented: migration 0008, transactional change triggers across 14 finance tables, authenticated bootstrap endpoint, and authenticated incremental pull endpoint.
+- Implemented: migration 0008, transactional change triggers across 14 finance tables, authenticated bootstrap and incremental pull endpoints, and a first push slice for transaction/transfer creation using existing server handlers and idempotency keys.
 - Added: read-only sync migration preflight script. It has not been run against staging or production.
 - CI: an earlier commit passed TypeScript check and production build; the latest changes are awaiting CI.
-- Not implemented: push endpoint/operation receipts, local SQLite repository/outbox, Capacitor Android project, APK/AAB, release signing, and end-to-end offline tests.
+- Not implemented: durable local SQLite repository/outbox, conflict-aware edit/delete and module-command push, Capacitor Android project, APK/AAB, release signing, and end-to-end offline tests.
 - No production database migration has been applied as part of this work.
