@@ -978,3 +978,21 @@ html.reduced-motion *::after { animation-duration: .01ms !important; animation-i
  .fiscus-dedicated-page .monetra-ai-privacy{font-size:8px}
  .fiscus-workspace-context{padding-top:5px}
 }
+
+
+/* Monetra interaction polish — restrained motion, respecting reduced-motion settings. */
+:root{--motion-fast:140ms;--motion-normal:220ms;--motion-slow:320ms;--motion-ease:cubic-bezier(.2,.75,.25,1)}
+button,[role="button"],a,.icon-btn,.nav-item,.bottom-nav-item,.card,.wallet-card,.stat-card,.transaction-row,.modal-panel,.dropdown-menu,.toast,.fiscus-ai-message{
+ transition:background-color var(--motion-normal) var(--motion-ease),border-color var(--motion-normal) var(--motion-ease),color var(--motion-fast) ease,box-shadow var(--motion-normal) var(--motion-ease),transform var(--motion-normal) var(--motion-ease),opacity var(--motion-normal) ease;
+}
+button:not(:disabled):active,[role="button"]:active,.icon-btn:active{transform:scale(.975)}
+.card:hover,.wallet-card:hover,.stat-card:hover{border-color:var(--line-strong,var(--line));}
+.modal-backdrop{animation:monetra-backdrop-in var(--motion-normal) ease both}
+.modal-panel{animation:monetra-panel-in var(--motion-slow) var(--motion-ease) both;transform-origin:center bottom}
+.toast,.notice-banner{animation:monetra-toast-in var(--motion-normal) var(--motion-ease) both}
+.view-transition{animation:monetra-view-in 220ms var(--motion-ease) both}
+@keyframes monetra-backdrop-in{from{opacity:0}to{opacity:1}}
+@keyframes monetra-panel-in{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes monetra-toast-in{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+@keyframes monetra-view-in{from{opacity:.55;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
