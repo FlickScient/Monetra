@@ -23,13 +23,31 @@ type Category = { id: string; name: string; categoryType: 'income' | 'expense' }
 type Transaction = { id: string; transactionType: string; amountMinor: number; description?: string; occurredAt?: string; walletId?: string; pendingSync?: boolean };
 type Debt = { id: string; title?: string; name?: string; principalMinor?: number; paidMinor?: number; status?: string };
 type Mode = 'checking' | 'sign-in' | 'prepare' | 'setup-pin' | 'unlock' | 'dashboard' | 'error';
-type AppView = 'home' | 'activity' | 'insights' | 'debts' | 'settings';
+type AppView = 'home' | 'activity' | 'insights' | 'debts' | 'fiscus' | 'settings';
+type FiscusMessage = { role: 'user' | 'model'; content: string };
 
 function money(minor: number): string {
   return new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 2 }).format((minor || 0) / 100);
 }
 function asRows<T>(value: unknown): T[] { return Array.isArray(value) ? value as T[] : []; }
 function transactionWalletLabel(wallets: Wallet[], id?: string): string { return wallets.find((item) => item.id === id)?.name || 'Wallet'; }
+
+async function invokeNativeFiscus(getToken: () => Promise<string | null>, workspaceId: string, action: 'chat' | 'restore' | 'new', payload: Record<string, unknown> = {}) {
+  const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  if (!baseUrl || !publishableKey) throw new Error('Fiscus is not configured in this Android build yet.');
+  const token = await getToken();
+  if (!token) throw new Error('Sign in to use Fiscus AI.');
+  const response = await fetch(baseUrl.replace(/\\/$/, '') + '/functions/v1/fiscus-chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token, apikey: publishableKey },
+    body: JSON.stringify({ ...payload, action, workspaceId }),
+    cache: 'no-store',
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof result.error === 'string' ? result.error : 'Fiscus could not complete the request.');
+  return result;
+}
 
 export default function App() {
   const { isLoaded, isSignedIn, userId, getToken } = useAuth();
@@ -52,6 +70,11 @@ export default function App() {
   const [view, setView] = useState<AppView>('home');
   const [activitySearch, setActivitySearch] = useState('');
   const [activityFilter, setActivityFilter] = useState<'all' | 'income' | 'expense' | 'transfer'>('all');
+  const [fiscusMessages, setFiscusMessages] = useState<FiscusMessage[]>([]);
+  const [fiscusDraft, setFiscusDraft] = useState('');
+  const [fiscusLoading, setFiscusLoading] = useState(false);
+  const [fiscusReady, setFiscusReady] = useState(false);
+  const [fiscusError, setFiscusError] = useState('');
   const initialized = useRef(false);
 
   const wallets = useMemo(() => asRows<Wallet>(data?.wallets).filter((item) => item.status !== 'inactive'), [data]);
@@ -268,6 +291,47 @@ export default function App() {
     };
   }, [workspace, ownerId, isSignedIn, configureSync, loadLocal]);
 
+  useEffect(() => {
+    if (view !== 'fiscus' || !workspace || !isSignedIn || fiscusReady || fiscusLoading) return;
+    let cancelled = false;
+    setFiscusLoading(true);
+    setFiscusError('');
+    void invokeNativeFiscus(getToken, workspace.id, 'restore')
+      .then((result) => {
+        if (cancelled) return;
+        const restored = Array.isArray(result.messages) ? result.messages.filter((item: FiscusMessage) => item && (item.role === 'user' || item.role === 'model') && typeof item.content === 'string').slice(-40) : [];
+        setFiscusMessages(restored);
+        setFiscusReady(true);
+      })
+      .catch((cause) => { if (!cancelled) { setFiscusError(cause instanceof Error ? cause.message : 'Fiscus could not load your chat.'); setFiscusReady(true); } })
+      .finally(() => { if (!cancelled) setFiscusLoading(false); });
+    return () => { cancelled = true; };
+  }, [view, workspace, isSignedIn, fiscusReady, fiscusLoading, getToken]);
+
+  const sendFiscusMessage = async (event: FormEvent) => {
+    event.preventDefault();
+    const content = fiscusDraft.trim();
+    if (!content || !workspace || !isSignedIn || fiscusLoading) return;
+    const next = [...fiscusMessages, { role: 'user' as const, content }].slice(-12);
+    setFiscusMessages((current) => [...current, { role: 'user', content }].slice(-40));
+    setFiscusDraft(''); setFiscusError(''); setFiscusLoading(true);
+    try {
+      const result = await invokeNativeFiscus(getToken, workspace.id, 'chat', { messages: next });
+      if (typeof result.answer !== 'string' || !result.answer.trim()) throw new Error('Fiscus returned an empty response.');
+      setFiscusMessages((current) => [...current, { role: 'model', content: result.answer }].slice(-40));
+    } catch (cause) {
+      setFiscusError(cause instanceof Error ? cause.message : 'Fiscus could not complete the request.');
+    } finally { setFiscusLoading(false); }
+  };
+
+  const startFiscusChat = async () => {
+    if (!workspace || !isSignedIn || fiscusLoading) return;
+    setFiscusLoading(true); setFiscusError('');
+    try { await invokeNativeFiscus(getToken, workspace.id, 'new'); setFiscusMessages([]); setFiscusReady(true); }
+    catch (cause) { setFiscusError(cause instanceof Error ? cause.message : 'Could not start a new chat.'); }
+    finally { setFiscusLoading(false); }
+  };
+
   const saveEntry = async (event: FormEvent) => {
     event.preventDefault();
     if (!workspace || !ownerId) return;
@@ -337,7 +401,7 @@ export default function App() {
       <header className="topbar"><div className="brand"><div className="brand-mark small">M</div><div><b>Monetra</b><small>{workspace?.name || 'Personal'} space</small></div></div><button className="sync-button" onClick={() => void refresh()} disabled={busy}>{busy ? 'Working…' : navigator.onLine ? 'Sync now' : 'Offline'}</button></header>
       <section className="hero"><span className="eyebrow">TOTAL WALLET BALANCE</span><h1>{money(totalBalance)}</h1><p>{navigator.onLine ? 'Your local vault is ready to sync.' : 'Saved on this device · no internet required.'}</p></section>
       {message && <p className="notice">{message}</p>}{error && <p className="error notice">{error}</p>}
-      <nav className="native-nav" aria-label="Main navigation">{([['home','Home'],['activity','Activity'],['insights','Insights'],['debts','Due'],['settings','Settings']] as const).map(([key,label]) => <button key={key} type="button" className={view===key?'active':''} onClick={() => setView(key)}>{label}</button>)}</nav>
+      <nav className="native-nav" aria-label="Main navigation">{([['home','Home'],['activity','Activity'],['insights','Insights'],['debts','Due'],['fiscus','Fiscus'],['settings','Settings']] as const).map(([key,label]) => <button key={key} type="button" className={view===key?'active':''} onClick={() => setView(key)}>{label}</button>)}</nav>
       {view === 'home' && <>
       <section className="panel"><div className="section-heading"><div><span className="eyebrow">QUICK ENTRY</span><h2>Record activity</h2></div></div>
         <form className="entry-form" onSubmit={saveEntry}>
@@ -361,6 +425,7 @@ export default function App() {
       {view === 'activity' && <section className="panel"><div className="section-heading"><div><span className="eyebrow">LEDGER</span><h2>All activity</h2></div><strong>{transactions.length}</strong></div><input className="search-input" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} placeholder="Search descriptions or wallets" aria-label="Search activity"/><div className="filter-row">{(['all','income','expense','transfer'] as const).map((filter) => <button type="button" key={filter} className={activityFilter===filter?'active':''} onClick={() => setActivityFilter(filter)}>{filter[0].toUpperCase()+filter.slice(1)}</button>)}</div>{filteredTransactions.length ? filteredTransactions.map((item) => <div className="transaction-row" key={item.id}><div><b>{item.description || item.transactionType}</b><small>{new Date(item.occurredAt || Date.now()).toLocaleString()} · {transactionWallet(item.walletId)}{item.pendingSync ? ' · Pending sync' : ''}</small></div><strong className={item.transactionType==='income'?'positive':item.transactionType==='expense'?'negative':''}>{item.transactionType==='income'?'+':item.transactionType==='expense'?'-':''}{money(Number(item.amountMinor || 0))}</strong></div>) : <p className="empty">No matching activity in this local snapshot.</p>}</section>}
       {view === 'insights' && <><section className="panel"><span className="eyebrow">THIS MONTH</span><h2>{new Date().toLocaleDateString('en', {month:'long',year:'numeric'})}</h2><div className="metric-grid"><div><small>Income</small><strong className="positive">{money(monthIncome)}</strong></div><div><small>Expenses</small><strong className="negative">{money(monthExpense)}</strong></div><div><small>Net cash flow</small><strong>{money(monthIncome-monthExpense)}</strong></div><div><small>Transactions</small><strong>{monthTransactions.length}</strong></div></div></section><section className="panel"><span className="eyebrow">SPENDING SNAPSHOT</span><h2>Where things stand</h2><div className="metric-line"><span>Wallet balance</span><b>{money(totalBalance)}</b></div><div className="metric-line"><span>Outstanding due</span><b>{money(openDebtTotal)}</b></div><div className="metric-line"><span>Average expense / entry</span><b>{money(monthTransactions.filter((item) => item.transactionType === 'expense').length ? monthExpense / monthTransactions.filter((item) => item.transactionType === 'expense').length : 0)}</b></div><p className="empty">Insights are calculated from the transactions currently stored on this device. Sync to refresh the snapshot.</p></section></>}
       {view === 'debts' && <section className="panel"><div className="section-heading"><div><span className="eyebrow">DUE & DEBT</span><h2>Outstanding balances</h2></div><strong>{money(openDebtTotal)}</strong></div>{debts.length ? debts.map((item) => {const principal=Number(item.principalMinor||0);const paid=Number(item.paidMinor||0);const remaining=Math.max(0,principal-paid);return <div className="debt-row" key={item.id}><div><b>{item.title||item.name||'Due'}</b><small>{paid>0?'Partially paid':'Unpaid'} · {money(paid)} paid</small><div className="debt-track"><span style={{width:`${principal>0?Math.min(100,paid/principal*100):0}%`}}/></div></div><strong>{money(remaining)}</strong></div>}) : <p className="empty">No outstanding debts in this local snapshot.</p>}<p className="empty">Debt creation and editing will be enabled after the local ledger operations are implemented.</p></section>}
+      {view === 'fiscus' && <section className="panel fiscus-panel"><div className="section-heading"><div><span className="eyebrow">MONETRA INTELLIGENCE</span><h2>Fiscus AI</h2><p className="empty">Your personal financial thinking partner · online</p></div><button className="sync-button" type="button" onClick={() => void startFiscusChat()} disabled={!isSignedIn || fiscusLoading}>New chat</button></div>{!isSignedIn && <p className="empty">Connect to the internet and sign in to use Fiscus.</p>}{fiscusMessages.length===0 && <div className="fiscus-welcome"><b>What are we figuring out today?</b><p>Ask about spending patterns, monthly cash flow, wallet balances, or whether a purchase fits your finances.</p></div>}<div className="fiscus-messages">{fiscusMessages.map((item,index)=><div className={'fiscus-message '+item.role} key={index}><small>{item.role==='user'?'YOU':'FISCUS'}</small><p>{item.content}</p></div>)}{fiscusLoading && <p className="empty">Fiscus is thinking…</p>}</div>{fiscusError && <p className="error">{fiscusError}</p>}<form className="fiscus-composer" onSubmit={sendFiscusMessage}><textarea value={fiscusDraft} onChange={(event)=>setFiscusDraft(event.target.value)} placeholder="Ask Fiscus anything about your money…" rows={3} maxLength={3000} disabled={!isSignedIn || fiscusLoading}/><button className="primary" disabled={!isSignedIn || fiscusLoading || !fiscusDraft.trim()}>{fiscusLoading?'Thinking…':'Send message'}</button></form><p className="empty">Fiscus requires internet. It can analyze synced account data; unsynced offline entries are not included until they sync.</p></section>}
       {view === 'settings' && <section className="panel"><span className="eyebrow">DEVICE & ACCOUNT</span><h2>Settings</h2><div className="metric-line"><span>Workspace</span><b>{workspace?.name||'Personal'}</b></div><div className="metric-line"><span>Connection</span><b>{navigator.onLine?'Online':'Offline'}</b></div><div className="metric-line"><span>Local database</span><b>Encrypted SQLite</b></div><div className="metric-line"><span>Sync</span><b>{busy?'In progress':'Manual / reconnect'}</b></div><button className="primary settings-action" type="button" onClick={() => void refresh()} disabled={busy}>{busy?'Working…':'Sync now'}</button><p className="empty">Your six-digit device PIN protects local access. Fiscus AI is an online feature and is not available while offline.</p></section>}
       <footer>Encrypted local database · {navigator.onLine ? 'Online' : 'Offline'} · Fiscus AI requires internet</footer>
     </main>
