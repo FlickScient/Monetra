@@ -18,6 +18,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const rawCursor = url.searchParams.get('after') ?? '0';
   const rawLimit = Number(url.searchParams.get('limit') ?? 200);
+  const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 500) : 200;
   let after: bigint;
   try {
     if (!/^\d+$/.test(rawCursor)) throw new Error('invalid');
@@ -46,9 +47,10 @@ export async function GET(req: Request) {
       .limit(limit + 1);
 
     const hasMore = rows.length > limit;
-    const changes = hasMore ? rows.slice(0, limit) : rows;
+    const selectedRows = hasMore ? rows.slice(0, limit) : rows;
+    const changes = selectedRows.map((row) => ({ ...row, cursor: String(row.cursor) }));
     const nextCursor = changes.length
-      ? String(changes[changes.length - 1].cursor)
+      ? changes[changes.length - 1].cursor
       : rawCursor;
 
     return NextResponse.json({
