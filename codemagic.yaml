@@ -15,6 +15,8 @@ workflows:
         script: npm ci
       - name: Install native web bundler
         script: npm install --no-save --package-lock=false vite@6 @vitejs/plugin-react@4
+      - name: Type-check standalone native app
+        script: npx tsc --noEmit -p native-app/tsconfig.json
       - name: Build standalone Monetra web bundle
         script: |
           if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then
