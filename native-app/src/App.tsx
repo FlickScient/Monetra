@@ -56,6 +56,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<CachedWorkspace | null>(null);
+  const [availableWorkspaces, setAvailableWorkspaces] = useState<CachedWorkspace[]>([]);
   const [data, setData] = useState<CachedFinanceData | null>(null);
   const [pin, setPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
@@ -134,6 +135,7 @@ export default function App() {
           }
           setOwnerId(lastOwner);
           const localWorkspaces = await listCachedNativeWorkspaces(lastOwner);
+          setAvailableWorkspaces(localWorkspaces);
           const selected = localWorkspaces.find((item) => item.type === 'personal') || localWorkspaces[0];
           if (!selected) throw new Error('No saved workspace was found on this device.');
           setWorkspace(selected);
@@ -168,6 +170,7 @@ export default function App() {
         });
         const rows = await response.json().catch(() => null);
         if (!response.ok || !Array.isArray(rows)) throw new Error(rows?.error || 'Could not load your Monetra workspaces.');
+        setAvailableWorkspaces(rows as CachedWorkspace[]);
         const selected = (rows as CachedWorkspace[]).find((item) => item.type === 'personal') || (rows as CachedWorkspace[])[0];
         if (!selected?.id) throw new Error('No personal workspace is available for this account.');
         await syncNativeWorkspace(userId, selected.id);
@@ -177,6 +180,7 @@ export default function App() {
       } catch (cause) {
         try {
           const cached = await listCachedNativeWorkspaces(userId);
+          setAvailableWorkspaces(cached);
           const selectedCached = cached.find((item) => item.type === 'personal') || cached[0];
           if (selectedCached && await hasNativeAppPin(userId)) {
             setWorkspace(selectedCached);
@@ -241,6 +245,26 @@ export default function App() {
       setMessage('Local app lock enabled. Your finance snapshot is saved on this device.');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not set the local PIN.');
+    } finally { setBusy(false); }
+  };
+
+  const switchWorkspace = async (workspaceId: string) => {
+    const selected = availableWorkspaces.find((item) => item.id === workspaceId);
+    if (!selected || selected.id === workspace?.id || !ownerId) return;
+    setBusy(true); setError('');
+    try {
+      if (navigator.onLine && isSignedIn) {
+        configureSync();
+        await syncNativeWorkspace(ownerId, selected.id);
+      }
+      const cached = await readCachedNativeWorkspace(selected.id);
+      setWorkspace(selected); setData(cached); setView('home');
+      setWalletId(asRows<Wallet>(cached.wallets)[0]?.id || '');
+      setDebtId(asRows<Debt>(cached.dueDebts)[0]?.id || '');
+      setFiscusMessages([]); setFiscusReady(false); setFiscusError('');
+      setMessage(navigator.onLine ? 'Workspace loaded and synced.' : 'Workspace switched · offline changes stay on this device.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not switch workspace.');
     } finally { setBusy(false); }
   };
 
@@ -398,7 +422,7 @@ export default function App() {
   const transactionWallet = (id?: string) => wallets.find((item) => item.id === id)?.name || 'Wallet';
   return (
     <main className="app">
-      <header className="topbar"><div className="brand"><div className="brand-mark small">M</div><div><b>Monetra</b><small>{workspace?.name || 'Personal'} space</small></div></div><button className="sync-button" onClick={() => void refresh()} disabled={busy}>{busy ? 'Working…' : navigator.onLine ? 'Sync now' : 'Offline'}</button></header>
+      <header className="topbar"><div className="brand"><div className="brand-mark small">M</div><div><b>Monetra</b><small>Local-first finance</small></div></div><div className="topbar-actions">{availableWorkspaces.length > 1 && <select className="workspace-select" aria-label="Switch workspace" value={workspace?.id || ''} onChange={(event) => void switchWorkspace(event.target.value)} disabled={busy}>{availableWorkspaces.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}<button className="sync-button" onClick={() => void refresh()} disabled={busy}>{busy ? 'Working…' : navigator.onLine ? 'Sync now' : 'Offline'}</button></div></header>
       <section className="hero"><span className="eyebrow">TOTAL WALLET BALANCE</span><h1>{money(totalBalance)}</h1><p>{navigator.onLine ? 'Your local vault is ready to sync.' : 'Saved on this device · no internet required.'}</p></section>
       {message && <p className="notice">{message}</p>}{error && <p className="error notice">{error}</p>}
       <nav className="native-nav" aria-label="Main navigation">{([['home','Home'],['activity','Activity'],['insights','Insights'],['debts','Due'],['fiscus','Fiscus'],['settings','Settings']] as const).map(([key,label]) => <button key={key} type="button" className={view===key?'active':''} onClick={() => setView(key)}>{label}</button>)}</nav>
