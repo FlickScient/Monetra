@@ -19,6 +19,6 @@ function MissingConfiguration() {
 const root = createRoot(document.getElementById('root')!);
 root.render(
   publishableKey
-    ? <React.StrictMode><ClerkProvider publishableKey={publishableKey}><App /></ClerkProvider></React.StrictMode>
+    ? <React.StrictMode><ClerkProvider publishableKey={publishableKey} standardBrowser={false}><App /></ClerkProvider></React.StrictMode>
     : <MissingConfiguration />,
 );
