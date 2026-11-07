@@ -27,6 +27,12 @@ async function createStore(): Promise<SqliteFinanceSyncStore> {
 }
 
 /** List previously authenticated workspaces when the device has no connection. */
+export async function getLastNativeSessionOwner(): Promise<string | null> {
+  if (!isNativeFinanceApp()) return null;
+  const store = await createStore();
+  return store.getLastLocalSessionOwner();
+}
+
 export async function listCachedNativeWorkspaces(ownerId: string): Promise<CachedWorkspace[]> {
   if (!isNativeFinanceApp()) return [];
   const store = await createStore();
@@ -51,6 +57,7 @@ export async function syncNativeWorkspace(ownerId: string, workspaceId: string):
     const snapshot = await fetchFinanceBootstrap(workspaceId);
     await store.installBootstrap(ownerId, snapshot);
   }
+  await store.rememberLocalSession(ownerId);
   await synchronizeFinanceWorkspace(store, workspaceId);
 }
 
