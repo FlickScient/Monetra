@@ -13,7 +13,8 @@
     "db:diagnose": "node scripts/diagnose-database.mjs",
     "db:preflight:workspace": "node scripts/preflight-workspace-migration.mjs",
     "prebuild": "node scripts/ensure-workspace-migrations.mjs",
-    "db:preflight:sync": "node scripts/preflight-finance-sync-migration.mjs"
+    "db:preflight:sync": "node scripts/preflight-finance-sync-migration.mjs",
+    "db:verify:sync": "node scripts/verify-finance-sync-migration.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.7.6",
