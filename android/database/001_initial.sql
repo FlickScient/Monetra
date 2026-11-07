@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS local_workspaces (
   owner_id TEXT NOT NULL,
   workspace_type TEXT NOT NULL CHECK (workspace_type IN ('personal', 'family', 'business')),
   name TEXT NOT NULL,
-  snapshot_cursor INTEGER NOT NULL DEFAULT 0 CHECK (snapshot_cursor >= 0),
+  snapshot_cursor TEXT NOT NULL DEFAULT '0' CHECK (length(snapshot_cursor) > 0),
   last_synced_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS local_records (
   occurred_at TEXT,
   record_json TEXT NOT NULL CHECK (json_valid(record_json)),
   is_deleted INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0, 1)),
-  server_cursor INTEGER NOT NULL DEFAULT 0,
+  server_cursor TEXT NOT NULL DEFAULT '0',
   local_updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   PRIMARY KEY (workspace_id, entity_type, entity_id),
   FOREIGN KEY (workspace_id) REFERENCES local_workspaces(id) ON DELETE CASCADE
@@ -68,7 +68,7 @@ CREATE INDEX IF NOT EXISTS sync_outbox_pending_idx
 
 CREATE TABLE IF NOT EXISTS workspace_sync_state (
   workspace_id TEXT PRIMARY KEY NOT NULL,
-  pull_cursor INTEGER NOT NULL DEFAULT 0 CHECK (pull_cursor >= 0),
+  pull_cursor TEXT NOT NULL DEFAULT '0',
   last_successful_pull_at TEXT,
   last_successful_push_at TEXT,
   FOREIGN KEY (workspace_id) REFERENCES local_workspaces(id) ON DELETE CASCADE
