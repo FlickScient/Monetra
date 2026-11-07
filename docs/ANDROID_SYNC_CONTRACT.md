@@ -99,7 +99,7 @@ The schema uses integer minor units for money, foreign keys for workspace partit
 ## Current implementation status
 
 - Implemented: migration 0008, transactional change triggers across 14 finance tables, authenticated bootstrap and incremental pull endpoints, and the limited push endpoint for transaction creation, transfers, and debt payments.
-- Implemented: typed wire contracts and HTTP helpers.
+- Implemented: typed wire contracts, HTTP helpers, and a storage-agnostic sync coordinator. The coordinator recovers interrupted pushes, serializes per-workspace sync, retains retryable commands, surfaces conflicts/rejections, and applies pulled pages only through an atomic repository contract.
 - Added: draft Android SQLite v1 schema and a Python SQLite validation step in CI.
 - Added: read-only sync migration preflight script. It has not been run against staging or production.
 - CI: latest full branch run is still pending/running; an earlier commit passed TypeScript check and production build.
