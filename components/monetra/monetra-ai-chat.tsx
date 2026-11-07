@@ -72,14 +72,15 @@ function MessageMarkdown({ content }: { content: string }) {
     {blocks.map((block, index) => {
       const lines = block.split('\n');
       const heading = lines[0].match(/^(#{1,3})\s+(.+)$/);
-      if (heading) return <h3 key={index}>{renderInlineMarkdown(heading[2])}</h3>;
-      if (lines.every(line => /^\s*[-*]\s+/.test(line))) {
-        return <ul key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(line.replace(/^\s*[-*]\s+/, ''))}</li>)}</ul>;
+      const bodyLines = heading ? lines.slice(1) : lines;
+      const headingNode = heading ? <h3>{renderInlineMarkdown(heading[2])}</h3> : null;
+      if (bodyLines.length && bodyLines.every(line => /^\s*[-*]\s+/.test(line))) {
+        return <div key={index}>{headingNode}<ul>{bodyLines.map((line, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(line.replace(/^\s*[-*]\s+/, ''))}</li>)}</ul></div>;
       }
-      if (lines.every(line => /^\s*\d+[.)]\s+/.test(line))) {
-        return <ol key={index}>{lines.map((line, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(line.replace(/^\s*\d+[.)]\s+/, ''))}</li>)}</ol>;
+      if (bodyLines.length && bodyLines.every(line => /^\s*\d+[.)]\s+/.test(line))) {
+        return <div key={index}>{headingNode}<ol>{bodyLines.map((line, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(line.replace(/^\s*\d+[.)]\s+/, ''))}</li>)}</ol></div>;
       }
-      return <p key={index}>{lines.map((line, lineIndex) => <span key={lineIndex}>{lineIndex > 0 && <br />}{renderInlineMarkdown(line)}</span>)}</p>;
+      return <div key={index}>{headingNode}{bodyLines.length > 0 && <p>{bodyLines.map((line, lineIndex) => <span key={lineIndex}>{lineIndex > 0 && <br />}{renderInlineMarkdown(line)}</span>)}</p>}</div>;
     })}
   </div>;
 }
