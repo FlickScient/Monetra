@@ -31,45 +31,57 @@ try {
   const identity = await pool.query(
     "select current_database() as database_name, current_schema() as schema_name",
   );
-  const schema = identity.rows[0].schema_name;
-  if (schema !== 'public') {
-    throw new Error(`Expected public schema, connected with search path schema "${schema}". Migration was NOT started.`);
+  if (identity.rows[0].schema_name !== 'public') {
+    throw new Error('Expected public schema. Migration was NOT started.');
   }
   console.log(`Connected to "${identity.rows[0].database_name}" / public.`);
 
-  const requiredTables = { ...syncTables, workspaces: ['id', 'user_id'] };\n  const names = Object.keys(syncTables);
+  const requiredTables = { ...syncTables, workspaces: ['id', 'user_id'] };
+  const names = Object.keys(requiredTables);
   const columnsResult = await pool.query(
-    `select table_name, column_name
+    `select table_name, column_name, udt_name
      from information_schema.columns
      where table_schema = 'public' and table_name = any($1::text[])`,
     [names],
   );
   const columns = new Map();
   for (const row of columnsResult.rows) {
-    if (!columns.has(row.table_name)) columns.set(row.table_name, new Set());
-    columns.get(row.table_name).set(row.column_name, { dataType: row.data_type, udtName: row.udt_name });
+    if (!columns.has(row.table_name)) columns.set(row.table_name, new Map());
+    columns.get(row.table_name).set(row.column_name, row.udt_name);
   }
 
   const missing = [];
+  const badTypes = [];
   for (const [table, required] of Object.entries(requiredTables)) {
     if (!columns.has(table)) {
       missing.push(`${table} (table)`);
       continue;
     }
     for (const column of required) {
-      if (!columns.get(table).has(column)) missing.push(`${table}.${column}`);
+      if (!columns.get(table).has(column)) {
+        missing.push(`${table}.${column}`);
+        continue;
+      }
+      const actualType = columns.get(table).get(column);
+      const expectedType = column === 'user_id' ? 'text' : 'uuid';
+      if (actualType !== expectedType) {
+        badTypes.push(`${table}.${column} expected ${expectedType}, got ${actualType}`);
+      }
     }
   }
   if (missing.length) {
-    throw new Error(`Sync trigger source schema is incomplete: ${missing.join(', ')}. Migration was NOT started.`);
+    throw new Error(`Sync source schema is incomplete: ${missing.join(', ')}. Migration was NOT started.`);
+  }
+  if (badTypes.length) {
+    throw new Error(`Sync source columns have incompatible types: ${badTypes.join('; ')}. Migration was NOT started.`);
   }
 
-  const workspace = await pool.query(
+  const workspaceNulls = await pool.query(
     `select count(*)::int as count
      from workspaces
      where id is null or user_id is null`,
   );
-  if (workspace.rows[0].count > 0) {
+  if (workspaceNulls.rows[0].count > 0) {
     throw new Error('Workspace owner fields contain NULL values. Migration was NOT started.');
   }
 
@@ -105,7 +117,7 @@ try {
     throw new Error(`${orphanGoals.rows[0].count} goal allocation(s) do not match a goal in the same workspace. Migration was NOT started.`);
   }
 
-  console.log(`PASS  All ${names.length} sync source tables expose the exact ID/workspace/owner columns and UUID/text types required by the trigger.`);
+  console.log(`PASS  All ${Object.keys(syncTables).length} sync source tables and workspace ownership columns have the required UUID/text types.`);
   console.log('PASS  Workspace ownership matches every sync source row; goal allocations resolve through their workspace.');
   console.log('PASS  Existing source data is structurally compatible with migration 0008.');
   console.log('This is a read-only preflight. It does not apply or modify any migration.');
