@@ -9,16 +9,16 @@ class CapacitorSqliteConnection implements LocalSqliteConnection {
   constructor(private readonly connection: SQLiteDBConnection) {}
 
   async run(sql: string, values: unknown[] = []): Promise<void> {
-    await this.connection.run(sql, values as (string | number | null | Blob)[], false);
+    await this.connection.run(sql, values as any[], false);
   }
 
   async get<T>(sql: string, values: unknown[] = []): Promise<T | undefined> {
-    const result = await this.connection.query(sql, values as (string | number | null | Blob)[]);
+    const result = await this.connection.query(sql, values as any[]);
     return result.values?.[0] as T | undefined;
   }
 
   async all<T>(sql: string, values: unknown[] = []): Promise<T[]> {
-    const result = await this.connection.query(sql, values as (string | number | null | Blob)[]);
+    const result = await this.connection.query(sql, values as any[]);
     return (result.values ?? []) as T[];
   }
 
@@ -37,7 +37,13 @@ class CapacitorSqliteConnection implements LocalSqliteConnection {
 
 let databasePromise: Promise<LocalSqliteConnection> | null = null;
 
-/** Opens durable SQLite storage inside the Android app sandbox. */
+function createDatabaseSecret(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/** Opens encrypted, durable SQLite storage inside the Android app sandbox. */
 export async function openNativeFinanceDatabase(): Promise<LocalSqliteConnection> {
   if (!Capacitor.isNativePlatform()) {
     throw new Error('Native finance storage is available only inside the Monetra Android app.');
@@ -48,9 +54,14 @@ export async function openNativeFinanceDatabase(): Promise<LocalSqliteConnection
       const sqlite = new SQLiteConnection(CapacitorSQLite);
       await sqlite.checkConnectionsConsistency();
 
+      const secretState = await sqlite.isSecretStored();
+      if (!secretState.result) {
+        await sqlite.setEncryptionSecret(createDatabaseSecret());
+      }
+
       const existing = await sqlite.isConnection(DATABASE_NAME, false);
       if (!existing.result) {
-        await sqlite.createConnection(DATABASE_NAME, false, 'no-encryption', DATABASE_VERSION, false);
+        await sqlite.createConnection(DATABASE_NAME, true, 'secret', DATABASE_VERSION, false);
       }
 
       const connection = await sqlite.retrieveConnection(DATABASE_NAME, false);
