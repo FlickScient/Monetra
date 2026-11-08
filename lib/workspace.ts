@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server';
+import { verifyToken } from '@clerk/backend';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { workspaces } from '@/db/schema';
@@ -14,7 +15,24 @@ const WORKSPACE_TYPES = ['personal', 'family', 'business'] as const;
  * Requests without x-workspace-id intentionally fall back to Personal.
  */
 export async function getWorkspaceContext(request?: Request): Promise<WorkspaceContext> {
-  const { userId } = await auth();
+  // Browser requests use Clerk cookies; the Android WebView authenticates API
+  // calls with its native Clerk session bearer token.
+  const session = await auth();
+  let userId: string | null = session.userId;
+  if (!userId && request) {
+    const authorization = request.headers.get('authorization') || '';
+    const match = authorization.match(/^Bearer\\s+(.+)$/i);
+    if (match?.[1]) {
+      try {
+        const claims = await verifyToken(match[1], {
+          secretKey: process.env.CLERK_SECRET_KEY,
+        });
+        userId = claims.sub;
+      } catch (error) {
+        console.warn('MONETRA_NATIVE_AUTH_REJECTED:', error instanceof Error ? error.message : 'Invalid bearer token');
+      }
+    }
+  }
   if (!userId) return { ok: false, status: 401, error: 'Unauthorized' };
 
   const requestedWorkspaceId = request?.headers.get('x-workspace-id')?.trim();
