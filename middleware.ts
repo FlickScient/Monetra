@@ -1,14 +1,13 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-// The internal Fiscus context endpoint is excluded from Clerk cookie middleware
-// because it authenticates Supabase-to-Vercel requests with a timestamped HMAC.
+// API handlers perform their own authentication. This permits native requests
+// to reach them with a Clerk bearer token; browser requests continue to use
+// Clerk cookies. Every finance API route resolves ownership through
+// getWorkspaceContext(), while /api/ai/context validates its own HMAC.
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
-  "/api/ai/context",
-  // Native Capacitor clients authenticate this endpoint with a Clerk bearer token;
-  // the route handler still enforces auth() and filters every row by userId.
-  "/api/workspaces",
+  "/api/(.*)",
 ]);
 
 export default clerkMiddleware((auth, req) => {

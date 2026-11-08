@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server';
+import { verifyToken } from '@clerk/backend';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { workspaces } from '@/db/schema';
@@ -10,12 +11,36 @@ export type WorkspaceContext =
 const WORKSPACE_TYPES = ['personal', 'family', 'business'] as const;
 
 /**
- * Resolve a workspace strictly within the authenticated Clerk user's ownership.
- * Requests without x-workspace-id intentionally fall back to Personal.
+ * Resolve the same owned workspace for browser-cookie and native bearer sessions.
+ * Browser sessions keep priority; bearer tokens are used only when no cookie session exists.
  */
 export async function getWorkspaceContext(request?: Request): Promise<WorkspaceContext> {
-  const { userId } = await auth();
+  const session = await auth();
+  let userId: string | null = session.userId;
+
+  if (!userId) {
+    const authorization = request?.headers.get('authorization') ?? '';
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    if (!match?.[1]) {
+      return { ok: false, status: 401, error: 'Unauthorized' };
+    }
+
+    try {
+      const claims = await verifyToken(match[1], {
+        secretKey: process.env.CLERK_SECRET_KEY,
+      });
+      userId = claims.sub;
+    } catch (error) {
+      console.warn(
+        'MONETRA_NATIVE_AUTH_REJECTED:',
+        error instanceof Error ? error.message : 'Invalid bearer token',
+      );
+      return { ok: false, status: 401, error: 'Unauthorized' };
+    }
+  }
+
   if (!userId) return { ok: false, status: 401, error: 'Unauthorized' };
+  const authenticatedUserId = userId;
 
   const requestedWorkspaceId = request?.headers.get('x-workspace-id')?.trim();
 
@@ -28,7 +53,7 @@ export async function getWorkspaceContext(request?: Request): Promise<WorkspaceC
       await db.transaction(async (tx) => {
         for (const workspaceType of WORKSPACE_TYPES) {
           await tx.insert(workspaces).values({
-            userId,
+            userId: authenticatedUserId,
             workspaceType,
             name: workspaceType[0].toUpperCase() + workspaceType.slice(1),
           }).onConflictDoNothing({
@@ -39,7 +64,7 @@ export async function getWorkspaceContext(request?: Request): Promise<WorkspaceC
     }
 
     const conditions = [
-      eq(workspaces.userId, userId),
+      eq(workspaces.userId, authenticatedUserId),
       requestedWorkspaceId
         ? eq(workspaces.id, requestedWorkspaceId)
         : eq(workspaces.workspaceType, 'personal'),
@@ -54,7 +79,7 @@ export async function getWorkspaceContext(request?: Request): Promise<WorkspaceC
       return { ok: false, status: 403, error: 'You do not own this workspace' } as const;
     }
 
-    return { ok: true, userId, workspaceId: workspace.id } as const;
+    return { ok: true, userId: authenticatedUserId, workspaceId: workspace.id } as const;
   } catch (error) {
     console.error('MONETRA_WORKSPACE_ERROR:', error);
     return {
