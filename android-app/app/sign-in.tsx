@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useSignIn, useSignUp } from '@clerk/expo';
+import { useSignIn, useSignUp, useSSO } from '@clerk/expo';
 import { useRouter } from 'expo-router';
 import { theme } from '@/src/theme';
 
@@ -28,6 +28,7 @@ export default function SignInScreen() {
   const router = useRouter();
   const { signIn, fetchStatus: signInStatus } = useSignIn();
   const { signUp, fetchStatus: signUpStatus } = useSignUp();
+  const { startSSOFlow } = useSSO();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [step, setStep] = useState<'credentials' | 'verify'>('credentials');
   const [email, setEmail] = useState('');
@@ -38,6 +39,21 @@ export default function SignInScreen() {
 
   const finish = async (finalize: (options?: { navigate?: (...args: never[]) => void }) => Promise<unknown>) => {
     await finalize({ navigate: () => router.replace('/') });
+  };
+
+  const googleSignIn = async () => {
+    setMessage('');
+    try {
+      const { createdSessionId, setActive, signUp: pendingSignUp } = await startSSOFlow({ strategy: 'oauth_google' });
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        router.replace('/');
+      } else if (pendingSignUp?.status === 'missing_requirements') {
+        setMessage('Google sign-in needs additional account details. Complete the missing requirements in your Clerk profile settings.');
+      }
+    } catch (issue) {
+      setMessage(errorText(issue));
+    }
   };
 
   const submit = async () => {
@@ -121,6 +137,10 @@ export default function SignInScreen() {
         <View style={styles.card}>
           {step === 'credentials' ? (
             <>
+              <Pressable disabled={busy} onPress={googleSignIn} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed, busy && styles.disabled]}>
+                <Text style={styles.googleG}>G</Text><Text style={styles.googleText}>Continue with Google</Text>
+              </Pressable>
+              <View style={styles.separator}><View style={styles.separatorLine} /><Text style={styles.separatorText}>OR CONTINUE WITH EMAIL</Text><View style={styles.separatorLine} /></View>
               <Text style={styles.label}>EMAIL ADDRESS</Text>
               <TextInput
                 value={email}
@@ -189,6 +209,12 @@ const styles = StyleSheet.create({
   card: { backgroundColor: theme.colors.surface, borderColor: theme.colors.line, borderWidth: 1, borderRadius: 22, padding: 20 },
   label: { color: theme.colors.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1, marginBottom: 9, marginTop: 8 },
   input: { minHeight: 52, borderRadius: 13, backgroundColor: theme.colors.surfaceSoft, borderWidth: 1, borderColor: theme.colors.line, paddingHorizontal: 14, color: theme.colors.text, fontSize: 15, marginBottom: 14 },
+  googleButton: { minHeight: 50, borderRadius: 13, backgroundColor: '#fff', borderWidth: 1, borderColor: theme.colors.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  googleG: { color: '#4285F4', fontSize: 18, fontWeight: '900' },
+  googleText: { color: theme.colors.text, fontSize: 13, fontWeight: '750' },
+  separator: { flexDirection: 'row', alignItems: 'center', gap: 9, marginVertical: 17 },
+  separatorLine: { flex: 1, height: 1, backgroundColor: theme.colors.line },
+  separatorText: { color: theme.colors.muted, fontSize: 8, fontWeight: '800', letterSpacing: 0.7 },
   primary: { minHeight: 52, borderRadius: 13, backgroundColor: theme.colors.greenDeep, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   primaryText: { color: '#fff', fontSize: 14, fontWeight: '800' },
   pressed: { opacity: 0.86 },
