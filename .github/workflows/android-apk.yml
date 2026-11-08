@@ -1,3 +1,4 @@
+# Builds the existing native-app source from the PR head against production API.
 name: Monetra Android Build
 
 on:
