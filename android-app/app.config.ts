@@ -3,16 +3,22 @@ import type { ExpoConfig } from 'expo/config';
 const config: ExpoConfig = {
   name: 'Monetra',
   slug: 'monetra-native',
-  version: '1.0.0',
+  version: '1.0.1',
   orientation: 'portrait',
   scheme: 'monetra',
   userInterfaceStyle: 'automatic',
-  newArchEnabled: true,
+  // Keep the stable architecture path while investigating the device startup crash.
+  newArchEnabled: false,
+  icon: './assets/icon.png',
   plugins: ['expo-router', 'expo-secure-store', '@clerk/expo', 'expo-sqlite'],
   android: {
     package: 'com.flickscient.monetramobile',
-    versionCode: 1,
+    versionCode: 2,
     edgeToEdgeEnabled: true,
+    adaptiveIcon: {
+      foregroundImage: './assets/icon.png',
+      backgroundColor: '#F5F6F2',
+    },
   },
   experiments: { typedRoutes: true },
   extra: {

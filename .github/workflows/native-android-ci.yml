@@ -5,10 +5,12 @@ on:
     branches: [feat/native-expo-android]
     paths:
       - "android-app/**"
+      - "Main.png"
       - ".github/workflows/native-android-ci.yml"
   pull_request:
     paths:
       - "android-app/**"
+      - "Main.png"
       - ".github/workflows/native-android-ci.yml"
   workflow_dispatch:
 
@@ -56,6 +58,12 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Prepare symbol-only Monetra launcher icon
+        run: |
+          python -m pip install --quiet Pillow
+          python scripts/prepare-icon.py
+          test -s assets/icon.png
+
       - name: Ensure this is a standalone app (no Expo development client)
         run: |
           if npm ls expo-dev-client --depth=0; then
@@ -68,6 +76,9 @@ jobs:
 
       - name: Expo Doctor
         run: npx expo-doctor
+
+      - name: Validate Expo configuration and icon
+        run: npx expo config --type public
 
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install --clean
