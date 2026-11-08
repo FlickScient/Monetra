@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { ClerkProvider } from '@clerk/clerk-react';
+import { ClerkProvider } from 'capacitor-clerk';
 import App from './App';
 import './styles.css';
 
@@ -115,6 +115,6 @@ function MissingConfiguration() {
 const root = createRoot(document.getElementById('root')!);
 root.render(
   publishableKey
-    ? <React.StrictMode><ClerkProvider publishableKey={publishableKey} standardBrowser={true}><App /></ClerkProvider></React.StrictMode>
+    ? <React.StrictMode><ClerkProvider publishableKey={publishableKey}><App /></ClerkProvider></React.StrictMode>
     : <MissingConfiguration />,
 );

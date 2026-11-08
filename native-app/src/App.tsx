@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { SignIn, useAuth } from '@clerk/clerk-react';
+import { useAuth, useSignIn, useSignUp, useSSO } from 'capacitor-clerk';
 import {
   getLastNativeSessionOwner,
   hasNativeAppPin,
@@ -48,6 +48,119 @@ async function invokeNativeFiscus(getToken: () => Promise<string | null>, worksp
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(typeof result.error === 'string' ? result.error : 'Fiscus could not complete the request.');
   return result;
+}
+
+function NativeAuthScreen() {
+  const { signIn, errors: signInErrors, fetchStatus: signInStatus } = useSignIn();
+  const { signUp, errors: signUpErrors, fetchStatus: signUpStatus } = useSignUp();
+  const { startSSOFlow } = useSSO();
+  const [screen, setScreen] = useState<'sign-in' | 'sign-up'>('sign-in');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [busyGoogle, setBusyGoogle] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  const googleSignIn = async () => {
+    setAuthError('');
+    setBusyGoogle(true);
+    try {
+      const { createdSessionId, setActive } = await startSSOFlow({
+        strategy: 'oauth_google',
+        redirectUrl: 'monetra://sso-callback',
+      });
+      if (!createdSessionId || !setActive) {
+        throw new Error('Google sign-in was closed before it finished. Try again.');
+      }
+      await setActive({ session: createdSessionId });
+    } catch (cause) {
+      setAuthError(cause instanceof Error ? cause.message : 'Google sign-in could not be completed.');
+    } finally {
+      setBusyGoogle(false);
+    }
+  };
+
+  const submitSignIn = async (event: FormEvent) => {
+    event.preventDefault();
+    setAuthError('');
+    const { error: resultError } = await signIn.password({ identifier: email.trim(), password });
+    if (resultError) setAuthError(resultError.message);
+    else if (signIn.status === 'complete') await signIn.finalize({ navigate: () => undefined });
+  };
+
+  const createAccount = async (event: FormEvent) => {
+    event.preventDefault();
+    setAuthError('');
+    const { error: resultError } = await signUp.password({ emailAddress: email.trim(), password });
+    if (resultError) {
+      setAuthError(resultError.message);
+      return;
+    }
+    const { error: codeError } = await signUp.verifications.sendEmailCode();
+    if (codeError) setAuthError(codeError.message);
+  };
+
+  const verifyEmail = async (event: FormEvent) => {
+    event.preventDefault();
+    setAuthError('');
+    const { error: verifyError } = await signUp.verifications.verifyEmailCode({ code: verificationCode.trim() });
+    if (verifyError) {
+      setAuthError(verifyError.message);
+      return;
+    }
+    if (signUp.status === 'complete') await signUp.finalize({ navigate: () => undefined });
+  };
+
+  const verifying = signUp.status === 'missing_requirements' && signUp.unverifiedFields.includes('email_address');
+  const busy = busyGoogle || signInStatus === 'fetching' || signUpStatus === 'fetching';
+
+  return (
+    <main className="screen auth-screen">
+      <div className="brand-mark">M</div>
+      <h1>Welcome to Monetra</h1>
+      <p>Sign in once to securely download your finance workspace for offline use.</p>
+      <section className="auth-card">
+        {verifying ? (
+          <form className="auth-form" onSubmit={verifyEmail}>
+            <h2>Verify your email</h2>
+            <p>Enter the verification code sent to {email}.</p>
+            <label className="auth-field">Verification code
+              <input className="auth-input" inputMode="numeric" autoComplete="one-time-code" value={verificationCode} onChange={(event) => setVerificationCode(event.target.value)} required />
+            </label>
+            <button className="auth-primary" type="submit" disabled={busy}>Verify email</button>
+            <button className="auth-link" type="button" onClick={() => void signUp.verifications.sendEmailCode()}>Resend code</button>
+          </form>
+        ) : (
+          <>
+            <div className="auth-tabs">
+              <button type="button" className={screen === 'sign-in' ? 'active' : ''} onClick={() => { setScreen('sign-in'); setAuthError(''); }}>Sign in</button>
+              <button type="button" className={screen === 'sign-up' ? 'active' : ''} onClick={() => { setScreen('sign-up'); setAuthError(''); }}>Create account</button>
+            </div>
+            <button className="auth-google" type="button" onClick={() => void googleSignIn()} disabled={busy}>
+              <span className="google-g" aria-hidden="true">G</span>
+              {busyGoogle ? 'Opening Google…' : 'Continue with Google'}
+            </button>
+            <div className="auth-divider"><span>or use email</span></div>
+            <form className="auth-form" onSubmit={screen === 'sign-in' ? submitSignIn : createAccount}>
+              <label className="auth-field">Email address
+                <input className="auth-input" type="email" autoComplete="email" autoCapitalize="none" value={email} onChange={(event) => setEmail(event.target.value)} required />
+              </label>
+              <label className="auth-field">Password
+                <input className="auth-input" type="password" autoComplete={screen === 'sign-in' ? 'current-password' : 'new-password'} minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required />
+              </label>
+              <button className="auth-primary" type="submit" disabled={busy}>
+                {busy ? 'Please wait…' : screen === 'sign-in' ? 'Sign in with email' : 'Create account'}
+              </button>
+            </form>
+          </>
+        )}
+        {(authError || signInErrors.global?.[0]?.message || signUpErrors.global?.[0]?.message) && (
+          <div className="auth-error">{authError || signInErrors.global?.[0]?.message || signUpErrors.global?.[0]?.message}</div>
+        )}
+      </section>
+      <p className="auth-footnote">Your account and finance data stay linked to the same Monetra profile.</p>
+    </main>
+  );
 }
 
 export default function App() {
@@ -434,7 +547,7 @@ export default function App() {
     return <main className="screen center"><div className="brand-mark">M</div><div className="spinner" /><h1>{mode === 'prepare' ? 'Preparing your offline vault' : 'Opening Monetra'}</h1><p>Securing your local finance data…</p></main>;
   }
   if (mode === 'sign-in') {
-    return <main className="screen center"><div className="brand-mark">M</div><h1>Welcome to Monetra</h1><p>Sign in once to download your finance workspace for offline use.</p><SignIn routing="hash" /></main>;
+    return <main className="screen center"><div className="brand-mark">M</div><h1>Welcome to Monetra</h1><p>Sign in once to download your finance workspace for offline use.</p><NativeAuthScreen /></main>;
   }
   if (mode === 'setup-pin') {
     return <main className="screen center"><div className="brand-mark">M</div><h1>Protect your offline vault</h1><p>Create a six-digit PIN. You’ll need it to open your saved finance data when you’re offline.</p><form className="pin-form" onSubmit={createPin}><input aria-label="Six-digit PIN" inputMode="numeric" maxLength={6} pattern="[0-9]{6}" type="password" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0,6))} placeholder="••••••" /><input aria-label="Confirm PIN" inputMode="numeric" maxLength={6} pattern="[0-9]{6}" type="password" value={pinConfirm} onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, '').slice(0,6))} placeholder="Confirm PIN" /><button disabled={busy || pin.length !== 6 || pinConfirm.length !== 6}>Enable offline lock</button></form>{error && <p className="error">{error}</p>}</main>;

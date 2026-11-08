@@ -9,6 +9,7 @@ on:
       - "capacitor.config.ts"
       - "package.json"
       - "package-lock.json"
+      - "scripts/configure-android-sso.mjs"
       - "android/database/**"
       - "public/sqlite/**"
       - ".github/workflows/android-apk.yml"
@@ -62,6 +63,7 @@ jobs:
         run: |
           npx cap add android
           npx cap sync android
+          node scripts/configure-android-sso.mjs
       - name: Assemble debug APK
         run: |
           cd android-native
