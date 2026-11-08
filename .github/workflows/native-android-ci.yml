@@ -110,19 +110,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            APK="android-app/android/app/build/outputs/apk/release/app-release.apk"
-            test -s "$APK"
-            adb install "$APK"
-            adb shell am force-stop com.flickscient.monetramobile || true
-            adb logcat -c
-            adb shell monkey -p com.flickscient.monetramobile 1
-            sleep 25
-            adb logcat -d -t 5000 > /tmp/monetra-startup-log.txt
-            adb shell pidof com.flickscient.monetramobile || (cat /tmp/monetra-startup-log.txt; exit 1)
-            if grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL|Fatal signal" /tmp/monetra-startup-log.txt; then
-              cat /tmp/monetra-startup-log.txt
-              exit 1
-            fi
+            APK="$GITHUB_WORKSPACE/android-app/android/app/build/outputs/apk/release/app-release.apk"; test -s "$APK" || { echo "APK missing at $APK"; find "$GITHUB_WORKSPACE/android-app" -name '*.apk' -type f; exit 1; }; adb install "$APK" && adb shell am force-stop com.flickscient.monetramobile && adb logcat -c && adb shell monkey -p com.flickscient.monetramobile 1 && sleep 25 && adb logcat -d -t 5000 > "$GITHUB_WORKSPACE/monetra-startup-log.txt" && adb shell pidof com.flickscient.monetramobile && ! grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL|Fatal signal" "$GITHUB_WORKSPACE/monetra-startup-log.txt"
 
       - name: Upload Android startup logs
         if: always()
