@@ -17,6 +17,9 @@ const config: ExpoConfig = {
   experiments: { typedRoutes: true },
   extra: {
     apiUrl: process.env.EXPO_PUBLIC_MONETRA_API_URL ?? 'https://monetra-4rax.vercel.app',
+    clerkPublishableKey:
+      process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ??
+      'pk_test_bm90YWJsZS1oZXJvbi02MDYuY2xlcmsuYWNjb3VudHMuZGV2JA',
   },
 };
 
