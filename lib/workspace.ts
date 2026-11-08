@@ -34,6 +34,7 @@ export async function getWorkspaceContext(request?: Request): Promise<WorkspaceC
     }
   }
   if (!userId) return { ok: false, status: 401, error: 'Unauthorized' };
+  const authenticatedUserId: string = userId;
 
   const requestedWorkspaceId = request?.headers.get('x-workspace-id')?.trim();
 
@@ -46,7 +47,7 @@ export async function getWorkspaceContext(request?: Request): Promise<WorkspaceC
       await db.transaction(async (tx) => {
         for (const workspaceType of WORKSPACE_TYPES) {
           await tx.insert(workspaces).values({
-            userId,
+            userId: authenticatedUserId,
             workspaceType,
             name: workspaceType[0].toUpperCase() + workspaceType.slice(1),
           }).onConflictDoNothing({
@@ -57,7 +58,7 @@ export async function getWorkspaceContext(request?: Request): Promise<WorkspaceC
     }
 
     const conditions = [
-      eq(workspaces.userId, userId),
+      eq(workspaces.userId, authenticatedUserId),
       requestedWorkspaceId
         ? eq(workspaces.id, requestedWorkspaceId)
         : eq(workspaces.workspaceType, 'personal'),
@@ -72,7 +73,7 @@ export async function getWorkspaceContext(request?: Request): Promise<WorkspaceC
       return { ok: false, status: 403, error: 'You do not own this workspace' } as const;
     }
 
-    return { ok: true, userId, workspaceId: workspace.id } as const;
+    return { ok: true, userId: authenticatedUserId, workspaceId: workspace.id } as const;
   } catch (error) {
     console.error('MONETRA_WORKSPACE_ERROR:', error);
     return {
