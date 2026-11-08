@@ -52,3 +52,7 @@ Keep the keystore and passwords private. Back up the keystore securely: future A
 The native app includes Fiscus chat. Its Supabase project URL is fixed to the configured Fiscus project, and only the public publishable key is supplied to the Vite build as `VITE_SUPABASE_PUBLISHABLE_KEY`; do not use the Supabase secret/service-role key in the app.
 
 The existing pull-request workflow produces a **debug** APK only. A successful debug build does not mean release signing, Clerk production login, or on-device offline behavior has been verified.
+
+## Finance sync service
+
+The Android client uses the production Monetra API at `https://monetra-4rax.vercel.app` for authenticated bootstrap, incremental changes, and queued offline writes. These routes are deployed by the main web application; do not point the APK at a preview deployment.
