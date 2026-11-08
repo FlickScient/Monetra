@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract the standalone Monetra trend mark from the supplied brand sheet."""
+"""Extract the large standalone Monetra trend symbol from Main.png."""
 from pathlib import Path
 from PIL import Image
 
@@ -11,34 +11,32 @@ if not SOURCE.is_file():
     raise SystemExit(f"Missing source logo: {SOURCE}")
 
 image = Image.open(SOURCE).convert("RGBA")
-if image.size != (1504, 1120):
+if image.size != (1760, 1120):
     raise SystemExit(f"Unexpected source dimensions {image.size}; refusing an unsafe crop.")
 
-# The large standalone mark is left of the Monetra wordmark. This crop excludes
-# the wordmark and the smaller explanatory mark/tagline below it.
-mark = image.crop((240, 340, 425, 490))
+# Exact bounds of the large arrow symbol on the left of the wordmark.
+# The Monetra lettering and the small caption/secondary mark are outside this crop.
+mark = image.crop((270, 390, 490, 560))
 pixels = mark.load()
 for y in range(mark.height):
     for x in range(mark.width):
         r, g, b, _ = pixels[x, y]
-        # Remove the warm off-white sheet background while retaining antialiased
-        # olive edges as partial alpha.
+        # Make the warm off-white paper transparent while preserving the olive mark.
         distance = ((r - 248) ** 2 + (g - 247) ** 2 + (b - 239) ** 2) ** 0.5
-        alpha = max(0, min(255, int((distance - 12) * 3.0)))
+        alpha = max(0, min(255, int((distance - 10) * 3.2)))
         pixels[x, y] = (r, g, b, alpha)
 
 bbox = mark.getbbox()
 if not bbox:
-    raise SystemExit("Could not isolate the trend mark from Main.png.")
+    raise SystemExit("Could not isolate the trend symbol from Main.png.")
 mark = mark.crop(bbox)
 
 canvas = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
-max_side = 620
-scale = min(max_side / mark.width, max_side / mark.height)
+scale = min(650 / mark.width, 650 / mark.height)
 size = (max(1, round(mark.width * scale)), max(1, round(mark.height * scale)))
 mark = mark.resize(size, Image.Resampling.LANCZOS)
 canvas.alpha_composite(mark, ((1024 - size[0]) // 2, (1024 - size[1]) // 2))
 
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 canvas.save(OUTPUT, format="PNG", optimize=True)
-print(f"Created symbol-only launcher icon: {OUTPUT} ({canvas.size[0]}x{canvas.size[1]})")
+print(f"Created symbol-only icon: {OUTPUT} ({canvas.width}x{canvas.height})")
