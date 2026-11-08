@@ -7,7 +7,7 @@ import {
   CircleHelp, Sparkles, TrendingUp, ShieldCheck, Menu, Landmark, Activity,
   HandCoins, PiggyBank, Settings as SettingsIcon, Pencil, Trash2, Download,
 } from 'lucide-react';
-import { useUser, UserButton } from '@clerk/nextjs';
+import { useUser, UserButton } from '@clerk/clerk-react';
 import { FiscusView, SettingsView } from '@/components/monetra/module-views';
 import { DueDebtView } from '@/components/monetra/due-debt-view';
 import { FiscusMark } from '@/components/monetra/fiscus-mark';
