@@ -18,9 +18,9 @@ declare global {
 window.__monetraDiagnostics = [];
 window.__monetraRecordDiagnostic = (message: string) => {
   const safe = String(message)
-    .replace(/(Bearer\\s+)[^\\s]+/gi, '$1[redacted]')
+    .replace(/(Bearer\s+)[^\s]+/gi, '$1[redacted]')
     .replace(/(pk_(?:test|live)_[A-Za-z0-9_-]+)/g, '[publishable-key]')
-    .replace(/[?&](?:token|__clerk_db_jwt|authorization)=[^&\\s]+/gi, '?[redacted]');
+    .replace(/[?&](?:token|__clerk_db_jwt|authorization)=[^&\s]+/gi, '?[redacted]');
   window.__monetraDiagnostics = [...(window.__monetraDiagnostics || []), safe.slice(0, 360)].slice(-8);
 };
 
