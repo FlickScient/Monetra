@@ -8,6 +8,13 @@ const config: CapacitorConfig = {
     path: 'android-native',
     allowMixedContent: false,
   },
+  plugins: {
+    // Route WebView fetch/XHR through Android's native HTTP stack.
+    // Clerk's native-mode requests can otherwise fail WebView CORS preflights.
+    CapacitorHttp: {
+      enabled: true,
+    },
+  },
 };
 
 export default config;
