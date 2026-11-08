@@ -102,6 +102,14 @@ jobs:
             exit 1
           fi
 
+      - name: Upload standalone Monetra APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: monetra-standalone-android-apk
+          path: android-app/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Launch release APK in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -123,10 +131,3 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Upload standalone Monetra APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: monetra-standalone-android-apk
-          path: android-app/android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
-          retention-days: 14
