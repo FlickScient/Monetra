@@ -1,4 +1,5 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import { useAuth, useSignIn, useSignUp, useSSO } from 'capacitor-clerk';
 import {
   getLastNativeSessionOwner,
@@ -27,6 +28,38 @@ type DebtPayment = { id: string; dueDebtId: string; amountMinor: number };
 type Mode = 'checking' | 'sign-in' | 'prepare' | 'setup-pin' | 'unlock' | 'dashboard' | 'error';
 type AppView = 'home' | 'activity' | 'insights' | 'debts' | 'fiscus' | 'settings';
 type FiscusMessage = { role: 'user' | 'model'; content: string };
+
+class DashboardErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: string | null }
+> {
+  state = { error: null as string | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error: error?.message || 'Unknown dashboard rendering error.' };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('MONETRA_DASHBOARD_RENDER_ERROR:', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <main className="screen center">
+          <div className="brand-mark">M</div>
+          <h1>Monetra dashboard couldn’t load</h1>
+          <p>The PIN is saved. Your finance data has not been erased.</p>
+          <pre className="error" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', textAlign: 'left', width: '100%', maxWidth: 520, fontSize: 12 }}>
+            {this.state.error}
+          </pre>
+          <button onClick={() => window.location.reload()}>Try again</button>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function money(minor: number): string {
   return new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 2 }).format((minor || 0) / 100);
@@ -373,10 +406,11 @@ export default function App() {
     setBusy(true); setError('');
     try {
       await setNativeAppPin(ownerId, pin);
+      if (!workspace?.id) throw new Error('Your workspace is not ready yet. Reopen Monetra while connected to finish setup.');
+      await loadLocal(workspace.id);
       setPin(''); setPinConfirm('');
-      setMode('dashboard');
-      if (workspace) await loadLocal(workspace.id);
       setMessage('Local app lock enabled. Your finance snapshot is saved on this device.');
+      setMode('dashboard');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not set the local PIN.');
     } finally { setBusy(false); }
@@ -560,8 +594,9 @@ export default function App() {
 
   // After the native sign-in + PIN gate, render the exact website finance experience.
   // Its own data adapter uses the same hosted APIs and the existing SQLite cache.
-  return <HomePage />;
-
-  // All native authentication/PIN states above are gates; the signed-in app is the website UI.
-  return <HomePage />;
+  return (
+    <DashboardErrorBoundary>
+      <HomePage />
+    </DashboardErrorBoundary>
+  );
 }
