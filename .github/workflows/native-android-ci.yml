@@ -101,6 +101,36 @@ jobs:
             exit 1
           fi
 
+      - name: Launch release APK in Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            adb install android/app/build/outputs/apk/release/app-release.apk
+            adb shell am force-stop com.flickscient.monetramobile || true
+            adb logcat -c
+            adb shell monkey -p com.flickscient.monetramobile 1
+            sleep 25
+            adb logcat -d -t 5000 > /tmp/monetra-startup-log.txt
+            adb shell pidof com.flickscient.monetramobile || (cat /tmp/monetra-startup-log.txt; exit 1)
+            if grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL|Fatal signal" /tmp/monetra-startup-log.txt; then
+              cat /tmp/monetra-startup-log.txt
+              exit 1
+            fi
+
+      - name: Upload Android startup logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monetra-android-startup-logs
+          path: /tmp/monetra-startup-log.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload standalone Monetra APK
         uses: actions/upload-artifact@v4
         with:
