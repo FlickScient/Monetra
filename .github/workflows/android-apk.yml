@@ -83,6 +83,9 @@ jobs:
           npx cap add android
           npx cap sync android
           node scripts/configure-android-sso.mjs
+          # Use the smaller Gradle binary distribution and allow slow CI downloads.
+          sed -i 's/gradle-8.14.3-all.zip/gradle-8.14.3-bin.zip/' android-native/gradle/wrapper/gradle-wrapper.properties
+          echo 'networkTimeout=120000' >> android-native/gradle/wrapper/gradle-wrapper.properties
       - name: Assemble debug APK
         run: |
           cd android-native
