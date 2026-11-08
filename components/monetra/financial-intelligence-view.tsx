@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { financeApiFetch } from '@/lib/native-api-fetch';
 import { MonetraAIChat } from './monetra-ai-chat';
 import { Activity, AlertTriangle, Calculator, CheckCircle2, ClipboardCheck, Lightbulb, PiggyBank, ShieldAlert, Target, TrendingUp, Wallet } from 'lucide-react';
 
@@ -78,7 +79,7 @@ export function FinancialIntelligenceView({ wallets, transactions, monthlyIncome
   const [trendData, setTrendData] = useState<{ trends: { month: string; incomeMinor: number; expenseMinor: number }[]; categoryBreakdown: { categoryId: string | null; name: string; color: string; totalMinor: number }[] }>({ trends: [], categoryBreakdown: [] });
   useEffect(() => {
     let active = true;
-    fetch('/api/finance-tools', { headers: { 'x-workspace-id': workspaceId } })
+    financeApiFetch('/api/finance-tools', { headers: { 'x-workspace-id': workspaceId } })
       .then(async response => { const payload = await response.json(); if (!response.ok) throw new Error(payload.error || 'Unable to load radar trends'); return payload; })
       .then(payload => { if (active) setTrendData({ trends: Array.isArray(payload.trends) ? payload.trends : [], categoryBreakdown: Array.isArray(payload.categoryBreakdown) ? payload.categoryBreakdown : [] }); })
       .catch(() => { if (active) setTrendData({ trends: [], categoryBreakdown: [] }); });
