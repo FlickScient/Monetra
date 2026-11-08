@@ -16,6 +16,7 @@ import {
   type CachedWorkspace,
 } from '@/lib/offline/native-finance';
 import { configureFinanceSyncClient } from '@/lib/offline/sync-client';
+import HomePage from '@/app/page';
 
 const API_BASE = (import.meta.env.VITE_MONETRA_API_URL || 'https://monetra-4rax.vercel.app').replace(/\/+$/, '');
 type Wallet = { id: string; name: string; walletType?: string; currentBalanceMinor?: number; currency?: string; status?: string };
@@ -556,6 +557,10 @@ export default function App() {
     return <main className="screen center"><div className="brand-mark">M</div><h1>Unlock Monetra</h1><p>{workspace?.name || 'Your saved workspace'} · Enter your device PIN to view local finance data.</p><form className="pin-form" onSubmit={unlock}><input aria-label="Six-digit PIN" autoFocus inputMode="numeric" maxLength={6} pattern="[0-9]{6}" type="password" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0,6))} placeholder="••••••" /><button disabled={busy || pin.length !== 6}>{busy ? 'Unlocking…' : 'Unlock'}</button></form>{error && <p className="error">{error}</p>}</main>;
   }
   if (mode === 'error') return <main className="screen center"><div className="brand-mark">M</div><h1>Monetra couldn’t open</h1><pre className="error" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', textAlign: 'left', width: '100%', maxWidth: 520, fontSize: 12 }}>{error}</pre>{isLoaded && !isSignedIn && navigator.onLine && <button onClick={() => setMode('sign-in')}>Sign in</button>}<button className="secondary" onClick={() => window.location.reload()}>Try again</button></main>;
+
+  // After the native sign-in + PIN gate, render the exact website finance experience.
+  // Its own data adapter uses the same hosted APIs and the existing SQLite cache.
+  return <HomePage />;
 
   const transactionWallet = (id?: string) => wallets.find((item) => item.id === id)?.name || 'Wallet';
   return (
