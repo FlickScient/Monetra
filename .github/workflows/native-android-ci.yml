@@ -21,6 +21,7 @@ concurrency:
 jobs:
   verify-and-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: android-app
@@ -108,9 +109,10 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_2
+          emulator-boot-timeout: 900
           disable-animations: true
           script: |
-            APK="$GITHUB_WORKSPACE/android-app/android/app/build/outputs/apk/release/app-release.apk"; test -s "$APK" || { echo "APK missing at $APK"; find "$GITHUB_WORKSPACE/android-app" -name '*.apk' -type f; exit 1; }; adb install "$APK" && adb shell am force-stop com.flickscient.monetramobile && adb logcat -c && adb shell monkey -p com.flickscient.monetramobile 1 && sleep 25 && APP_PID="$(adb shell pidof com.flickscient.monetramobile | tr -d '\r')" && test -n "$APP_PID" && adb logcat -d -v threadtime -t 5000 > "$GITHUB_WORKSPACE/monetra-startup-log.txt" && if awk -v pid="$APP_PID" '$3 == pid && ($5 == "F" || /FATAL EXCEPTION|Fatal signal/) { print; found=1 } END { exit found ? 0 : 1 }' "$GITHUB_WORKSPACE/monetra-startup-log.txt"; then echo "Monetra process emitted a fatal error."; exit 1; else echo "Monetra stayed alive for 25 seconds; no fatal error from its process."; fi
+            set +e; APK="$GITHUB_WORKSPACE/android-app/android/app/build/outputs/apk/release/app-release.apk"; adb install "$APK"; INSTALL_STATUS=$?; if [ "$INSTALL_STATUS" -eq 0 ]; then adb shell am force-stop com.flickscient.monetramobile; adb logcat -c; adb shell monkey -p com.flickscient.monetramobile 1; sleep 25; APP_PID="$(adb shell pidof com.flickscient.monetramobile | tr -d '\r')"; else APP_PID=""; fi; adb logcat -d -v threadtime -t 5000 > "$GITHUB_WORKSPACE/monetra-startup-log.txt" 2>&1; if [ "$INSTALL_STATUS" -ne 0 ]; then echo "APK installation failed"; exit "$INSTALL_STATUS"; fi; if [ -z "$APP_PID" ]; then echo "Monetra process did not remain alive after launch"; exit 1; fi; if awk -v pid="$APP_PID" '$3 == pid && ($5 == "F" || /FATAL EXCEPTION|Fatal signal/) { print; found=1 } END { exit found ? 0 : 1 }' "$GITHUB_WORKSPACE/monetra-startup-log.txt"; then echo "Monetra process emitted a fatal error."; exit 1; fi; echo "Monetra stayed alive for 25 seconds; no fatal error from its process."
 
       - name: Upload Android startup logs
         if: always()
