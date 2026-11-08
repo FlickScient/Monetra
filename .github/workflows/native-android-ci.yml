@@ -117,7 +117,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: monetra-android-startup-logs
-          path: /tmp/monetra-startup-log.txt
+          path: monetra-startup-log.txt
           if-no-files-found: ignore
           retention-days: 7
 
