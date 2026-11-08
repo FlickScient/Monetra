@@ -56,31 +56,44 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Ensure this is a standalone app (no Expo development client)
+        run: |
+          if npm ls expo-dev-client --depth=0; then
+            echo "expo-dev-client must not be installed in the standalone APK."
+            exit 1
+          fi
+
       - name: TypeScript check
         run: npx tsc --noEmit
 
       - name: Expo Doctor
         run: npx expo-doctor
 
-      - name: Bundle Android app
-        run: npx expo export --platform android
-
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install --clean
 
-      - name: Assemble debug APK
+      - name: Assemble standalone release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug
+          ./gradlew --no-daemon assembleRelease
 
-      - name: Verify APK output
-        run: test -s android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Verify standalone APK output
+        run: |
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "package: name='com.flickscient.monetramobile'"
+          if "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | grep -qi "launchable-activity"; then
+            echo "Standalone APK contains a launchable Android activity."
+          else
+            echo "APK has no launchable activity."
+            exit 1
+          fi
 
-      - name: Upload installable APK
+      - name: Upload standalone Monetra APK
         uses: actions/upload-artifact@v4
         with:
-          name: monetra-native-android-debug
-          path: android-app/android/app/build/outputs/apk/debug/app-debug.apk
+          name: monetra-standalone-android-apk
+          path: android-app/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
