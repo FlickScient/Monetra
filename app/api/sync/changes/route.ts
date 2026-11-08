@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 500) : 200;
   let after: bigint;
   try {
-    if (!/^\\d+$/.test(rawCursor)) throw new Error('invalid');
+    if (!/^\d+$/.test(rawCursor)) throw new Error('invalid');
     after = BigInt(rawCursor);
     if (after < BigInt('0')) throw new Error('invalid');
   } catch {
