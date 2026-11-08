@@ -45,7 +45,7 @@ if (!settings.includes("id 'org.jetbrains.kotlin.android' version '2.1.20'")) {
     '    }',
     '}',
     '',
-  ].join('\\n');
+  ].join('\n');
   settings = pluginManagement + settings;
   await writeFile(settingsPath, settings);
   console.log('Pinned Kotlin Android Gradle plugin 2.1.20 for capacitor-clerk.');
