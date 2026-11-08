@@ -131,8 +131,8 @@ export default function App() {
       setError([
         'Clerk did not finish initializing within 20 seconds.',
         environment,
-        diagnostics.length ? 'Captured startup diagnostics:\\n' + diagnostics.join('\\n') : 'No browser error event was captured. The next useful check is the Clerk Frontend API request from this WebView.',
-      ].join('\\n\\n'));
+        diagnostics.length ? 'Captured startup diagnostics:\n' + diagnostics.join('\n') : 'No browser error event was captured. The next useful check is the Clerk Frontend API request from this WebView.',
+      ].join('\n\n'));
       setMode('error');
     }, 20000);
     return () => window.clearTimeout(timeout);
