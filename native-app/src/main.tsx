@@ -2,8 +2,8 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ClerkProvider } from 'capacitor-clerk';
 import App from './App';
-import '../../app/globals.css';
 import './styles.css';
+import '../../app/globals.css';
 
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
