@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   input: { minHeight: 52, borderRadius: 13, backgroundColor: theme.colors.surfaceSoft, borderWidth: 1, borderColor: theme.colors.line, paddingHorizontal: 14, color: theme.colors.text, fontSize: 15, marginBottom: 14 },
   googleButton: { minHeight: 50, borderRadius: 13, backgroundColor: '#fff', borderWidth: 1, borderColor: theme.colors.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   googleG: { color: '#4285F4', fontSize: 18, fontWeight: '900' },
-  googleText: { color: theme.colors.text, fontSize: 13, fontWeight: '750' },
+  googleText: { color: theme.colors.text, fontSize: 13, fontWeight: '700' },
   separator: { flexDirection: 'row', alignItems: 'center', gap: 9, marginVertical: 17 },
   separatorLine: { flex: 1, height: 1, backgroundColor: theme.colors.line },
   separatorText: { color: theme.colors.muted, fontSize: 8, fontWeight: '800', letterSpacing: 0.7 },
