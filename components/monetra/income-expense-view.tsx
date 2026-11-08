@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { financeApiFetch } from '@/lib/native-api-fetch';
 import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, ChevronDown, ChevronUp, Plus, RefreshCw, Search } from 'lucide-react';
 import { dhakaMonthStart, shiftMonthStart } from '@/lib/dhaka-time';
 
@@ -30,7 +31,7 @@ export function IncomeExpenseView({ workspaceId, onAdd }: { workspaceId: string;
   useEffect(() => {
     let active = true;
     setLoading(true); setError(''); setData(null); setExpandedDay('');
-    fetch('/api/transactions/income-expense?month=' + encodeURIComponent(month), { headers: { 'x-workspace-id': workspaceId } })
+    financeApiFetch('/api/transactions/income-expense?month=' + encodeURIComponent(month), { headers: { 'x-workspace-id': workspaceId } })
       .then(async response => { const payload = await response.json(); if (!response.ok) throw new Error(payload.error || 'Could not load ledger.'); return payload as LedgerData; })
       .then(payload => { if (active) { setData(payload); setExpandedDay(payload.days[0]?.date || ''); } })
       .catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'Could not load ledger.'); })
