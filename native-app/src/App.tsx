@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { SignIn, useAuth } from '@clerk/clerk-react';
+import { SignIn, useAuth } from '@clerk/react';
 import {
   getLastNativeSessionOwner,
   hasNativeAppPin,
