@@ -8,6 +8,7 @@ import {
   HandCoins, PiggyBank, Settings as SettingsIcon, Pencil, Trash2, Download,
 } from 'lucide-react';
 import { useAuth, useUser, UserButton } from '@clerk/clerk-react';
+import { configureNativeApiTokenProvider, financeApiFetch } from '@/lib/native-api-fetch';
 import { FiscusView, SettingsView } from '@/components/monetra/module-views';
 import { DueDebtView } from '@/components/monetra/due-debt-view';
 import { FiscusMark } from '@/components/monetra/fiscus-mark';
@@ -45,16 +46,8 @@ const dateLabel = (value: string) =>
 export default function HomePage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
-  const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
-    if (!isNativeFinanceApp()) return fetch(input, init);
-    const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    const url = new URL(raw, import.meta.env.VITE_MONETRA_API_URL || 'https://monetra-4rax.vercel.app');
-    const token = await getToken();
-    if (!token) throw new Error('Your Monetra session expired. Sign in again to continue.');
-    const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
-    headers.set('Authorization', 'Bearer ' + token);
-    return fetch(url.toString(), { ...init, headers });
-  };
+  useEffect(() => { configureNativeApiTokenProvider(getToken); }, [getToken]);
+
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState('');
   const [wallets, setWallets] = useState<Wallet[]>([]);
@@ -154,7 +147,7 @@ export default function HomePage() {
     setLoading(true);
     setLoadError('');
     try {
-      const response = await apiFetch('/api/workspaces');
+      const response = await financeApiFetch('/api/workspaces');
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         const message = typeof payload?.error === 'string' ? payload.error : 'Could not load workspaces';
@@ -205,7 +198,7 @@ export default function HomePage() {
       const headers: Record<string, string> = {};
       if (workspaceId) headers['x-workspace-id'] = workspaceId;
       const [walletRes, categoryRes, transactionRes, summaryRes] = await Promise.all([
-        apiFetch('/api/wallets', { headers }), apiFetch('/api/categories', { headers }), apiFetch('/api/transactions?limit=50&offset=0', { headers }), apiFetch(summaryUrl, { headers }),
+        financeApiFetch('/api/wallets', { headers }), financeApiFetch('/api/categories', { headers }), financeApiFetch('/api/transactions?limit=50&offset=0', { headers }), financeApiFetch(summaryUrl, { headers }),
       ]);
       if (!walletRes.ok || !categoryRes.ok || !transactionRes.ok || !summaryRes.ok) throw new Error('Some finance data could not be loaded.');
       const [walletData, categoryData, transactionData, summaryData] = await Promise.all([walletRes.json(), categoryRes.json(), transactionRes.json(), summaryRes.json()]);
@@ -270,7 +263,7 @@ export default function HomePage() {
   }
   async function restoreWallet(wallet: Wallet) {
     try {
-      const response = await apiFetch('/api/wallets/' + wallet.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-workspace-id': activeWorkspaceId }, body: JSON.stringify({ status: 'active' }) });
+      const response = await financeApiFetch('/api/wallets/' + wallet.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-workspace-id': activeWorkspaceId }, body: JSON.stringify({ status: 'active' }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not restore wallet.');
       setNotice('Wallet restored and available for new activity.');
@@ -281,7 +274,7 @@ export default function HomePage() {
   async function archiveWallet(wallet: Wallet) {
     if (!window.confirm('Archive ' + wallet.name + '? Its history will remain, but it cannot be used for new activity.')) return;
     try {
-      const response = await apiFetch('/api/wallets/' + wallet.id, { method: 'DELETE', headers: { 'x-workspace-id': activeWorkspaceId } });
+      const response = await financeApiFetch('/api/wallets/' + wallet.id, { method: 'DELETE', headers: { 'x-workspace-id': activeWorkspaceId } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not archive wallet.');
       setNotice('Wallet archived. Its transaction history is preserved.');
@@ -292,7 +285,7 @@ export default function HomePage() {
   async function deleteTransaction(transaction: Transaction) {
     if (!window.confirm('Delete this transaction? Its wallet balance and ledger will be reversed.')) return;
     try {
-      const response = await apiFetch('/api/transactions/' + transaction.id, { method: 'DELETE', headers: { 'x-workspace-id': activeWorkspaceId } });
+      const response = await financeApiFetch('/api/transactions/' + transaction.id, { method: 'DELETE', headers: { 'x-workspace-id': activeWorkspaceId } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not delete this transaction.');
       setNotice('Transaction deleted. Wallet balances have been recalculated.');
@@ -306,7 +299,7 @@ export default function HomePage() {
     if (!ids.length) return [];
     if (!window.confirm(`Delete ${ids.length} selected transaction(s)? Each wallet balance and ledger entry will be reversed.`)) return [];
     const results = await Promise.allSettled(ids.map(async id => {
-      const response = await apiFetch('/api/transactions/' + id, {
+      const response = await financeApiFetch('/api/transactions/' + id, {
         method: 'DELETE',
         headers: { 'x-workspace-id': activeWorkspaceId },
       });
@@ -327,7 +320,7 @@ export default function HomePage() {
     const workspaceId = activeWorkspaceId;
     const offset = transactions.length;
     try {
-      const response = await apiFetch(`/api/transactions?limit=50&offset=${offset}`, { headers: { 'x-workspace-id': workspaceId } });
+      const response = await financeApiFetch(`/api/transactions?limit=50&offset=${offset}`, { headers: { 'x-workspace-id': workspaceId } });
       if (!response.ok) throw new Error('Unable to load older transactions');
       const rows: Transaction[] = await response.json();
       if (requestId !== financeRequestId.current || workspaceId !== activeWorkspaceId) return;
@@ -564,7 +557,7 @@ function TransactionsView({ workspaceId, transactions, wallets, categories, onAd
   async function exportTransactions() {
     setExporting(true); setExportError('');
     try {
-      const response = await apiFetch('/api/transactions/export', { headers: { 'x-workspace-id': workspaceId } });
+      const response = await financeApiFetch('/api/transactions/export', { headers: { 'x-workspace-id': workspaceId } });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Could not export transactions.');
@@ -614,7 +607,7 @@ function WalletModal({ workspaceId, initialWallet, onClose, onSaved }: { workspa
       const amount = Math.round(Number(opening || 0) * 100);
       const endpoint = initialWallet ? '/api/wallets/' + initialWallet.id : '/api/wallets';
       const body = initialWallet ? { name, notes: notes.trim() || null, ...(type === 'credit_card' ? { creditLimitMinor: Math.round(Number(creditLimit || 0) * 100) } : {}) } : { name, walletType: type, currency: 'BDT', openingBalanceMinor: amount, notes: notes.trim() || null, creditLimitMinor: type === 'credit_card' ? Math.round(Number(creditLimit || 0) * 100) : 0 };
-      const res = await apiFetch(endpoint, { method: initialWallet ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify(body) });
+      const res = await financeApiFetch(endpoint, { method: initialWallet ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify(body) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); setError(data.error || 'Could not add this wallet.'); }
       else onSaved(initialWallet ? 'Wallet updated. Balances are syncing.' : 'Wallet added. Balances are syncing.');
     } catch { setError('Connection issue. Please try again.'); }
@@ -695,7 +688,7 @@ function TransactionModal({ workspaceId, wallets, categories, initialTransaction
 
       let res: Response;
       try {
-        res = await apiFetch(endpoint, {
+        res = await financeApiFetch(endpoint, {
           method: initialTransaction ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, ...(initialTransaction ? {} : { 'idempotency-key': idempotencyKey }) },
           body: JSON.stringify(body),
