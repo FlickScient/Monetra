@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { financeApiFetch } from '@/lib/native-api-fetch';
 import { dhakaDateString } from '@/lib/dhaka-time';
 import { CalendarDays, CheckCircle2, CirclePause, CirclePlay, ClipboardList, Plus, RefreshCw, Wallet } from 'lucide-react';
 
@@ -41,7 +42,7 @@ export function FinanceOperationsView({ workspaceId, categories }: { workspaceId
     setLoading(true); setError('');
     try {
       const headers = { 'x-workspace-id': workspaceId };
-      const [toolsRes, debtRes] = await Promise.all([fetch('/api/finance-tools', { headers }), fetch('/api/due-debt', { headers })]);
+      const [toolsRes, debtRes] = await Promise.all([financeApiFetch('/api/finance-tools', { headers }), financeApiFetch('/api/due-debt', { headers })]);
       const [toolsData, debtData] = await Promise.all([toolsRes.json(), debtRes.json()]);
       if (!toolsRes.ok) throw new Error(toolsData.error || 'Could not load finance tools.');
       if (!debtRes.ok) throw new Error(debtData.error || 'Could not load due dates.');
@@ -71,7 +72,7 @@ export function FinanceOperationsView({ workspaceId, categories }: { workspaceId
   async function submit(kind: string, payload: Record<string, unknown>) {
     setBusy(true); setError(''); setNotice('');
     try {
-      const response = await fetch('/api/finance-tools', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ kind, ...payload }) });
+      const response = await financeApiFetch('/api/finance-tools', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ kind, ...payload }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Could not save this item.');
       setNotice(kind === 'reconciliation' ? 'Reconciliation saved. Your wallet balance was not changed.' : 'Saved successfully.');
@@ -103,7 +104,7 @@ export function FinanceOperationsView({ workspaceId, categories }: { workspaceId
     if (item.nextRun < today() && !window.confirm('This schedule has missed dates. Record every due occurrence, up to 24 per click, as separate transactions?')) return;
     setBusy(true); setError(''); setNotice('');
     try {
-      const response = await fetch('/api/finance-tools', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ kind: 'recurring-run', id: item.id }) });
+      const response = await financeApiFetch('/api/finance-tools', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ kind: 'recurring-run', id: item.id }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Could not record scheduled transaction.');
       setNotice('Recorded ' + (result.recordedCount || 0) + ' due occurrence(s). Next occurrence: ' + result.nextRun + (result.moreDue ? ' · More overdue dates remain; record again to continue.' : '.')); await load();
@@ -115,7 +116,7 @@ export function FinanceOperationsView({ workspaceId, categories }: { workspaceId
     if (!window.confirm('Skip this scheduled occurrence without recording a transaction?')) return;
     setBusy(true); setError(''); setNotice('');
     try {
-      const response = await fetch('/api/finance-tools', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ kind: 'recurring-skip', id: item.id }) });
+      const response = await financeApiFetch('/api/finance-tools', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ kind: 'recurring-skip', id: item.id }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Could not skip this occurrence.');
       setNotice('Skipped this occurrence. Next date: ' + result.nextRun + '.'); await load();
@@ -126,7 +127,7 @@ export function FinanceOperationsView({ workspaceId, categories }: { workspaceId
   async function toggleRecurring(item: RecurringRow) {
     setBusy(true); setError(''); setNotice('');
     try {
-      const response = await fetch('/api/finance-tools', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ id: item.id, enabled: !item.enabled }) });
+      const response = await financeApiFetch('/api/finance-tools', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ id: item.id, enabled: !item.enabled }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Could not update schedule.');
       setNotice(item.enabled ? 'Schedule paused.' : 'Schedule resumed.'); await load();
