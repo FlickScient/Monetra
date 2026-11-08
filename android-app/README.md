@@ -19,7 +19,7 @@ A separate React Native / Expo application. It is not a WebView and does not emb
 
 ## Package identity
 
-The native app uses `com.flickscient.monetra.native` so it can be installed alongside earlier Monetra test APKs without Android package/signature conflicts.
+The native app uses `com.flickscient.monetramobile` so it can be installed alongside earlier Monetra test APKs without Android package/signature conflicts.
 
 ## Planned milestones
 

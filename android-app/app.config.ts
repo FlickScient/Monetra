@@ -10,7 +10,7 @@ const config: ExpoConfig = {
   newArchEnabled: true,
   plugins: ['expo-router', 'expo-secure-store', '@clerk/expo', 'expo-sqlite'],
   android: {
-    package: 'com.flickscient.monetra.native',
+    package: 'com.flickscient.monetramobile',
     versionCode: 1,
     edgeToEdgeEnabled: true,
   },
