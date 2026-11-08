@@ -2,6 +2,22 @@ name: Monetra Android Build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - "feat/unified-monetra-android"
+    paths:
+      - "native-app/**"
+      - "app/**"
+      - "components/monetra/**"
+      - "lib/native-api-fetch.ts"
+      - "lib/offline/**"
+      - "capacitor.config.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/configure-android-sso.mjs"
+      - "android/database/**"
+      - "public/sqlite/**"
+      - ".github/workflows/android-apk.yml"
   pull_request:
     paths:
       - "native-app/**"
