@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { financeApiFetch } from '@/lib/native-api-fetch';
 import { FiscusMark } from '@/components/monetra/fiscus-mark';
 import { MonetraAIChat } from '@/components/monetra/monetra-ai-chat';
 import { BackupControls } from '@/components/monetra/backup-controls';
@@ -80,7 +81,7 @@ function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onCh
 
   useEffect(() => {
     let active = true;
-    fetch('/api/categories', { headers: { 'x-workspace-id': workspaceId } })
+    financeApiFetch('/api/categories', { headers: { 'x-workspace-id': workspaceId } })
       .then(async response => { const data = await response.json().catch(() => []); if (!response.ok) throw new Error(data.error || 'Could not load categories.'); return data; })
       .then(data => { if (active) setItems(Array.isArray(data) ? data : []); })
       .catch(err => { if (active) setError(err instanceof Error ? err.message : 'Could not load categories.'); });
@@ -90,7 +91,7 @@ function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onCh
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(''); setNotice('');
     try {
-      const response = await fetch('/api/categories', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ name, categoryType, color }) });
+      const response = await financeApiFetch('/api/categories', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ name, categoryType, color }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not create category.');
       setItems(current => [...current, data]); setName(''); setNotice('Category created.'); onChanged([...items, data]);
@@ -102,7 +103,7 @@ function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onCh
   async function saveEdit(item: CategoryRow) {
     setBusy(true); setError(''); setNotice('');
     try {
-      const response = await fetch('/api/categories/' + item.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ name: editName, categoryType: editType, color: editColor }) });
+      const response = await financeApiFetch('/api/categories/' + item.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId }, body: JSON.stringify({ name: editName, categoryType: editType, color: editColor }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not update category.');
       setItems(current => current.map(row => row.id === item.id ? data : row)); setEditing(''); setNotice('Category updated.'); onChanged(items.map(row => row.id === item.id ? data : row));
@@ -113,7 +114,7 @@ function CategoryManager({ workspaceId, onChanged }: { workspaceId: string; onCh
     if (!window.confirm('Delete "' + item.name + '"? Existing transactions will become Uncategorized; their amounts and balances will not change.')) return;
     setBusy(true); setError(''); setNotice('');
     try {
-      const response = await fetch('/api/categories/' + item.id, { method: 'DELETE', headers: { 'x-workspace-id': workspaceId } });
+      const response = await financeApiFetch('/api/categories/' + item.id, { method: 'DELETE', headers: { 'x-workspace-id': workspaceId } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not delete category.');
       setItems(current => current.filter(row => row.id !== item.id)); setNotice('Category deleted. Existing transactions were kept.'); onChanged(items.filter(row => row.id !== item.id));
