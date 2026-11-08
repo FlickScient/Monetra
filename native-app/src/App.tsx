@@ -126,7 +126,13 @@ export default function App() {
   useEffect(() => {
     if (mode !== 'checking' || isLoaded) return;
     const timeout = window.setTimeout(() => {
-      setError('Sign-in could not initialize. Check your internet connection, then tap Try again. If this keeps happening, the Android authentication connection needs attention.');
+      const diagnostics = (window.__monetraDiagnostics || []).slice(-6);
+      const environment = `Environment: ${window.location.protocol} · online=${navigator.onLine} · Clerk key configured=${Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY)}`;
+      setError([
+        'Clerk did not finish initializing within 20 seconds.',
+        environment,
+        diagnostics.length ? 'Captured startup diagnostics:\\n' + diagnostics.join('\\n') : 'No browser error event was captured. The next useful check is the Clerk Frontend API request from this WebView.',
+      ].join('\\n\\n'));
       setMode('error');
     }, 20000);
     return () => window.clearTimeout(timeout);
@@ -436,7 +442,7 @@ export default function App() {
   if (mode === 'unlock') {
     return <main className="screen center"><div className="brand-mark">M</div><h1>Unlock Monetra</h1><p>{workspace?.name || 'Your saved workspace'} · Enter your device PIN to view local finance data.</p><form className="pin-form" onSubmit={unlock}><input aria-label="Six-digit PIN" autoFocus inputMode="numeric" maxLength={6} pattern="[0-9]{6}" type="password" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0,6))} placeholder="••••••" /><button disabled={busy || pin.length !== 6}>{busy ? 'Unlocking…' : 'Unlock'}</button></form>{error && <p className="error">{error}</p>}</main>;
   }
-  if (mode === 'error') return <main className="screen center"><div className="brand-mark">M</div><h1>Monetra couldn’t open</h1><p>{error}</p>{isLoaded && !isSignedIn && navigator.onLine && <button onClick={() => setMode('sign-in')}>Sign in</button>}<button className="secondary" onClick={() => window.location.reload()}>Try again</button></main>;
+  if (mode === 'error') return <main className="screen center"><div className="brand-mark">M</div><h1>Monetra couldn’t open</h1><pre className="error" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', textAlign: 'left', width: '100%', maxWidth: 520, fontSize: 12 }}>{error}</pre>{isLoaded && !isSignedIn && navigator.onLine && <button onClick={() => setMode('sign-in')}>Sign in</button>}<button className="secondary" onClick={() => window.location.reload()}>Try again</button></main>;
 
   const transactionWallet = (id?: string) => wallets.find((item) => item.id === id)?.name || 'Wallet';
   return (
