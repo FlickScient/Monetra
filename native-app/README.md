@@ -55,4 +55,6 @@ The existing pull-request workflow produces a **debug** APK only. A successful d
 
 ## Finance sync service
 
+The Android debug build is produced by the repository's `Monetra Android Build` GitHub Actions workflow.
+
 The Android client uses the production Monetra API at `https://monetra-4rax.vercel.app` for authenticated bootstrap, incremental changes, and queued offline writes. These routes are deployed by the main web application; do not point the APK at a preview deployment.
