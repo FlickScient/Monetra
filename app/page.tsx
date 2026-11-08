@@ -7,7 +7,9 @@ import {
   CircleHelp, Sparkles, TrendingUp, ShieldCheck, Menu, Landmark, Activity,
   HandCoins, PiggyBank, Settings as SettingsIcon, Pencil, Trash2, Download,
 } from 'lucide-react';
-import { useAuth, useUser, UserButton } from '@clerk/clerk-react';
+import { useAuth, useUser } from 'capacitor-clerk';
+import { UserButton as WebUserButton } from '@clerk/clerk-react';
+import { UserButton as NativeUserButton } from 'capacitor-clerk/native';
 import { configureNativeApiTokenProvider, financeApiFetch } from '@/lib/native-api-fetch';
 import { FiscusView, SettingsView } from '@/components/monetra/module-views';
 import { DueDebtView } from '@/components/monetra/due-debt-view';
@@ -384,7 +386,7 @@ export default function HomePage() {
         </nav>
         <div className="sidebar-bottom">
           <div className="vault-note"><div className="vault-note-icon"><ShieldCheck size={17} /></div><div><b>Your data, protected.</b><span>Private financial workspace</span></div></div>
-          <div className="sidebar-user"><UserButton afterSignOutUrl="/" /><div className="min-w-0"><b className="truncate">{user?.fullName || firstName}</b><span>{activeWorkspace ? workspaceLabel(activeWorkspace) : 'Personal'}</span></div></div>
+          <div className="sidebar-user">{isNativeFinanceApp() ? <NativeUserButton /> : <WebUserButton afterSignOutUrl="/" />}<div className="min-w-0"><b className="truncate">{user?.fullName || firstName}</b><span>{activeWorkspace ? workspaceLabel(activeWorkspace) : 'Personal'}</span></div></div>
         </div>
       </aside>
 
@@ -403,7 +405,7 @@ export default function HomePage() {
             <button className="icon-btn" aria-label="Help"><CircleHelp size={18} /></button>
             <button className="icon-btn reports-shortcut" onClick={() => { setShowMoreMenu(false); setActiveView('reports'); }} aria-label="Open reports" title="Reports"><BarChart3 size={18} /></button>
             <button className="icon-btn settings-shortcut" onClick={() => { setShowMoreMenu(false); setActiveView('settings'); }} aria-label="Open settings" title="Settings"><SettingsIcon size={18} /></button>
-            <div className="topbar-user"><UserButton afterSignOutUrl="/" /></div>
+            <div className="topbar-user">{isNativeFinanceApp() ? <NativeUserButton /> : <WebUserButton afterSignOutUrl="/" />}</div>
           </div>
         </header>
 
