@@ -5,6 +5,9 @@ on:
   pull_request:
     paths:
       - "native-app/**"
+      - "app/**"
+      - "components/monetra/**"
+      - "lib/native-api-fetch.ts"
       - "lib/offline/**"
       - "capacitor.config.ts"
       - "package.json"
