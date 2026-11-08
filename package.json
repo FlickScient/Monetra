@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "drizzle-kit migrate",
     "db:verify:workspace": "node scripts/verify-workspace-migration.mjs",
+    "db:preflight:finance-sync": "node scripts/preflight-finance-sync-migration.mjs",
+    "db:verify:finance-sync": "node scripts/verify-finance-sync-migration.mjs",
     "db:diagnose": "node scripts/diagnose-database.mjs",
     "db:preflight:workspace": "node scripts/preflight-workspace-migration.mjs",
     "prebuild": "node scripts/ensure-workspace-migrations.mjs"
