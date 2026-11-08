@@ -6,6 +6,9 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/ai/context",
+  // Native Capacitor clients authenticate this endpoint with a Clerk bearer token;
+  // the route handler still enforces auth() and filters every row by userId.
+  "/api/workspaces",
 ]);
 
 export default clerkMiddleware((auth, req) => {
