@@ -46,7 +46,7 @@ const dateLabel = (value: string) =>
 export default function HomePage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
-  useEffect(() => { configureNativeApiTokenProvider(getToken); }, [getToken]);
+  configureNativeApiTokenProvider(getToken);
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState('');
