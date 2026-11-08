@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { financeApiFetch } from '@/lib/native-api-fetch';
 import { ArrowDownToLine, ArrowUpFromLine, PiggyBank, Plus, Target, Trash2, Wallet, Pencil } from 'lucide-react';
 
 type WalletRecord = { id: string; name: string; walletType: string; currentBalanceMinor: number; currency: string; status: string };
@@ -26,7 +27,7 @@ export function SavingsGoalsView({ workspaceId, wallets }: { workspaceId: string
     setGoals([]);
     setLoading(true);
     setError('');
-    fetch('/api/goals', { headers: { 'x-workspace-id': workspaceId } })
+    financeApiFetch('/api/goals', { headers: { 'x-workspace-id': workspaceId } })
       .then(async response => {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || 'Could not load savings goals.');
@@ -83,7 +84,7 @@ export function SavingsGoalsView({ workspaceId, wallets }: { workspaceId: string
     if (mode === 'release' && value > currentInWallet) { setError('You cannot release more than this goal holds in the selected wallet.'); return; }
     setError('');
     try {
-      const response = await fetch('/api/goals/' + activeGoal + '/allocations', {
+      const response = await financeApiFetch('/api/goals/' + activeGoal + '/allocations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId },
         body: JSON.stringify({ walletId: sourceWallet, amountMinor: value, action: mode }),
@@ -107,7 +108,7 @@ export function SavingsGoalsView({ workspaceId, wallets }: { workspaceId: string
     if (!window.confirm(prompt)) return;
     setError('');
     try {
-      const response = await fetch('/api/goals/' + goal.id, { method: 'DELETE', headers: { 'x-workspace-id': workspaceId } });
+      const response = await financeApiFetch('/api/goals/' + goal.id, { method: 'DELETE', headers: { 'x-workspace-id': workspaceId } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not archive this goal.');
       setGoals(current => current.filter(item => item.id !== goal.id));
