@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -125,7 +126,7 @@ export default function SignInScreen() {
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <View style={styles.brandMark}><Text style={styles.brandLetter}>M</Text></View>
+        <View style={styles.brandMark}><Image source={require('../assets/icon.png')} style={styles.brandImage} resizeMode="contain" /></View>
         <Text style={styles.eyebrow}>YOUR FINANCIAL COMMAND CENTER</Text>
         <Text style={styles.title}>{step === 'verify' ? 'Check your inbox.' : mode === 'signin' ? 'Welcome back.' : 'Create your Monetra.'}</Text>
         <Text style={styles.subtitle}>
@@ -202,7 +203,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.background },
   scroll: { flexGrow: 1, justifyContent: 'center', padding: 24, paddingTop: 56, paddingBottom: 40 },
   brandMark: { width: 54, height: 54, borderRadius: 17, backgroundColor: theme.colors.greenDeep, alignItems: 'center', justifyContent: 'center', marginBottom: 26 },
-  brandLetter: { color: '#fff', fontSize: 29, fontWeight: '800', letterSpacing: -2 },
+  brandImage: { width: 34, height: 34 },
   eyebrow: { color: theme.colors.green, fontSize: 10, fontWeight: '800', letterSpacing: 1.7, marginBottom: 12 },
   title: { color: theme.colors.text, fontSize: 34, lineHeight: 40, fontWeight: '800', letterSpacing: -1.2 },
   subtitle: { color: theme.colors.muted, fontSize: 14, lineHeight: 22, marginTop: 10, marginBottom: 28, maxWidth: 310 },
