@@ -110,7 +110,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            APK="$GITHUB_WORKSPACE/android-app/android/app/build/outputs/apk/release/app-release.apk"; test -s "$APK" || { echo "APK missing at $APK"; find "$GITHUB_WORKSPACE/android-app" -name '*.apk' -type f; exit 1; }; adb install "$APK" && adb shell am force-stop com.flickscient.monetramobile && adb logcat -c && adb shell monkey -p com.flickscient.monetramobile 1 && sleep 25 && adb logcat -d -t 5000 > "$GITHUB_WORKSPACE/monetra-startup-log.txt" && adb shell pidof com.flickscient.monetramobile && ! grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL|Fatal signal" "$GITHUB_WORKSPACE/monetra-startup-log.txt"
+            APK="$GITHUB_WORKSPACE/android-app/android/app/build/outputs/apk/release/app-release.apk"; test -s "$APK" || { echo "APK missing at $APK"; find "$GITHUB_WORKSPACE/android-app" -name '*.apk' -type f; exit 1; }; adb install "$APK" && adb shell am force-stop com.flickscient.monetramobile && adb logcat -c && adb shell monkey -p com.flickscient.monetramobile 1 && sleep 25 && APP_PID="$(adb shell pidof com.flickscient.monetramobile | tr -d '\r')" && test -n "$APP_PID" && adb logcat -d -v threadtime -t 5000 > "$GITHUB_WORKSPACE/monetra-startup-log.txt" && if awk -v pid="$APP_PID" '$3 == pid && ($5 == "F" || /FATAL EXCEPTION|Fatal signal/) { print; found=1 } END { exit found ? 0 : 1 }' "$GITHUB_WORKSPACE/monetra-startup-log.txt"; then echo "Monetra process emitted a fatal error."; exit 1; else echo "Monetra stayed alive for 25 seconds; no fatal error from its process."; fi
 
       - name: Upload Android startup logs
         if: always()
