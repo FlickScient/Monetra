@@ -53,39 +53,13 @@ const insightAreas = [
 type FiscusWorkspace = { id: string; type: 'personal' | 'family' | 'business' };
 
 export function FiscusView({ workspaces, activeWorkspaceId }: { workspaces: FiscusWorkspace[]; activeWorkspaceId: string }) {
-  const [draft, setDraft] = useState('');
-  const [scope, setScope] = useState('current');
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
-  const workspaceName = (workspace: FiscusWorkspace) => workspace.type === 'personal' ? 'Personal workspace' : workspace.type === 'family' ? 'Family workspace' : 'Business workspace';
-  const selectedWorkspace = workspaces.find((workspace) => workspace.id === scope);
-  const scopeLabel = scope === 'all'
-    ? 'All workspaces + Due & Debt'
-    : scope === 'current'
-      ? (activeWorkspace ? workspaceName(activeWorkspace) : 'Selected workspace')
-      : (selectedWorkspace ? workspaceName(selectedWorkspace) : 'Selected workspace');
+  const workspaceLabel = activeWorkspace?.type === 'family' ? 'Family' : activeWorkspace?.type === 'business' ? 'Business' : 'Personal';
 
   return (
-    <div className="page-stack module-page fiscus-page">
-      <ModuleIntro eyebrow="MONETRA INTELLIGENCE" title="Fiscus A.I." description="Your financial co-pilot. Grounded in your records, clear about its reasoning." icon={<FiscusMark size={34} />} />
-
-      <section className="fiscus-hero">
-        <div className="fiscus-hero-top">
-          <div className="fiscus-identity">
-            <span className="fiscus-hero-mark"><FiscusMark size={43} /></span>
-            <div><span className="fiscus-kicker">FISCUS INTELLIGENCE ENGINE</span><h2>Understand the numbers.<br /><em>Make the next move.</em></h2></div>
-          </div>
-          <span className="fiscus-offline"><i /> LIVE WORKSPACE AI</span>
-        </div>
-        <p className="fiscus-hero-copy">Ask Fiscus about spending, income, budgets, debts and savings. Answers are grounded in the currently selected workspace and do not modify your records.</p>
-        <div className="fiscus-principles">
-          <span><ShieldCheck size={14} /> Record-backed answers</span>
-          <span><Activity size={14} /> Transparent calculations</span>
-          <span><LockKeyhole size={14} /> Permission-aware access</span>
-        </div>
-      </section>
-
+    <div className="fiscus-page fiscus-dedicated-page" aria-label="Fiscus AI chat">
       <MonetraAIChat key={activeWorkspaceId} workspaceId={activeWorkspaceId} />
-      <ModuleStatus>Live workspace intelligence · Read-only financial analysis</ModuleStatus>
+      <span className="fiscus-workspace-context">{workspaceLabel} workspace · Private conversation</span>
     </div>
   );
 }

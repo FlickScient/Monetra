@@ -57,6 +57,13 @@
       "when": 1794139200000,
       "tag": "0007_finance_query_performance",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794225600000,
+      "tag": "0008_finance_sync_change_log",
+      "breakpoints": true
     }
   ]
 }

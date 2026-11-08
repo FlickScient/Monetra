@@ -33,3 +33,7 @@ yarn-error.log*
 next-env.d.ts
 
 # Deployment sync marker
+
+# Generated Capacitor Android project and bundled native web output
+/android-native/
+/native/www/

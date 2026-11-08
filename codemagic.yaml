@@ -1,0 +1,34 @@
+workflows:
+  monetra-android-debug:
+    name: Monetra Android Debug APK
+    max_build_duration: 60
+    instance_type: linux_x2
+    environment:
+      node: 22.22.0
+      java: 21
+      groups:
+        - monetra_android
+      vars:
+        VITE_MONETRA_API_URL: https://monetra-4rax.vercel.app
+    scripts:
+      - name: Install project dependencies
+        script: npm ci
+      - name: Type-check standalone native app
+        script: npx tsc --noEmit -p native-app/tsconfig.json
+      - name: Build standalone Monetra web bundle
+        script: |
+          if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then
+            echo "Missing VITE_CLERK_PUBLISHABLE_KEY in the monetra_android environment group."
+            exit 1
+          fi
+          npm run build:native
+      - name: Generate Android project and sync Capacitor plugins
+        script: |
+          npx cap add android
+          npx cap sync android
+      - name: Build installable debug APK
+        script: |
+          cd android-native
+          ./gradlew --no-daemon assembleDebug
+    artifacts:
+      - android-native/app/build/outputs/apk/debug/app-debug.apk

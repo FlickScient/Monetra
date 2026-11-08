@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowDownLeft, ArrowUpRight, CalendarClock, CirclePlus, Download, HandCoins, History, Pencil, Plus, Search, ShieldCheck, Trash2, Wallet, X } from 'lucide-react';
+import { isNativeFinanceApp, queueNativeDebtPayment, readCachedNativeWorkspace } from '@/lib/offline/native-finance';
 
 type Direction = 'receivable' | 'payable';
 type Payment = { id: string; amount: number; date: string; note: string };
@@ -53,7 +54,38 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
         return data;
       })
       .then(data => { if (active) setEntries(Array.isArray(data) ? data.map(mapApiDebt) : []); })
-      .catch(err => { if (active) setError(err instanceof Error ? err.message : 'Could not load Due & Debt records.'); })
+      .catch(async err => {
+        if (isNativeFinanceApp()) {
+          try {
+            const cached = await readCachedNativeWorkspace(workspaceId);
+            const paymentsByDebt = new Map<string, Payment[]>();
+            for (const raw of cached.dueDebtPayments) {
+              const payment = raw as { id?: string; dueDebtId?: string; amountMinor?: number; paidAt?: string; note?: string | null };
+              if (!payment.id || !payment.dueDebtId) continue;
+              const list = paymentsByDebt.get(payment.dueDebtId) || [];
+              list.push({
+                id: payment.id,
+                amount: Number(payment.amountMinor || 0),
+                date: String(payment.paidAt || '').slice(0, 10),
+                note: payment.note || '',
+              });
+              paymentsByDebt.set(payment.dueDebtId, list);
+            }
+            const cachedEntries = cached.dueDebts.map(raw => {
+              const debt = raw as ApiDebt;
+              return mapApiDebt({ ...debt, repayments: paymentsByDebt.get(debt.id) || [] });
+            });
+            if (active && cachedEntries.length) {
+              setEntries(cachedEntries);
+              setNotice('Offline mode · your separate Due & Debt ledger is loaded from this device.');
+              return;
+            }
+          } catch {
+            // Fall through to the normal load error if no usable local snapshot exists.
+          }
+        }
+        if (active) setError(err instanceof Error ? err.message : 'Could not load Due & Debt records.');
+      })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [workspaceId]);
@@ -118,19 +150,40 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
       : crypto.randomUUID();
     paymentKeyRef.current = { signature, key: idempotencyKey };
     try {
-      const response = await fetch('/api/due-debt/' + repayId + '/payments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, 'idempotency-key': idempotencyKey },
-        body: JSON.stringify({ amountMinor: amount, note: repayNote.trim() || null }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Could not record this payment.');
-      const payment = data.payment;
+      let payment: { id: string; amountMinor: number; paidAt: string; note?: string | null } | null = null;
+      let response: Response | null = null;
+      try {
+        response = await fetch('/api/due-debt/' + repayId + '/payments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, 'idempotency-key': idempotencyKey },
+          body: JSON.stringify({ amountMinor: amount, note: repayNote.trim() || null }),
+        });
+      } catch {
+        if (!isNativeFinanceApp()) throw new Error('Connection issue. Please try again.');
+        const paidAt = new Date().toISOString();
+        await queueNativeDebtPayment(workspaceId, {
+          operationId: idempotencyKey,
+          dueDebtId: repayId,
+          amountMinor: amount,
+          paidAt,
+          note: repayNote.trim() || null,
+        });
+        payment = { id: idempotencyKey, amountMinor: amount, paidAt, note: repayNote.trim() || null };
+        setNotice('Payment saved on this device. It will sync when you reconnect.');
+      }
+      if (response) {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Could not record this payment.');
+        if (!data.payment || typeof data.payment.id !== 'string') throw new Error('The server returned an invalid payment.');
+        payment = data.payment;
+      }
+      if (!payment) throw new Error('Could not record this payment.');
+      const savedPayment = payment;
       setEntries(current => current.map(item => item.id === repayId ? {
         ...item,
-        repayments: item.repayments.some(existing => existing.id === payment.id)
+        repayments: item.repayments.some(existing => existing.id === savedPayment.id)
           ? item.repayments
-          : [...item.repayments, { id: payment.id, amount: Number(payment.amountMinor), date: String(payment.paidAt).slice(0, 10), note: payment.note || '' }],
+          : [...item.repayments, { id: savedPayment.id, amount: Number(savedPayment.amountMinor), date: String(savedPayment.paidAt).slice(0, 10), note: savedPayment.note || '' }],
       } : item));
       paymentKeyRef.current = null;
       setRepayAmount(''); setRepayNote(''); setRepayId('');
