@@ -22,11 +22,11 @@ export async function GET(request: NextRequest) {
   // Browser sessions are authenticated by Clerk cookies. Capacitor's native
   // WebView sends the same Clerk session as an Authorization bearer token.
   const session = await auth();
-  let userId = session.userId;
+  let userId: string | null = session.userId;
 
   if (!userId) {
     const authorization = request.headers.get('authorization') || '';
-    const match = authorization.match(/^Bearer\\s+(.+)$/i);
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
     if (!match?.[1]) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -43,12 +43,13 @@ export async function GET(request: NextRequest) {
   }
 
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authenticatedUserId = userId;
 
   try {
     await db.transaction(async (tx) => {
       for (const workspaceType of WORKSPACE_TYPES) {
         await tx.insert(workspaces).values({
-          userId,
+          userId: authenticatedUserId,
           workspaceType,
           name: WORKSPACE_NAMES[workspaceType],
         }).onConflictDoNothing({
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
       type: workspaces.workspaceType,
       createdAt: workspaces.createdAt,
     }).from(workspaces)
-      .where(eq(workspaces.userId, userId))
+      .where(eq(workspaces.userId, authenticatedUserId))
       .orderBy(asc(workspaces.createdAt));
 
     const response = rows
