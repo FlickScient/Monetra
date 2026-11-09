@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet,
-  Text, TextInput, View,
+  Text, TextInput, View, type StyleProp, type ViewStyle,
 } from 'react-native';
 import { useAuth, useClerk, useUser } from '@clerk/expo';
 import { useRouter } from 'expo-router';
@@ -12,7 +12,10 @@ import { theme } from '@/src/theme';
 type Wallet = { id: string; name: string; walletType: string; currency: string; currentBalanceMinor: number; status: string; creditLimitMinor?: number };
 type Category = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
 type Transaction = { id: string; transactionType: 'income' | 'expense' | 'transfer'; walletId: string; amountMinor: number; description: string; occurredAt: string; categoryId?: string | null; voidedAt?: string | null };
-type Debt = { id: string; direction: 'receivable' | 'payable'; counterpartyName: string; principalMinor: number; paidMinor: number; outstandingMinor: number; dueDate: string | null; note?: string | null; status: string; repayments?: { id: string; amount: number; date: string; note: string }[] };
+type Debt = { id: string; direction: 'receivable' | 'payable'; counterpartyName: string; principalMinor: number; dueDate: string | null; note?: string | null; status: string };
+type DebtPayment = { id: string; dueDebtId: string; amountMinor: number; paidAt: string; note?: string | null };
+type GoalAllocation = { id: string; goalId: string; walletId: string; amountMinor: number };
+type Budget = { id: string; categoryId: string; monthStart: string; limitMinor: number; carryForward: boolean };
 type Goal = { id: string; name: string; targetMinor: number; currency: string; targetDate: string | null; allocations: { walletId: string; amountMinor: number }[] };
 type Snapshot = {
   workspace: { id: string; name: string; type: string };
@@ -20,8 +23,8 @@ type Snapshot = {
   exportedAt: string;
   data: {
     wallets: Wallet[]; categories: Category[]; transactions: Transaction[];
-    dueDebts: Debt[]; dueDebtPayments: unknown[]; savingsGoals: Goal[];
-    monthlyBudgets: any[]; recurringTransactions: any[]; walletReconciliations: any[];
+    dueDebts: Debt[]; dueDebtPayments: DebtPayment[]; savingsGoals: Omit<Goal, 'allocations'>[];
+    goalAllocations: GoalAllocation[]; monthlyBudgets: Budget[]; recurringTransactions: any[]; walletReconciliations: any[];
     financeAuditEvents: any[]; ledgerAccounts: any[]; ledgerEntries: any[];
   };
 };
@@ -51,7 +54,7 @@ const dateLabel = (value: string) => {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('en-BD', { timeZone: 'Asia/Dhaka', day: '2-digit', month: 'short', year: 'numeric' });
 };
 
-function Panel({ children, style }: { children: ReactNode; style?: object }) {
+function Panel({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   return <View style={[styles.panel, style]}>{children}</View>;
 }
 function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
@@ -167,8 +170,15 @@ export default function HomeScreen() {
   const wallets = data?.wallets ?? [];
   const categories = data?.categories ?? [];
   const transactions = (data?.transactions ?? []).filter(row => !row.voidedAt).sort((a,b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
-  const debts = data?.dueDebts ?? [];
-  const goals = data?.savingsGoals ?? [];
+  const debts = useMemo(() => (data?.dueDebts ?? []).map(debt => {
+    const payments = (data?.dueDebtPayments ?? []).filter(payment => payment.dueDebtId === debt.id);
+    const paidMinor = payments.reduce((sum, payment) => sum + Number(payment.amountMinor), 0);
+    return { ...debt, paidMinor, outstandingMinor: Math.max(0, Number(debt.principalMinor) - paidMinor) };
+  }), [data]);
+  const goals = useMemo(() => (data?.savingsGoals ?? []).map(goal => ({
+    ...goal,
+    allocations: (data?.goalAllocations ?? []).filter(allocation => allocation.goalId === goal.id),
+  })), [data]);
   const assets = wallets.filter(w => w.walletType !== 'credit_card').reduce((sum,w) => sum + Number(w.currentBalanceMinor), 0);
   const liabilities = wallets.filter(w => w.walletType === 'credit_card').reduce((sum,w) => sum + Number(w.currentBalanceMinor), 0);
   const monthKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit' }).format(new Date()).slice(0,7);
@@ -308,7 +318,7 @@ export default function HomeScreen() {
         </>}
         {active === 'tools' && <>
           <SectionTitle title="Money Tools" subtitle="Budgets, recurring activity and reconciliations"/>
-          <Panel><Text style={styles.itemTitle}>Monthly budgets</Text>{(data?.monthlyBudgets??[]).map((row:any)=><RowItem key={row.id} title={row.name??row.categoryId??'Budget'} subtitle={'Limit '+money(row.limitMinor)} amount={money(row.spentMinor??0)}/>)}{!data?.monthlyBudgets?.length&&<Text style={styles.muted}>No monthly budgets in this workspace snapshot.</Text>}</Panel>
+          <Panel><Text style={styles.itemTitle}>Monthly budgets</Text>{(data?.monthlyBudgets??[]).map(row=>{const category=categories.find(item=>item.id===row.categoryId);const spent=thisMonth.filter(tx=>tx.transactionType==='expense'&&tx.categoryId===row.categoryId).reduce((sum,tx)=>sum+Number(tx.amountMinor),0);return <RowItem key={row.id} title={category?.name??'Budget'} subtitle={'Limit '+money(row.limitMinor)} amount={money(spent)}/>;})}{!data?.monthlyBudgets?.length&&<Text style={styles.muted}>No monthly budgets in this workspace snapshot.</Text>}</Panel>
           <Panel><Text style={styles.itemTitle}>Recurring transactions</Text>{(data?.recurringTransactions??[]).map((row:any)=><RowItem key={row.id} title={row.description} subtitle={row.frequency+' · '+row.nextRun} amount={money(row.amountMinor)}/>)}{!data?.recurringTransactions?.length&&<Text style={styles.muted}>No recurring items in this workspace snapshot.</Text>}</Panel>
           <Panel><Text style={styles.itemTitle}>Wallet reconciliations</Text><Text style={styles.muted}>{data?.walletReconciliations?.length??0} reconciliation record(s) synced.</Text></Panel>
         </>}
