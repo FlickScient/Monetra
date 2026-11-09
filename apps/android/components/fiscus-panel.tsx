@@ -6,8 +6,8 @@ type Message = { role: "user" | "model"; content: string };
 type Memory = { id: string; memory_type: "preference" | "goal" | "context"; content: string; updated_at: string };
 type Conversation = { id: string; title: string; status: string; last_message_at: string };
 
-const URL = process.env.EXPO_PUBLIC_FISCUS_FUNCTION_URL;
-const KEY = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const URL = process.env.EXPO_PUBLIC_FISCUS_FUNCTION_URL || "https://osfitgjwkjhhexgcazwj.supabase.co/functions/v1/fiscus-chat";
+const KEY = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "sb_publishable_0kIBTUEf57t8d85BxB6owg__ZE01Ma8";
 const T = { ink: "#20251D", muted: "#788071", olive: "#596344", bg: "#F4F3EC", paper: "#FFFFFF", line: "#E7E8DF", red: "#B64D43" };
 
 export function FiscusPanel({ workspaceId, userId, getToken }: {
