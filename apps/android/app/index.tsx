@@ -38,6 +38,12 @@ export default function HomeScreen() {
   const [txDestinationWalletId, setTxDestinationWalletId] = useState("");
   const [txCategoryId, setTxCategoryId] = useState("");
   const [txSaving, setTxSaving] = useState(false);
+  const [paymentModal, setPaymentModal] = useState(false);
+  const [paymentDebtId, setPaymentDebtId] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [paymentSaving, setPaymentSaving] = useState(false);
 
   const loadLocal = useCallback(async (uid: string, id: string) => {
     const cached = await readCachedWorkspace(uid, id);
@@ -187,6 +193,44 @@ export default function HomeScreen() {
     } finally { setTxSaving(false); }
   }
 
+  async function saveDebtPayment() {
+    if (!user?.id || !workspaceId || !paymentDebtId || paymentSaving) return;
+    const amount = Number(paymentAmount.replace(/,/g, ""));
+    const amountMinor = Math.round(amount * 100);
+    const debt = debts.find((item) => item.id === paymentDebtId);
+    if (!Number.isFinite(amount) || amountMinor <= 0 || !Number.isSafeInteger(amountMinor)) {
+      setError("Enter a valid payment amount.");
+      return;
+    }
+    if (!debt || amountMinor > debtOutstanding(debt)) {
+      setError("Payment cannot exceed the outstanding amount.");
+      return;
+    }
+    setPaymentSaving(true);
+    setError("");
+    try {
+      await queueOfflineOperation({
+        userId: user.id,
+        workspaceId,
+        type: "debt.payment",
+        payload: {
+          dueDebtId: paymentDebtId,
+          amountMinor,
+          paidAt: new Date().toISOString(),
+          paymentMethod,
+          note: paymentNote.trim() || null
+        }
+      });
+      setPaymentModal(false);
+      setPaymentAmount("");
+      setPaymentNote("");
+      await loadLocal(user.id, workspaceId);
+      await syncNow(workspaceId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the payment locally.");
+    } finally { setPaymentSaving(false); }
+  }
+
   if (!isLoaded) return <View style={s.center}><ActivityIndicator color={P.olive} size="large" /></View>;
   if (!isSignedIn) return (
     <SafeAreaView style={s.screen}>
@@ -264,6 +308,7 @@ export default function HomeScreen() {
             <Text style={s.muted}>{debt.direction === "receivable" ? "You should receive" : "You need to pay"} · {debt.dueDate || "No due date"}</Text>
             <Text style={s.moduleAmount}>{money(debtOutstanding(debt), debt.currency || "BDT")}</Text>
             <Text style={s.muted}>Original {money(Number(debt.principalMinor || 0), debt.currency || "BDT")} · Paid {money(Number(debt.principalMinor || 0) - debtOutstanding(debt), debt.currency || "BDT")}</Text>
+            {debtOutstanding(debt) > 0 && <Pressable onPress={() => { setPaymentDebtId(debt.id); setPaymentModal(true); }} style={s.settingsButton}><Text style={s.settingsButtonText}>Record payment</Text></Pressable>}
           </View>)}
           {!debts.length && <Text style={s.empty}>No debt records in this workspace.</Text>}
         </>}
@@ -332,6 +377,21 @@ export default function HomeScreen() {
             </>}
             <Text style={s.formHint}>Offline entries are saved on this device and marked pending until Neon confirms synchronization.</Text>
             <Pressable disabled={txSaving} onPress={() => void saveTransaction()} style={[s.primary, txSaving && { opacity: 0.6 }]}><Text style={s.primaryText}>{txSaving ? "Saving…" : "Save transaction"}</Text></Pressable>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+      <Modal visible={paymentModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPaymentModal(false)}>
+        <SafeAreaView style={s.modalScreen}>
+          <View style={s.modalHeader}><Text style={s.modalTitle}>Record debt payment</Text><Pressable onPress={() => setPaymentModal(false)}><Text style={s.modalClose}>Close</Text></Pressable></View>
+          <ScrollView contentContainerStyle={s.modalBody} keyboardShouldPersistTaps="handled">
+            <Text style={s.formLabel}>Payment amount (৳)</Text>
+            <TextInput value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" placeholder="0.00" style={s.formInput} />
+            <Text style={s.formLabel}>Payment method</Text>
+            <View style={s.choiceWrap}>{(["Cash", "Bank", "bKash", "Nagad", "Rocket", "Other"] as const).map((method) => <Pressable key={method} onPress={() => setPaymentMethod(method)} style={[s.choice, paymentMethod === method && s.choiceOn]}><Text style={[s.choiceText, paymentMethod === method && s.choiceTextOn]}>{method}</Text></Pressable>)}</View>
+            <Text style={s.formLabel}>Note (optional)</Text>
+            <TextInput value={paymentNote} onChangeText={setPaymentNote} placeholder="Add a note" style={s.formInput} maxLength={1000} />
+            <Text style={s.formHint}>Saved locally while offline. The payment is only posted to Neon after server confirmation.</Text>
+            <Pressable disabled={paymentSaving} onPress={() => void saveDebtPayment()} style={[s.primary, paymentSaving && { opacity: 0.6 }]}><Text style={s.primaryText}>{paymentSaving ? "Saving…" : "Save payment"}</Text></Pressable>
           </ScrollView>
         </SafeAreaView>
       </Modal>
