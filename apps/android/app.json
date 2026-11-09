@@ -10,6 +10,7 @@
     "android": {
       "package": "com.flickscient.monetra",
       "versionCode": 1,
+      "allowBackup": false,
       "adaptiveIcon": {
         "backgroundColor": "#F4F3EC"
       },
