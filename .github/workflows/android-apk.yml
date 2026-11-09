@@ -6,11 +6,13 @@ on:
     branches: [android-native]
     paths:
       - "apps/android/**"
+      - "public/icon.png"
       - ".github/workflows/android-apk.yml"
   pull_request:
     branches: [main]
     paths:
       - "apps/android/**"
+      - "public/icon.png"
       - ".github/workflows/android-apk.yml"
 
 permissions:
@@ -21,7 +23,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  android-debug-apk:
+  android-standalone-apk:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,17 +60,15 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      # Keep the security gate visible without blocking a DEBUG-only build.
-      # The current Expo SDK 54 dependency tree includes upstream advisories
-      # (including image-size, for which no patched upstream release exists).
+      # Keep the security gate visible without blocking a test APK build.
       # Do not promote this APK to production until the audit is clean or each
       # remaining advisory has been reviewed and documented.
-      - name: Audit production dependencies (non-blocking for debug APK)
+      - name: Audit production dependencies (non-blocking for APK validation)
         id: dependency-audit
         continue-on-error: true
         run: |
           npm audit --omit=dev --audit-level=high --json > npm-audit-report.json || {
-            echo "::warning::Dependency audit reported vulnerabilities. See the uploaded npm-audit-report artifact; this debug APK is not production-cleared."
+            echo "::warning::Dependency audit reported vulnerabilities. See the uploaded npm-audit-report artifact; this APK is not production-cleared."
           }
 
       - name: Upload dependency audit report
@@ -82,25 +82,28 @@ jobs:
       - name: Validate Expo SDK dependency compatibility
         run: npx expo install --check
 
+      - name: Verify Monetra launcher icon
+        run: test -s assets/icon.png
+
       - name: Type-check native app
         run: npx tsc --noEmit
 
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install
 
-      - name: Assemble installable debug APK
+      - name: Assemble standalone release APK (bundled JavaScript, no dev launcher)
         working-directory: apps/android/android
         env:
           EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
           EXPO_PUBLIC_MONETRA_API_URL: https://monetra-4rax.vercel.app
           EXPO_PUBLIC_FISCUS_FUNCTION_URL: ${{ secrets.EXPO_PUBLIC_FISCUS_FUNCTION_URL }}
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleRelease --no-daemon
 
-      - name: Upload APK artifact
+      - name: Upload standalone APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: monetra-native-android-debug-apk
-          path: apps/android/android/app/build/outputs/apk/debug/app-debug.apk
+          name: monetra-native-android-standalone-apk
+          path: apps/android/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, AppState, Modal, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, AppState, Image, Modal, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Network from "expo-network";
 import { useAuth, useUser } from "@clerk/expo";
 import { AuthView, UserButton } from "@clerk/expo/native";
@@ -267,7 +267,7 @@ export default function HomeScreen() {
     <SafeAreaView style={s.screen}>
       <StatusBar barStyle="dark-content" />
       <View style={s.auth}>
-        <View style={s.mark}><Text style={s.markText}>M</Text></View>
+        <View style={s.mark}><Image source={require("../assets/icon.png")} style={s.markImage} resizeMode="contain" /></View>
         <Text style={s.brand}>monetra</Text>
         <Text style={s.tagline}>Your money. Clearer.</Text>
         <Text style={s.copy}>One calm place for every wallet, every decision, and every next move.</Text>
@@ -437,8 +437,8 @@ export default function HomeScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: P.bg }, center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: P.bg },
-  auth: { flex: 1, alignItems: "center", justifyContent: "center", padding: 28 }, mark: { width: 64, height: 64, borderRadius: 21, backgroundColor: P.olive, alignItems: "center", justifyContent: "center" },
-  markText: { color: "#FFF", fontSize: 34, fontWeight: "800" }, brand: { color: P.ink, fontSize: 30, fontWeight: "800", marginTop: 12, letterSpacing: -1 },
+  auth: { flex: 1, alignItems: "center", justifyContent: "center", padding: 28 }, mark: { width: 72, height: 72, borderRadius: 22, backgroundColor: P.bg, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  markImage: { width: "100%", height: "100%" }, brand: { color: P.ink, fontSize: 30, fontWeight: "800", marginTop: 12, letterSpacing: -1 },
   tagline: { color: P.olive, fontSize: 15, fontWeight: "700", marginTop: 4 }, copy: { color: P.muted, textAlign: "center", lineHeight: 23, marginTop: 20 },
   primary: { marginTop: 30, backgroundColor: P.olive, borderRadius: 16, padding: 17, width: "100%", alignItems: "center" }, primaryText: { color: "#FFF", fontWeight: "800" },
   header: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

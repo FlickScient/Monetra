@@ -4,14 +4,16 @@
     "slug": "monetra",
     "scheme": "monetra",
     "version": "1.0.0",
+    "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "android": {
       "package": "com.flickscient.monetra",
-      "versionCode": 1,
+      "versionCode": 2,
       "allowBackup": false,
       "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#F4F3EC"
       },
       "edgeToEdgeEnabled": true

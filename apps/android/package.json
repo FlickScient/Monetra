@@ -12,7 +12,6 @@
   "dependencies": {
     "@clerk/expo": "^3.6.0",
     "expo": "~54.0.0",
-    "expo-dev-client": "~6.0.0",
     "expo-router": "~6.0.0",
     "expo-secure-store": "~15.0.0",
     "expo-sqlite": "~16.0.0",

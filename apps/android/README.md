@@ -13,15 +13,11 @@ Native Android client built with React Native + Expo. This is not a WebView wrap
 
 ## Build a standalone Android APK
 
-The GitHub Actions workflow `.github/workflows/android-apk.yml` validates TypeScript, generates the native Android project and builds an installable debug APK. Run it manually from Actions or push a change to `android-native`. Download the artifact named `monetra-native-android-debug-apk` from the completed workflow.
+The GitHub Actions workflow `.github/workflows/android-apk.yml` validates TypeScript, generates the native Android project and builds the **release variant APK**. The app JavaScript is bundled into the APK, and the Expo development-client launcher is not included. The launcher icon and sign-in logo use the repository's Monetra icon asset at `apps/android/assets/icon.png`.
 
-For a signed production release, configure EAS credentials and use:
+Run the workflow manually from Actions or push a change to `android-native`. Download the artifact named `monetra-native-android-standalone-apk` from the completed workflow.
 
-```sh
-npx eas-cli build --platform android --profile production
-```
-
-Clerk's native components require a development/native build; Expo Go is not supported.
+This CI APK is signed with the runner's debug signing key for direct device testing. A stable signing key must be configured before distributing updates broadly or publishing to Google Play.
 
 ## Offline model
 
