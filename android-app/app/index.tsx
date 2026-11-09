@@ -318,7 +318,7 @@ export default function HomeScreen() {
         </>}
         {active === 'savings' && <>
           <SectionTitle title="Savings Goals" subtitle="Targets and wallet allocations"/>
-          {goals.map(goal=>{const saved=goal.allocations.reduce((s,a)=>s+Number(a.amountMinor),0);const percent=goal.targetMinor>0?Math.min(100,saved/goal.targetMinor*100):0;return <Panel key={goal.id}><Text style={styles.itemTitle}>{goal.name}</Text><Text style={styles.panelBig}>{money(saved)} <Text style={styles.muted}>/ {money(goal.targetMinor)}</Text></Text><View style={styles.progress}><View style={[styles.progressFill,{width:percent+'%'}]}/></View><Text style={styles.muted}>{Math.round(percent)}% funded · {goal.targetDate?'Target '+goal.targetDate:'No target date'}</Text></Panel>;})}
+          {goals.map(goal=>{const saved=goal.allocations.reduce((s,a)=>s+Number(a.amountMinor),0);const percent=goal.targetMinor>0?Math.min(100,saved/goal.targetMinor*100):0;return <Panel key={goal.id}><Text style={styles.itemTitle}>{goal.name}</Text><Text style={styles.panelBig}>{money(saved)} <Text style={styles.muted}>/ {money(goal.targetMinor)}</Text></Text><View style={styles.progress}><View style={[styles.progressFill,{width:`${percent}%`}]}/></View><Text style={styles.muted}>{Math.round(percent)}% funded · {goal.targetDate?'Target '+goal.targetDate:'No target date'}</Text></Panel>;})}
           {!goals.length&&<Empty title="No savings goals yet" detail="Create a goal on the Monetra website; native goal management is being added."/>}
         </>}
         {active === 'tools' && <>
