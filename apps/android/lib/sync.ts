@@ -132,6 +132,11 @@ async function performSyncWorkspace(userId: string, workspaceId: string, token: 
       hasMore = Boolean(page.hasMore);
     }
 
+    await db.runAsync(
+      `INSERT INTO sync_state(user_id,workspace_id,last_success_at,last_error) VALUES(?,?,?,NULL)
+       ON CONFLICT(user_id,workspace_id) DO UPDATE SET last_success_at=excluded.last_success_at,last_error=NULL`,
+      userId, workspaceId, new Date().toISOString()
+    );
     return { status: "synced", message: "All changes are synchronized.", cursor };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Synchronization failed.";
