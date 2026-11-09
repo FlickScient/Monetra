@@ -33,6 +33,8 @@ jobs:
       - name: Production build
         env:
           MONETRA_CI_BUILD: '1'
+          # Build-only placeholder: CI must never connect to a real finance database.
+          DATABASE_URL: postgresql://monetra_ci:monetra_ci@127.0.0.1:5432/monetra_ci
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_bW9uZXRyYS1jaS5jbGVyay5hY2NvdW50cy5kZXYk
           NEXT_TELEMETRY_DISABLED: '1'
         run: npm run build
