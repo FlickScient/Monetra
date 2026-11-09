@@ -31,10 +31,11 @@ export default function HomeScreen() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"overview" | "wallets" | "activity" | "more" | "debts" | "goals" | "budgets" | "reports" | "settings" | "fiscus">("overview");
   const [transactionModal, setTransactionModal] = useState(false);
-  const [txType, setTxType] = useState<"income" | "expense">("expense");
+  const [txType, setTxType] = useState<"income" | "expense" | "transfer">("expense");
   const [txAmount, setTxAmount] = useState("");
   const [txDescription, setTxDescription] = useState("");
   const [txWalletId, setTxWalletId] = useState("");
+  const [txDestinationWalletId, setTxDestinationWalletId] = useState("");
   const [txCategoryId, setTxCategoryId] = useState("");
   const [txSaving, setTxSaving] = useState(false);
 
@@ -143,6 +144,10 @@ export default function HomeScreen() {
       setError("Choose a wallet before saving.");
       return;
     }
+    if (txType === "transfer" && (!txDestinationWalletId || txDestinationWalletId === txWalletId)) {
+      setError("Choose a different destination wallet.");
+      return;
+    }
     if (!txDescription.trim()) {
       setError("Add a short description.");
       return;
@@ -153,8 +158,14 @@ export default function HomeScreen() {
       await queueOfflineOperation({
         userId: user.id,
         workspaceId,
-        type: "transaction.create",
-        payload: {
+        type: txType === "transfer" ? "transfer.create" : "transaction.create",
+        payload: txType === "transfer" ? {
+          walletId: txWalletId,
+          destinationWalletId: txDestinationWalletId,
+          amountMinor,
+          description: txDescription.trim(),
+          occurredAt: new Date().toISOString()
+        } : {
           walletId: txWalletId,
           transactionType: txType,
           amountMinor,
@@ -167,6 +178,7 @@ export default function HomeScreen() {
       setTxAmount("");
       setTxDescription("");
       setTxCategoryId("");
+      setTxDestinationWalletId("");
       await loadLocal(user.id, workspaceId);
       await syncNow(workspaceId);
       setTab("overview");
@@ -303,16 +315,21 @@ export default function HomeScreen() {
           <View style={s.modalHeader}><Text style={s.modalTitle}>New transaction</Text><Pressable onPress={() => setTransactionModal(false)}><Text style={s.modalClose}>Close</Text></Pressable></View>
           <ScrollView contentContainerStyle={s.modalBody} keyboardShouldPersistTaps="handled">
             <View style={s.typeSwitch}>
-              {(["expense", "income"] as const).map((type) => <Pressable key={type} onPress={() => { setTxType(type); setTxCategoryId(""); }} style={[s.typeOption, txType === type && s.typeOptionOn]}><Text style={[s.typeOptionText, txType === type && s.typeOptionTextOn]}>{type.toUpperCase()}</Text></Pressable>)}
+              {(["expense", "income", "transfer"] as const).map((type) => <Pressable key={type} onPress={() => { setTxType(type); setTxCategoryId(""); }} style={[s.typeOption, txType === type && s.typeOptionOn]}><Text style={[s.typeOptionText, txType === type && s.typeOptionTextOn]}>{type.toUpperCase()}</Text></Pressable>)}
             </View>
             <Text style={s.formLabel}>Amount (৳)</Text>
             <TextInput value={txAmount} onChangeText={setTxAmount} keyboardType="decimal-pad" placeholder="0.00" style={s.formInput} />
             <Text style={s.formLabel}>Description</Text>
             <TextInput value={txDescription} onChangeText={setTxDescription} placeholder="What was this for?" style={s.formInput} maxLength={500} />
-            <Text style={s.formLabel}>Wallet</Text>
+            <Text style={s.formLabel}>{txType === "transfer" ? "From wallet" : "Wallet"}</Text>
             <View style={s.choiceWrap}>{wallets.filter((w) => w.status === "active").map((w) => <Pressable key={w.id} onPress={() => setTxWalletId(w.id)} style={[s.choice, txWalletId === w.id && s.choiceOn]}><Text style={[s.choiceText, txWalletId === w.id && s.choiceTextOn]}>{w.name}</Text></Pressable>)}</View>
-            <Text style={s.formLabel}>Category (optional)</Text>
-            <View style={s.choiceWrap}>{(data.categories ?? []).filter((x) => x.categoryType === txType).map((category) => <Pressable key={category.id} onPress={() => setTxCategoryId(txCategoryId === category.id ? "" : category.id)} style={[s.choice, txCategoryId === category.id && s.choiceOn]}><Text style={[s.choiceText, txCategoryId === category.id && s.choiceTextOn]}>{category.name}</Text></Pressable>)}</View>
+            {txType === "transfer" ? <>
+              <Text style={s.formLabel}>To wallet</Text>
+              <View style={s.choiceWrap}>{wallets.filter((w) => w.status === "active" && w.id !== txWalletId).map((w) => <Pressable key={w.id} onPress={() => setTxDestinationWalletId(w.id)} style={[s.choice, txDestinationWalletId === w.id && s.choiceOn]}><Text style={[s.choiceText, txDestinationWalletId === w.id && s.choiceTextOn]}>{w.name}</Text></Pressable>)}</View>
+            </> : <>
+              <Text style={s.formLabel}>Category (optional)</Text>
+              <View style={s.choiceWrap}>{(data.categories ?? []).filter((x) => x.categoryType === txType).map((category) => <Pressable key={category.id} onPress={() => setTxCategoryId(txCategoryId === category.id ? "" : category.id)} style={[s.choice, txCategoryId === category.id && s.choiceOn]}><Text style={[s.choiceText, txCategoryId === category.id && s.choiceTextOn]}>{category.name}</Text></Pressable>)}</View>
+            </>}
             <Text style={s.formHint}>Offline entries are saved on this device and marked pending until Neon confirms synchronization.</Text>
             <Pressable disabled={txSaving} onPress={() => void saveTransaction()} style={[s.primary, txSaving && { opacity: 0.6 }]}><Text style={s.primaryText}>{txSaving ? "Saving…" : "Save transaction"}</Text></Pressable>
           </ScrollView>
