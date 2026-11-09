@@ -29,7 +29,7 @@ export default function HomeScreen() {
   const [pending, setPending] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"overview" | "wallets" | "activity" | "fiscus">("overview");
+  const [tab, setTab] = useState<"overview" | "wallets" | "activity" | "more" | "debts" | "goals" | "budgets" | "reports" | "settings" | "fiscus">("overview");
   const [transactionModal, setTransactionModal] = useState(false);
   const [txType, setTxType] = useState<"income" | "expense">("expense");
   const [txAmount, setTxAmount] = useState("");
@@ -122,6 +122,14 @@ export default function HomeScreen() {
   const expense = transactions.filter((x) => x.transactionType === "expense").reduce((sum, x) => sum + Number(x.amountMinor || 0), 0);
   const balance = wallets.filter((x) => x.status === "active").reduce((sum, x) => sum + Number(x.currentBalanceMinor || 0), 0);
   const active = workspaces.find((w) => w.id === workspaceId);
+  const debts = data.dueDebts ?? [];
+  const payments = data.dueDebtPayments ?? [];
+  const goals = data.savingsGoals ?? [];
+  const allocations = data.goalAllocations ?? [];
+  const budgets = data.monthlyBudgets ?? [];
+  const categories = data.categories ?? [];
+  const debtOutstanding = (debt: any) => Math.max(0, Number(debt.principalMinor || 0) - payments.filter((p) => p.dueDebtId === debt.id).reduce((sum, p) => sum + Number(p.amountMinor || 0), 0));
+  const allocatedFor = (goal: any) => allocations.filter((a) => a.goalId === goal.id).reduce((sum, a) => sum + Number(a.amountMinor || 0), 0);
 
   async function saveTransaction() {
     if (!user?.id || !workspaceId || txSaving) return;
@@ -226,6 +234,66 @@ export default function HomeScreen() {
           <Text style={s.heading}>Transactions</Text><Text style={s.subheading}>Latest records from your ledger.</Text>
           {transactions.map((x) => <View key={x.id} style={s.row}><View style={s.rowMain}><Text style={s.rowTitle}>{x.description || "Transaction"}</Text><Text style={s.muted}>{new Date(x.occurredAt).toLocaleString()}</Text></View><Text style={s.amount}>{money(Number(x.amountMinor || 0))}</Text></View>)}
         </>}
+        {tab === "more" && <>
+          <Text style={s.heading}>Your Monetra</Text><Text style={s.subheading}>Every part of your financial command centre.</Text>
+          {([
+            ["debts", "Due & debt", "Track money owed and payments"],
+            ["goals", "Savings goals", "Progress and allocations"],
+            ["budgets", "Monthly budgets", "Limits and category spending"],
+            ["reports", "Reports & insights", "Income, expense and cash flow"],
+            ["settings", "Settings", "Sync, account and app preferences"]
+          ] as const).map(([key, title, subtitle]) => <Pressable key={key} onPress={() => setTab(key)} style={s.moreCard}><View style={s.moreMark}><Text style={s.moreMarkText}>{title.slice(0,1)}</Text></View><View style={s.rowMain}><Text style={s.rowTitle}>{title}</Text><Text style={s.muted}>{subtitle}</Text></View><Text style={s.moreArrow}>›</Text></Pressable>)}
+        </>}
+        {tab === "debts" && <>
+          <Pressable onPress={() => setTab("more")}><Text style={s.backLink}>‹  More</Text></Pressable>
+          <Text style={s.heading}>Due & debt</Text><Text style={s.subheading}>Outstanding amounts from your synced ledger.</Text>
+          {debts.filter((d) => d.status !== "archived").map((debt) => <View key={debt.id} style={s.moduleCard}>
+            <View style={s.section}><Text style={s.rowTitle}>{debt.counterpartyName}</Text><Text style={s.statusTag}>{debt.status}</Text></View>
+            <Text style={s.muted}>{debt.direction === "receivable" ? "You should receive" : "You need to pay"} · {debt.dueDate || "No due date"}</Text>
+            <Text style={s.moduleAmount}>{money(debtOutstanding(debt), debt.currency || "BDT")}</Text>
+            <Text style={s.muted}>Original {money(Number(debt.principalMinor || 0), debt.currency || "BDT")} · Paid {money(Number(debt.principalMinor || 0) - debtOutstanding(debt), debt.currency || "BDT")}</Text>
+          </View>)}
+          {!debts.length && <Text style={s.empty}>No debt records in this workspace.</Text>}
+        </>}
+        {tab === "goals" && <>
+          <Pressable onPress={() => setTab("more")}><Text style={s.backLink}>‹  More</Text></Pressable>
+          <Text style={s.heading}>Savings goals</Text><Text style={s.subheading}>Your progress, backed by recorded allocations.</Text>
+          {goals.map((goal) => {
+            const saved = allocatedFor(goal);
+            const target = Number(goal.targetMinor || 0);
+            const percent = target > 0 ? Math.min(100, Math.round(saved / target * 100)) : 0;
+            return <View key={goal.id} style={s.moduleCard}><Text style={s.rowTitle}>{goal.name}</Text><Text style={s.moduleAmount}>{money(saved, goal.currency || "BDT")}</Text><Text style={s.muted}>of {money(target, goal.currency || "BDT")} · {percent}%</Text><View style={s.progressTrack}><View style={[s.progressFill, { width: percent + "%" }]} /></View><Text style={s.muted}>{goal.targetDate ? "Target " + goal.targetDate : "No target date"} · {goal.status}</Text></View>;
+          })}
+          {!goals.length && <Text style={s.empty}>No savings goals in this workspace.</Text>}
+        </>}
+        {tab === "budgets" && <>
+          <Pressable onPress={() => setTab("more")}><Text style={s.backLink}>‹  More</Text></Pressable>
+          <Text style={s.heading}>Monthly budgets</Text><Text style={s.subheading}>Budget limits compared with recorded spending.</Text>
+          {budgets.map((budget) => {
+            const category = categories.find((x) => x.id === budget.categoryId);
+            const spent = transactions.filter((x) => x.transactionType === "expense" && x.categoryId === budget.categoryId && String(x.occurredAt).slice(0,7) === String(budget.monthStart).slice(0,7)).reduce((sum, x) => sum + Number(x.amountMinor || 0), 0);
+            const limit = Number(budget.limitMinor || 0);
+            const percent = limit > 0 ? Math.min(100, Math.round(spent / limit * 100)) : 0;
+            return <View key={budget.id} style={s.moduleCard}><Text style={s.rowTitle}>{category?.name || "Category"}</Text><Text style={s.moduleAmount}>{money(spent)}</Text><Text style={s.muted}>of {money(limit)} · {budget.monthStart}</Text><View style={s.progressTrack}><View style={[s.progressFill, { width: percent + "%", backgroundColor: percent >= 100 ? P.red : P.olive }]} /></View><Text style={s.muted}>{Math.max(0, limit - spent) > 0 ? money(limit - spent) + " remaining" : "Budget limit reached"}</Text></View>;
+          })}
+          {!budgets.length && <Text style={s.empty}>No monthly budgets in this workspace.</Text>}
+        </>}
+        {tab === "reports" && <>
+          <Pressable onPress={() => setTab("more")}><Text style={s.backLink}>‹  More</Text></Pressable>
+          <Text style={s.heading}>Reports & insights</Text><Text style={s.subheading}>Based on the transactions currently synced to this device.</Text>
+          <View style={s.reportCard}><Text style={s.statLabel}>TOTAL INCOME</Text><Text style={[s.moduleAmount, { color: P.green }]}>{money(income)}</Text></View>
+          <View style={s.reportCard}><Text style={s.statLabel}>TOTAL EXPENSE</Text><Text style={[s.moduleAmount, { color: P.red }]}>{money(expense)}</Text></View>
+          <View style={s.reportCard}><Text style={s.statLabel}>NET CASH FLOW</Text><Text style={s.moduleAmount}>{money(income - expense)}</Text></View>
+          <Text style={s.formHint}>These totals cover the locally synchronized transaction history, not necessarily only the current month. Refresh to pull the latest Neon changes.</Text>
+        </>}
+        {tab === "settings" && <>
+          <Pressable onPress={() => setTab("more")}><Text style={s.backLink}>‹  More</Text></Pressable>
+          <Text style={s.heading}>Settings</Text><Text style={s.subheading}>App status and account information.</Text>
+          <View style={s.moduleCard}><Text style={s.rowTitle}>Account</Text><Text style={s.muted}>{user?.primaryEmailAddress?.emailAddress || user?.id}</Text></View>
+          <View style={s.moduleCard}><Text style={s.rowTitle}>Active workspace</Text><Text style={s.muted}>{active?.name || "Not selected"}</Text></View>
+          <View style={s.moduleCard}><Text style={s.rowTitle}>Synchronization</Text><Text style={s.muted}>{sync.message}</Text><Text style={s.muted}>Last known cursor: {snapshot?.cursor || "Not downloaded"}</Text><Pressable onPress={() => void syncNow()} style={s.settingsButton}><Text style={s.settingsButtonText}>Sync now</Text></Pressable></View>
+          <View style={s.moduleCard}><Text style={s.rowTitle}>Offline storage</Text><Text style={s.muted}>Your cached finance snapshot and Fiscus conversation copy are stored locally in this app, isolated by account and workspace.</Text></View>
+        </>}
         {tab === "fiscus" && <FiscusPanel workspaceId={workspaceId} userId={user?.id ?? ""} getToken={getToken} />}
 
         <Text style={s.footer}>Pending sync actions: {pending} · {sync.message}</Text>
@@ -251,7 +319,7 @@ export default function HomeScreen() {
         </SafeAreaView>
       </Modal>
       <View style={s.nav}>
-        {(["overview", "wallets", "activity", "fiscus"] as const).map((name) => <Pressable key={name} style={s.navItem} onPress={() => setTab(name)}><Text style={[s.navGlyph, tab === name && s.navActive]}>{name === "overview" ? "⌂" : name === "wallets" ? "▣" : name === "activity" ? "≡" : "✳"}</Text><Text style={[s.navText, tab === name && s.navActive]}>{name[0].toUpperCase() + name.slice(1)}</Text></Pressable>)}
+        {(["overview", "wallets", "activity", "more", "fiscus"] as const).map((name) => <Pressable key={name} style={s.navItem} onPress={() => setTab(name)}><Text style={[s.navGlyph, tab === name && s.navActive]}>{name === "overview" ? "⌂" : name === "wallets" ? "▣" : name === "activity" ? "≡" : name === "more" ? "•••" : "✳"}</Text><Text style={[s.navText, tab === name && s.navActive]}>{name === "fiscus" ? "Fiscus" : name[0].toUpperCase() + name.slice(1)}</Text></Pressable>)}
       </View>
     </SafeAreaView>
   );
@@ -285,6 +353,18 @@ const s = StyleSheet.create({
   empty: { color: P.muted, backgroundColor: P.paper, padding: 22, borderRadius: 16, textAlign: "center", lineHeight: 20, marginTop: 8 },
   alert: { backgroundColor: "#F5EBD8", padding: 12, borderRadius: 12, marginTop: 8 }, alertText: { color: "#7C551D", fontSize: 11, lineHeight: 17 },
   footer: { color: P.muted, fontSize: 10, textAlign: "center", paddingVertical: 16 },
+  moreCard: { backgroundColor: P.paper, borderRadius: 16, padding: 14, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 9 },
+  moreMark: { width: 38, height: 38, borderRadius: 13, backgroundColor: P.soft, alignItems: "center", justifyContent: "center" },
+  moreMarkText: { color: P.olive, fontSize: 15, fontWeight: "800" }, moreArrow: { color: P.muted, fontSize: 22 },
+  backLink: { color: P.olive, fontSize: 12, fontWeight: "800", marginTop: 12 },
+  moduleCard: { backgroundColor: P.paper, borderRadius: 16, padding: 16, marginBottom: 10 },
+  moduleAmount: { color: P.ink, fontSize: 21, fontWeight: "800", marginTop: 9, marginBottom: 4 },
+  statusTag: { color: P.olive, fontSize: 9, fontWeight: "800", textTransform: "uppercase" },
+  progressTrack: { height: 7, backgroundColor: P.soft, borderRadius: 6, overflow: "hidden", marginVertical: 10 },
+  progressFill: { height: 7, backgroundColor: P.olive, borderRadius: 6 },
+  reportCard: { backgroundColor: P.paper, borderRadius: 16, padding: 17, marginBottom: 10 },
+  settingsButton: { alignSelf: "flex-start", backgroundColor: P.olive, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 11, marginTop: 12 },
+  settingsButtonText: { color: "#FFF", fontSize: 10, fontWeight: "800" },
   addButton: { backgroundColor: P.olive, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 12 }, addButtonText: { color: "#FFF", fontSize: 10, fontWeight: "800" },
   modalScreen: { flex: 1, backgroundColor: P.bg }, modalHeader: { padding: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   modalTitle: { color: P.ink, fontSize: 20, fontWeight: "800" }, modalClose: { color: P.olive, fontSize: 12, fontWeight: "700" },
