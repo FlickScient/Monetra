@@ -17,7 +17,7 @@ const clerkJwks = await (async () => {
 
 type IncomingMessage = { role: "user" | "model"; content: string };
 type RequestBody = {
-  action?: "chat" | "restore" | "clear" | "history" | "new" | "select" | "delete";
+  action?: "chat" | "restore" | "clear" | "history" | "new" | "select" | "delete" | "preferences" | "memory-list" | "memory-add" | "memory-delete";
   conversationId?: string;
   workspaceId?: string;
   messages?: unknown;
