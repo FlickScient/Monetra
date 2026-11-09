@@ -61,9 +61,6 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      # Keep the security gate visible without blocking a test APK build.
-      # Do not promote this APK to production until the audit is clean or each
-      # remaining advisory has been reviewed and documented.
       - name: Audit production dependencies (non-blocking for APK validation)
         id: dependency-audit
         continue-on-error: true
@@ -106,15 +103,28 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          target: google_apis
+          target: default
           arch: x86_64
           profile: pixel_2
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -no-snapshot-save
           disable-animations: true
           script: |
             set -euo pipefail
             APK="apps/android/android/app/build/outputs/apk/release/app-release.apk"
             adb wait-for-device
-            adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
+            for attempt in $(seq 1 90); do
+              BOOTED="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+              if [ "$BOOTED" = "1" ]; then
+                break
+              fi
+              sleep 2
+            done
+            if [ "${BOOTED:-}" != "1" ]; then
+              echo "::error::Android 15 emulator did not finish booting within 180 seconds."
+              adb devices -l || true
+              adb shell getprop || true
+              exit 1
+            fi
             adb install -r "$APK"
             adb shell monkey -p com.flickscient.monetra 1
             sleep 25
