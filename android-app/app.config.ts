@@ -10,7 +10,7 @@ const config: ExpoConfig = {
   // Keep the stable architecture path while investigating the device startup crash.
   newArchEnabled: false,
   icon: './assets/icon.png',
-  plugins: ['expo-router', 'expo-secure-store', '@clerk/expo', 'expo-sqlite'],
+  plugins: ['expo-router', 'expo-secure-store', '@clerk/expo', ['expo-sqlite', { useSQLCipher: true }]],
   android: {
     package: 'com.flickscient.monetramobile',
     versionCode: 2,
