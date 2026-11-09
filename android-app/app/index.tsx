@@ -9,7 +9,7 @@ import { apiRequest, Workspace } from '@/src/lib/api';
 import { queueOperation, readPendingOperations, readSnapshot, readWorkspaceIndex, removePendingOperation, writeSnapshot, writeWorkspaceIndex } from '@/src/lib/offline';
 import { theme } from '@/src/theme';
 
-type Wallet = { id: string; name: string; walletType: string; currency: string; currentBalanceMinor: number; status: string; creditLimitMinor?: number };
+type Wallet = { id: string; name: string; walletType: string; currency: string; currentBalanceMinor: number; status: string; creditLimitMinor?: number; notes?: string | null };
 type Category = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
 type Transaction = { id: string; transactionType: 'income' | 'expense' | 'transfer'; walletId: string; amountMinor: number; description: string; occurredAt: string; categoryId?: string | null; voidedAt?: string | null };
 type Debt = { id: string; direction: 'receivable' | 'payable'; counterpartyName: string; principalMinor: number; dueDate: string | null; note?: string | null; status: string };
@@ -94,6 +94,7 @@ export default function HomeScreen() {
   const [categoryId, setCategoryId] = useState('');
   const [saving, setSaving] = useState(false);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [editingTransactionOccurredAt, setEditingTransactionOccurredAt] = useState<string | null>(null);
   const [walletModal, setWalletModal] = useState(false);
   const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
   const [walletName, setWalletName] = useState('');
@@ -274,7 +275,7 @@ export default function HomeScreen() {
     }
     const payload = {
       walletId, transactionType, amountMinor: Math.round(Number(amount) * 100),
-      categoryId: categoryId || null, description: description.trim(), occurredAt: new Date().toISOString(),
+      categoryId: categoryId || null, description: description.trim(), occurredAt: editingTransactionOccurredAt ?? new Date().toISOString(),
     };
     const operationId = uuid();
     setSaving(true);
@@ -322,7 +323,7 @@ export default function HomeScreen() {
           }
         }
       }
-      setModal(false); setAmount(''); setDescription(''); setCategoryId(''); setEditingTransactionId(null);
+      setModal(false); setAmount(''); setDescription(''); setCategoryId(''); setEditingTransactionId(null); setEditingTransactionOccurredAt(null);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not save this transaction.');
     } finally { setSaving(false); }
@@ -330,6 +331,7 @@ export default function HomeScreen() {
 
   function editTransaction(tx: Transaction) {
     setEditingTransactionId(tx.id);
+    setEditingTransactionOccurredAt(tx.occurredAt);
     setTransactionType(tx.transactionType === 'income' ? 'income' : 'expense');
     setWalletId(tx.walletId);
     setCategoryId(tx.categoryId ?? '');
@@ -359,7 +361,7 @@ export default function HomeScreen() {
     setWalletType(wallet?.walletType ?? 'cash');
     setWalletOpeningBalance(wallet ? (Number(wallet.currentBalanceMinor) / 100).toFixed(2) : '0');
     setWalletCreditLimit(wallet ? (Number(wallet.creditLimitMinor ?? 0) / 100).toFixed(2) : '0');
-    setWalletNotes('');
+    setWalletNotes(wallet?.notes ?? '');
     setWalletModal(true);
   }
 
@@ -540,10 +542,10 @@ export default function HomeScreen() {
         {modules.slice(0,5).map(item=><Pressable key={item.key} onPress={()=>setActive(item.key)} style={styles.bottomItem}><View style={[styles.bottomDot,active===item.key&&styles.bottomDotActive]}/><Text style={[styles.bottomText,active===item.key&&styles.bottomTextActive]}>{item.short}</Text></Pressable>)}
         <Pressable onPress={()=>setActive('settings')} style={styles.bottomItem}><View style={[styles.bottomDot,active==='settings'&&styles.bottomDotActive]}/><Text style={[styles.bottomText,active==='settings'&&styles.bottomTextActive]}>More</Text></Pressable>
       </View>
-      <Pressable style={styles.fab} onPress={()=>{setTransactionType('expense');setModal(true);}}><Text style={styles.fabText}>＋</Text></Pressable>
+      <Pressable style={styles.fab} onPress={()=>{setEditingTransactionId(null);setEditingTransactionOccurredAt(null);setTransactionType('expense');setModal(true);}}><Text style={styles.fabText}>＋</Text></Pressable>
       <Modal visible={modal} transparent animationType="slide" onRequestClose={()=>setModal(false)}>
         <View style={styles.modalBackdrop}><View style={styles.modalCard}>
-          <View style={styles.modalHeader}><Text style={styles.modalTitle}>{editingTransactionId ? 'Edit transaction' : 'New transaction'}</Text><Pressable onPress={()=>setModal(false)}><Text style={styles.close}>✕</Text></Pressable></View>
+          <View style={styles.modalHeader}><Text style={styles.modalTitle}>{editingTransactionId ? 'Edit transaction' : 'New transaction'}</Text><Pressable onPress={()=>{setModal(false);setEditingTransactionId(null);setEditingTransactionOccurredAt(null);}}><Text style={styles.close}>✕</Text></Pressable></View>
           <View style={styles.typeSwitch}><Pressable onPress={()=>setTransactionType('expense')} style={[styles.typeButton,transactionType==='expense'&&styles.typeActive]}><Text style={[styles.typeText,transactionType==='expense'&&styles.typeTextActive]}>Expense</Text></Pressable><Pressable onPress={()=>setTransactionType('income')} style={[styles.typeButton,transactionType==='income'&&styles.typeActive]}><Text style={[styles.typeText,transactionType==='income'&&styles.typeTextActive]}>Income</Text></Pressable></View>
           <Text style={styles.fieldLabel}>Amount (৳)</Text><TextInput keyboardType="decimal-pad" value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={theme.colors.muted} style={styles.input}/>
           <Text style={styles.fieldLabel}>Description</Text><TextInput value={description} onChangeText={setDescription} placeholder="What was this for?" placeholderTextColor={theme.colors.muted} style={styles.input}/>
