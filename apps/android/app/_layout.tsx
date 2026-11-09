@@ -3,7 +3,7 @@ import { tokenCache } from "@clerk/expo/token-cache";
 import { Stack } from "expo-router";
 import { ActivityIndicator, Text, View } from "react-native";
 
-const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_bm90YWJsZS1oZXJvbi02MDYuY2xlcmsuYWNjb3VudHMuZGV2JA";
 
 export default function RootLayout() {
   if (!publishableKey) {
