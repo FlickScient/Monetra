@@ -10,7 +10,7 @@ import { FiscusPanel } from "@/components/fiscus-panel";
 
 type Workspace = { id: string; name: string; type: string };
 type Snapshot = { cursor: string; data: Record<string, any[]> };
-const API = process.env.EXPO_PUBLIC_MONETRA_API_URL?.replace(/\/+$/, "");
+const API = (process.env.EXPO_PUBLIC_MONETRA_API_URL || "https://monetra-4rax.vercel.app").replace(/\/+$/, "");
 const P = { bg: "#F4F3EC", paper: "#FFFFFF", ink: "#20251D", muted: "#788071", olive: "#596344", soft: "#E8EBDD", line: "#E7E8DF", green: "#327A55", red: "#B64D43" };
 
 const money = (minor: number, currency = "BDT") => {
