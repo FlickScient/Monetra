@@ -127,3 +127,12 @@ export async function saveFiscusCache(userId: string, workspaceId: string, messa
     userId, workspaceId, JSON.stringify(messages), new Date().toISOString()
   );
 }
+
+export async function pendingOperationCount(userId: string, workspaceId: string) {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<{ count: number }>(
+    "SELECT COUNT(*) AS count FROM pending_operations WHERE user_id = ? AND workspace_id = ?",
+    userId, workspaceId
+  );
+  return row?.count ?? 0;
+}
