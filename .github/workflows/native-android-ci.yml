@@ -2,7 +2,7 @@ name: Native Android app checks and APK
 
 on:
   push:
-    branches: [feat/native-expo-android]
+    branches: [feat/native-expo-android, fix/android-startup-cache-failure]
     paths:
       - "android-app/**"
       - "Main.png"
