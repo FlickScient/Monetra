@@ -1,0 +1,72 @@
+import * as SQLite from 'expo-sqlite';
+
+let database: Promise<SQLite.SQLiteDatabase> | null = null;
+
+async function getDatabase() {
+  if (!database) database = SQLite.openDatabaseAsync('monetra-offline.db');
+  const db = await database;
+  await db.execAsync(`
+    PRAGMA journal_mode = WAL;
+    CREATE TABLE IF NOT EXISTS workspace_snapshots (
+      workspace_id TEXT PRIMARY KEY NOT NULL,
+      payload TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS pending_operations (
+      operation_id TEXT PRIMARY KEY NOT NULL,
+      workspace_id TEXT NOT NULL,
+      operation_type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS pending_operations_workspace_idx
+      ON pending_operations(workspace_id, created_at);
+  `);
+  return db;
+}
+
+export async function readSnapshot<T>(workspaceId: string): Promise<T | null> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ payload: string }>(
+    'SELECT payload FROM workspace_snapshots WHERE workspace_id = ?',
+    workspaceId,
+  );
+  if (!row) return null;
+  try { return JSON.parse(row.payload) as T; } catch { return null; }
+}
+
+export async function writeSnapshot(workspaceId: string, snapshot: unknown) {
+  const db = await getDatabase();
+  await db.runAsync(
+    'INSERT INTO workspace_snapshots (workspace_id, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(workspace_id) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at',
+    workspaceId, JSON.stringify(snapshot), Date.now(),
+  );
+}
+
+export type QueuedOperation = {
+  operationId: string;
+  workspaceId: string;
+  operationType: string;
+  payload: string;
+};
+
+export async function queueOperation(workspaceId: string, operationId: string, operationType: string, payload: unknown) {
+  const db = await getDatabase();
+  await db.runAsync(
+    'INSERT OR IGNORE INTO pending_operations (operation_id, workspace_id, operation_type, payload, created_at) VALUES (?, ?, ?, ?, ?)',
+    operationId, workspaceId, operationType, JSON.stringify(payload), Date.now(),
+  );
+}
+
+export async function readPendingOperations(workspaceId: string): Promise<QueuedOperation[]> {
+  const db = await getDatabase();
+  return db.getAllAsync<QueuedOperation>(
+    'SELECT operation_id as operationId, workspace_id as workspaceId, operation_type as operationType, payload FROM pending_operations WHERE workspace_id = ? ORDER BY created_at ASC',
+    workspaceId,
+  );
+}
+
+export async function removePendingOperation(operationId: string) {
+  const db = await getDatabase();
+  await db.runAsync('DELETE FROM pending_operations WHERE operation_id = ?', operationId);
+}
