@@ -48,6 +48,7 @@ export default function HomeScreen() {
   const loadLocal = useCallback(async (uid: string, id: string) => {
     const cached = await readCachedWorkspace(uid, id);
     if (cached) setSnapshot(JSON.parse(cached.snapshot_json) as Snapshot);
+    else setSnapshot(null);
     setPending(await pendingOperationCount(uid, id));
   }, []);
 
@@ -71,6 +72,11 @@ export default function HomeScreen() {
   const chooseWorkspace = useCallback(async (id: string) => {
     if (!user?.id) return;
     setWorkspaceId(id);
+    setSnapshot(null);
+    setTxWalletId("");
+    setTxDestinationWalletId("");
+    setTxCategoryId("");
+    setPaymentDebtId("");
     await SecureStore.setItemAsync("monetra-active-workspace:" + user.id, id);
     await loadLocal(user.id, id);
     await syncNow(id);
