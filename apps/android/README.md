@@ -13,7 +13,7 @@ Native Android client built with React Native + Expo. This is not a WebView wrap
 
 ## Build a standalone Android APK
 
-The GitHub Actions workflow `.github/workflows/android-apk.yml` validates TypeScript, generates the native Android project and builds an installable debug APK. Run it manually from Actions or push a change to `android-native`. Download the artifact named `monetra-android-debug-apk` from the completed workflow.
+The GitHub Actions workflow `.github/workflows/android-apk.yml` validates TypeScript, generates the native Android project and builds an installable debug APK. Run it manually from Actions or push a change to `android-native`. Download the artifact named `monetra-native-android-debug-apk` from the completed workflow.
 
 For a signed production release, configure EAS credentials and use:
 
