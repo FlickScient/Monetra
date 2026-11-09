@@ -18,7 +18,7 @@ type Debt = { id: string; direction: 'receivable' | 'payable'; counterpartyName:
 type DebtPayment = { id: string; dueDebtId: string; amountMinor: number; paidAt: string; note?: string | null };
 type GoalAllocation = { id: string; goalId: string; walletId: string; amountMinor: number };
 type Budget = { id: string; categoryId: string; monthStart: string; limitMinor: number; carryForward: boolean };
-type Goal = { id: string; name: string; targetMinor: number; currency: string; targetDate: string | null; allocations: { walletId: string; amountMinor: number }[] };
+type Goal = { id: string; name: string; targetMinor: number; currency: string; targetDate: string | null; status: string; allocations: { walletId: string; amountMinor: number }[] };
 type Snapshot = {
   workspace: { id: string; name: string; type: string };
   cursor: string;
@@ -632,7 +632,7 @@ export default function HomeScreen() {
           <Panel><Text style={styles.itemTitle}>Wallet health</Text>{wallets.filter(w=>w.currentBalanceMinor<0).map(w=><RowItem key={w.id} title={w.name} subtitle="Negative balance · review spending" amount={money(w.currentBalanceMinor)}/>)}{!wallets.some(w=>w.currentBalanceMinor<0)&&<Text style={styles.muted}>No negative wallet balances in this snapshot.</Text>}</Panel>
         </>}
         {active === 'debts' && <>
-          <SectionTitle title="Due & Debt" subtitle="Receivables and payables · separate from wallet assets" action={<Pressable style={styles.smallButton} onPress={() => setDebtModal(true)}><Text style={styles.smallButtonText}>+ Add record</Text></Pressable>}/>
+          <SectionTitle title="Due & Debt" subtitle="Receivables and payables · separate from wallet assets" action={<Pressable style={styles.smallButton} onPress={() => {setEditingDebtId(null);setDebtName('');setDebtAmount('');setDebtDueDate('');setDebtNote('');setDebtDirection('payable');setDebtModal(true);}}><Text style={styles.smallButtonText}>+ Add record</Text></Pressable>}/>
           <View style={styles.metricGrid}><Panel style={styles.metric}><Text style={styles.metricLabel}>TO RECEIVE</Text><Text style={styles.metricValue}>{money(debts.filter(d=>d.direction==='receivable').reduce((s,d)=>s+d.outstandingMinor,0))}</Text></Panel><Panel style={styles.metric}><Text style={styles.metricLabel}>TO PAY</Text><Text style={styles.metricValue}>{money(debts.filter(d=>d.direction==='payable').reduce((s,d)=>s+d.outstandingMinor,0))}</Text></Panel></View>
           {debts.filter(debt=>debt.status!=='archived').map(debt=><Panel key={debt.id}>
             <RowItem title={debt.counterpartyName} subtitle={(debt.direction==='receivable'?'They owe you':'You owe')+' · Due '+(debt.dueDate||'not set')} amount={money(debt.outstandingMinor)} positive={debt.direction==='receivable'}/>
@@ -643,10 +643,10 @@ export default function HomeScreen() {
               <Pressable style={styles.secondaryButton} onPress={()=>archiveDebt(debt)}><Text style={styles.secondaryButtonText}>Archive</Text></Pressable>
             </View>
           </Panel>)}
-          {!debts.length&&<Empty title="No due or debt records" detail="Create a receivable or payable to track outstanding principal and partial payments."/>}
+          {!debts.some(debt=>debt.status!=='archived')&&<Empty title="No due or debt records" detail="Create a receivable or payable to track outstanding principal and partial payments."/>}
         </>}
         {active === 'savings' && <>
-          <SectionTitle title="Savings Goals" subtitle="Targets and wallet allocations" action={<Pressable style={styles.smallButton} onPress={() => setGoalModal(true)}><Text style={styles.smallButtonText}>+ New goal</Text></Pressable>}/>
+          <SectionTitle title="Savings Goals" subtitle="Targets and wallet allocations" action={<Pressable style={styles.smallButton} onPress={() => {setEditingGoalId(null);setGoalName('');setGoalTarget('');setGoalTargetDate('');setGoalModal(true);}}><Text style={styles.smallButtonText}>+ New goal</Text></Pressable>}/>
           {goals.filter(goal=>goal.status!=='archived').map(goal=>{const saved=goal.allocations.reduce((sum,a)=>sum+Number(a.amountMinor),0);const percent=goal.targetMinor>0?Math.min(100,saved/goal.targetMinor*100):0;return <Panel key={goal.id}><Text style={styles.itemTitle}>{goal.name}</Text><Text style={styles.panelBig}>{money(saved)} <Text style={styles.muted}>/ {money(goal.targetMinor)}</Text></Text><View style={styles.progress}><View style={[styles.progressFill,{width:`${percent}%`}]}/></View><Text style={styles.muted}>{Math.round(percent)}% funded · {goal.targetDate?'Target '+goal.targetDate:'No target date'}</Text>
             {goal.allocations.map(allocation=>{const wallet=wallets.find(w=>w.id===allocation.walletId);return <RowItem key={allocation.id} title={wallet?.name??'Wallet'} subtitle="Allocated" amount={money(allocation.amountMinor)}/>;})}
             <View style={{flexDirection:'row',gap:8,marginTop:8}}>
@@ -656,7 +656,7 @@ export default function HomeScreen() {
               <Pressable style={styles.secondaryButton} onPress={()=>archiveGoal(goal)}><Text style={styles.secondaryButtonText}>Archive</Text></Pressable>
             </View>
           </Panel>;})}
-          {!goals.length&&<Empty title="No savings goals yet" detail="Create your first goal to track money set aside across wallets."/>}
+          {!goals.some(goal=>goal.status!=='archived')&&<Empty title="No savings goals yet" detail="Create your first goal to track money set aside across wallets."/>}
         </>}
         {active === 'tools' && selected && <MoneyTools
           workspaceId={selected.id}
@@ -726,7 +726,7 @@ export default function HomeScreen() {
           <Pressable disabled={saving} onPress={() => void saveWallet()} style={[styles.primaryButton,{marginTop:20}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':editingWalletId?'Update wallet':'Create wallet'}</Text></Pressable>
         </View></View>
       </Modal>
-      <Modal visible={debtModal} transparent animationType="slide" onRequestClose={() => setDebtModal(false)}>
+      <Modal visible={debtModal} transparent animationType="slide" onRequestClose={() => {setDebtModal(false);setEditingDebtId(null);}}>
         <View style={styles.modalBackdrop}><View style={styles.modalCard}>
           <View style={styles.modalHeader}><Text style={styles.modalTitle}>{editingDebtId?'Edit Due & Debt record':'New Due & Debt record'}</Text><Pressable onPress={()=>{setDebtModal(false);setEditingDebtId(null);}}><Text style={styles.close}>✕</Text></Pressable></View>
           <View style={styles.typeSwitch}><Pressable onPress={()=>setDebtDirection('payable')} style={[styles.typeButton,debtDirection==='payable'&&styles.typeActive]}><Text style={[styles.typeText,debtDirection==='payable'&&styles.typeTextActive]}>I owe</Text></Pressable><Pressable onPress={()=>setDebtDirection('receivable')} style={[styles.typeButton,debtDirection==='receivable'&&styles.typeActive]}><Text style={[styles.typeText,debtDirection==='receivable'&&styles.typeTextActive]}>Owed to me</Text></Pressable></View>
@@ -745,7 +745,7 @@ export default function HomeScreen() {
           <Pressable disabled={saving} onPress={()=>void recordDebtPayment()} style={[styles.primaryButton,{marginTop:16}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':'Confirm payment'}</Text></Pressable>
         </View></View>
       </Modal>
-      <Modal visible={goalModal} transparent animationType="slide" onRequestClose={()=>setGoalModal(false)}>
+      <Modal visible={goalModal} transparent animationType="slide" onRequestClose={()=>{setGoalModal(false);setEditingGoalId(null);}}>
         <View style={styles.modalBackdrop}><View style={styles.modalCard}>
           <View style={styles.modalHeader}><Text style={styles.modalTitle}>{editingGoalId?'Edit savings goal':'New savings goal'}</Text><Pressable onPress={()=>{setGoalModal(false);setEditingGoalId(null);}}><Text style={styles.close}>✕</Text></Pressable></View>
           <Text style={styles.fieldLabel}>GOAL NAME</Text><TextInput value={goalName} onChangeText={setGoalName} placeholder="e.g. Emergency fund" placeholderTextColor={theme.colors.muted} style={styles.input}/>
