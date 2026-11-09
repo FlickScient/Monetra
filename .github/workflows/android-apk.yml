@@ -99,32 +99,20 @@ jobs:
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Install and launch APK on Android emulator
-        timeout-minutes: 10
+        timeout-minutes: 15
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          target: default
+          target: google_apis
           arch: x86_64
           profile: pixel_2
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -no-snapshot-save
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           script: |
             set -euo pipefail
             APK="apps/android/android/app/build/outputs/apk/release/app-release.apk"
             adb wait-for-device
-            for attempt in $(seq 1 90); do
-              BOOTED="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
-              if [ "$BOOTED" = "1" ]; then
-                break
-              fi
-              sleep 2
-            done
-            if [ "${BOOTED:-}" != "1" ]; then
-              echo "::error::Android 15 emulator did not finish booting within 180 seconds."
-              adb devices -l || true
-              adb shell getprop || true
-              exit 1
-            fi
+            adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
             adb install -r "$APK"
             adb shell monkey -p com.flickscient.monetra 1
             sleep 25
