@@ -124,7 +124,7 @@ export default function HomeScreen() {
 
   const data = snapshot?.data ?? {};
   const wallets = data.wallets ?? [];
-  const transactions = [...(data.transactions ?? [])].filter((x) => !x.voidedAt).sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+  const transactions = [...(data.transactions ?? [])].filter((x) => !x.voidedAt && x.transactionType !== "adjustment").sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
   const monthKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka", year: "numeric", month: "2-digit" }).format(new Date());
   const inThisMonth = (value: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka", year: "numeric", month: "2-digit" }).format(new Date(value)) === monthKey;
   const monthlyTransactions = transactions.filter((x) => inThisMonth(x.occurredAt));
@@ -284,7 +284,7 @@ export default function HomeScreen() {
           {transactions.slice(0, 10).map((x) => <View key={x.id} style={s.row}>
             <View style={[s.txIcon, { backgroundColor: x.transactionType === "income" ? "#E5F0E7" : "#F6E9E5" }]}><Text style={{ color: x.transactionType === "income" ? P.green : P.red, fontWeight: "800" }}>{x.transactionType === "income" ? "↓" : "↑"}</Text></View>
             <View style={s.rowMain}><Text style={s.rowTitle}>{x.description || "Transaction"}</Text><Text style={s.muted}>{new Date(x.occurredAt).toLocaleDateString("en-BD", { day: "numeric", month: "short" })}</Text></View>
-            <Text style={s.amount}>{x.transactionType === "expense" ? "−" : "+"}{money(Number(x.amountMinor || 0))}</Text>
+            <Text style={s.amount}>{x.transactionType === "transfer" ? "↔ " : x.transactionType === "expense" ? "−" : "+"}{money(Number(x.amountMinor || 0))}</Text>
           </View>)}
           {!snapshot && <Text style={s.empty}>Connect once to download your finance data for offline access.</Text>}
         </>}
