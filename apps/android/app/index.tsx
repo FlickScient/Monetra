@@ -6,6 +6,7 @@ import * as SecureStore from "expo-secure-store";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { readAllCachedWorkspaces, readCachedWorkspace } from "@/lib/database";
 import { pendingOperationCount, syncWorkspace, type SyncResult } from "@/lib/sync";
+import { FiscusPanel } from "@/components/fiscus-panel";
 
 type Workspace = { id: string; name: string; type: string };
 type Snapshot = { cursor: string; data: Record<string, any[]> };
@@ -204,18 +205,8 @@ export default function HomeScreen() {
           <Text style={s.heading}>Transactions</Text><Text style={s.subheading}>Latest records from your ledger.</Text>
           {transactions.map((x) => <View key={x.id} style={s.row}><View style={s.rowMain}><Text style={s.rowTitle}>{x.description || "Transaction"}</Text><Text style={s.muted}>{new Date(x.occurredAt).toLocaleString()}</Text></View><Text style={s.amount}>{money(Number(x.amountMinor || 0))}</Text></View>)}
         </>}
-        {tab === "fiscus" && <>
-          <Text style={s.heading}>Fiscus AI</Text><Text style={s.subheading}>Your financial co-pilot · AI replies need internet</Text>
-          <View style={s.chat}>
-            <ScrollView style={s.chatHistory} contentContainerStyle={{ gap: 10 }}>
-              {!messages.length && <View style={s.welcome}><Text style={s.welcomeTitle}>Let's make your money make sense.</Text><Text style={s.muted}>Ask about spending, cash flow, budgets or patterns.</Text></View>}
-              {messages.map((m, i) => <View key={i} style={[s.bubble, m.role === "user" ? s.userBubble : s.aiBubble]}><Text style={[s.bubbleText, m.role === "user" && { color: "#FFF" }]}>{m.content}</Text></View>)}
-              {sending && <Text style={s.muted}>Fiscus is thinking…</Text>}
-            </ScrollView>
-            <View style={s.composer}><TextInput value={draft} onChangeText={setDraft} placeholder="Message Fiscus…" placeholderTextColor={P.muted} style={s.input} multiline maxLength={3000} /><Pressable style={s.send} onPress={() => void sendFiscus()}><Text style={s.sendText}>↑</Text></Pressable></View>
-          </View>
-          <Text style={s.memoryNote}>Conversation history and approved-memory controls will be connected to the existing Fiscus memory service in the next integration pass. Offline messages are not sent or treated as AI replies.</Text>
-        </>}
+        {tab === "fiscus" && <FiscusPanel workspaceId={workspaceId} userId={user?.id ?? ""} getToken={getToken} />}
+
         <Text style={s.footer}>Pending sync actions: {pending} · {sync.message}</Text>
       </ScrollView>
       <View style={s.nav}>
