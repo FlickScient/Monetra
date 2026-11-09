@@ -69,8 +69,8 @@ function RowItem({ title, subtitle, amount, positive }: { title: string; subtitl
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { isLoaded, isSignedIn, getToken } = useAuth();
-  const { user } = useUser();
+  const { isLoaded: isAuthLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded: isUserLoaded, user } = useUser();
   const { signOut } = useClerk();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selected, setSelected] = useState<Workspace | null>(null);
@@ -82,6 +82,8 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState('');
   const [loadError, setLoadError] = useState('');
+  const [authWaitExpired, setAuthWaitExpired] = useState(false);
+  const [authRetryKey, setAuthRetryKey] = useState(0);
   const selectedWorkspaceId = useRef<string | null>(null);
   const initializedUserId = useRef<string | null>(null);
   const [modal, setModal] = useState(false);
@@ -92,10 +94,33 @@ export default function HomeScreen() {
   const [categoryId, setCategoryId] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const getSessionToken = useCallback(async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        Promise.resolve().then(() => getToken()),
+        new Promise<null>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Secure sign-in is taking too long. Please retry or sign in again.')), 12000);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }, [getSessionToken]);
+
+  useEffect(() => {
+    if (isAuthLoaded && isUserLoaded) {
+      setAuthWaitExpired(false);
+      return;
+    }
+    const timer = setTimeout(() => setAuthWaitExpired(true), 15000);
+    return () => clearTimeout(timer);
+  }, [isAuthLoaded, isUserLoaded, authRetryKey]);
+
   const loadWorkspaceList = useCallback(async () => {
     let rows: Workspace[];
     try {
-      const token = await getToken();
+      const token = await getSessionToken();
       if (!token) throw new Error('Your sign-in session has expired.');
       // A cache failure must never turn a successful online response into a failed login.
       rows = await apiRequest<Workspace[]>('/api/workspaces', token);
@@ -126,7 +151,7 @@ export default function HomeScreen() {
   const loadWorkspace = useCallback(async (workspace: Workspace, silent = false) => {
     if (!silent) setSyncing(true);
     try {
-      const token = await getToken();
+      const token = await getSessionToken();
       if (!token) throw new Error('Your sign-in session has expired.');
       let pending: Awaited<ReturnType<typeof readPendingOperations>> = [];
       try {
@@ -194,17 +219,17 @@ export default function HomeScreen() {
   }, [loadWorkspaceList, loadWorkspace]);
 
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!isAuthLoaded || !isUserLoaded) return;
     if (!isSignedIn) {
       initializedUserId.current = null;
       router.replace('/sign-in');
       return;
     }
-    const userId = user?.id ?? 'signed-in-user';
-    if (initializedUserId.current === userId) return;
-    initializedUserId.current = userId;
+    if (!user?.id) return;
+    if (initializedUserId.current === user.id) return;
+    initializedUserId.current = user.id;
     void initialize();
-  }, [isLoaded, isSignedIn, user?.id, initialize, router]);
+  }, [isAuthLoaded, isUserLoaded, isSignedIn, user?.id, initialize, router]);
 
   const data = snapshot?.data;
   const wallets = data?.wallets ?? [];
@@ -247,7 +272,7 @@ export default function HomeScreen() {
     setSaving(true);
     try {
       let token: string | null = null;
-      try { token = await getToken(); } catch { /* A cached session may still be usable offline. */ }
+      try { token = await getSessionToken(); } catch { /* A cached session may still be usable offline. */ }
       const saveLocally = async () => {
         await queueOperation(selected.id, operationId, 'transaction.create', payload);
         const current = await readSnapshot<Snapshot>(selected.id);
@@ -286,7 +311,18 @@ export default function HomeScreen() {
     } finally { setSaving(false); }
   }
 
-  if (!isLoaded) return <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.green}/><Text style={styles.loadingText}>Preparing secure sign-in…</Text></View>;
+  if (!isAuthLoaded || !isUserLoaded) {
+    if (authWaitExpired) {
+      return <View style={styles.center}>
+        <Text style={styles.errorTitle}>Secure sign-in isn’t responding</Text>
+        <Text style={styles.errorMessage}>Monetra is waiting for Clerk to finish initializing. Check your connection, then retry. Your finance data has not been changed.</Text>
+        <Pressable onPress={() => { setAuthWaitExpired(false); setAuthRetryKey(value => value + 1); }} style={styles.retryButton}>
+          <Text style={styles.retryText}>Retry sign-in</Text>
+        </Pressable>
+      </View>;
+    }
+    return <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.green}/><Text style={styles.loadingText}>Preparing secure sign-in…</Text></View>;
+  }
   if (!isSignedIn) return <View style={styles.center}><ActivityIndicator color={theme.colors.green}/><Text style={styles.loadingText}>Opening sign-in…</Text></View>;
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.green}/><Text style={styles.loadingText}>Preparing your Monetra workspace…</Text></View>;
   if (loadError && !snapshot) return (

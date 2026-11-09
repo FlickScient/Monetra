@@ -19,12 +19,12 @@ export async function apiRequest<T>(
   token: string,
   options: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; workspaceId?: string; body?: unknown; headers?: Record<string, string>; timeoutMs?: number } = {},
 ): Promise<T> {
-  let response: Response;
   const controller = new AbortController();
   const timeoutMs = options.timeoutMs ?? 15000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    response = await fetch(`${API_URL}${path}`, {
+    const response = await fetch(`${API_URL}${path}`, {
       method: options.method ?? 'GET',
       signal: controller.signal,
       headers: {
@@ -36,6 +36,19 @@ export async function apiRequest<T>(
       },
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     });
+
+    // Keep the abort timer alive while parsing the body too. A server that sends
+    // headers and then stalls must not leave the native app stuck indefinitely.
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message = payload && typeof payload.error === 'string'
+        ? payload.error
+        : `Monetra API request failed (${response.status})`;
+      const error = new Error(message) as ApiError;
+      error.status = response.status;
+      throw error;
+    }
+    return payload as T;
   } catch (cause) {
     if (controller.signal.aborted) {
       throw new Error(`Monetra server did not respond within ${Math.ceil(timeoutMs / 1000)} seconds. Check your connection and try again.`);
@@ -44,17 +57,6 @@ export async function apiRequest<T>(
   } finally {
     clearTimeout(timeout);
   }
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message = payload && typeof payload.error === 'string'
-      ? payload.error
-      : `Monetra API request failed (${response.status})`;
-    const error = new Error(message) as ApiError;
-    error.status = response.status;
-    throw error;
-  }
-  return payload as T;
 }
 
 export async function apiGet<T>(path: string, token: string, workspaceId?: string): Promise<T> {
