@@ -9,6 +9,7 @@ import { apiRequest, Workspace } from '@/src/lib/api';
 import { queueOperation, readPendingOperations, readSnapshot, readWorkspaceIndex, removePendingOperation, writeSnapshot, writeWorkspaceIndex } from '@/src/lib/offline';
 import { theme } from '@/src/theme';
 import { FiscusChat } from '@/src/components/FiscusChat';
+import { MoneyTools } from '@/src/components/MoneyTools';
 
 type Wallet = { id: string; name: string; walletType: string; currency: string; currentBalanceMinor: number; status: string; creditLimitMinor?: number; notes?: string | null };
 type Category = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
@@ -599,12 +600,17 @@ export default function HomeScreen() {
           </Panel>;})}
           {!goals.length&&<Empty title="No savings goals yet" detail="Create your first goal to track money set aside across wallets."/>}
         </>}
-        {active === 'tools' && <>
-          <SectionTitle title="Money Tools" subtitle="Budgets, recurring activity and reconciliations"/>
-          <Panel><Text style={styles.itemTitle}>Monthly budgets</Text>{(data?.monthlyBudgets??[]).map(row=>{const category=categories.find(item=>item.id===row.categoryId);const spent=thisMonth.filter(tx=>tx.transactionType==='expense'&&tx.categoryId===row.categoryId).reduce((sum,tx)=>sum+Number(tx.amountMinor),0);return <RowItem key={row.id} title={category?.name??'Budget'} subtitle={'Limit '+money(row.limitMinor)} amount={money(spent)}/>;})}{!data?.monthlyBudgets?.length&&<Text style={styles.muted}>No monthly budgets in this workspace snapshot.</Text>}</Panel>
-          <Panel><Text style={styles.itemTitle}>Recurring transactions</Text>{(data?.recurringTransactions??[]).map((row:any)=><RowItem key={row.id} title={row.description} subtitle={row.frequency+' · '+row.nextRun} amount={money(row.amountMinor)}/>)}{!data?.recurringTransactions?.length&&<Text style={styles.muted}>No recurring items in this workspace snapshot.</Text>}</Panel>
-          <Panel><Text style={styles.itemTitle}>Wallet reconciliations</Text><Text style={styles.muted}>{data?.walletReconciliations?.length??0} reconciliation record(s) synced.</Text></Panel>
-        </>}
+        {active === 'tools' && selected && <MoneyTools
+          workspaceId={selected.id}
+          wallets={wallets}
+          categories={categories}
+          budgets={data?.monthlyBudgets ?? []}
+          recurring={data?.recurringTransactions ?? []}
+          reconciliations={data?.walletReconciliations ?? []}
+          transactions={transactions}
+          getToken={getSessionToken}
+          onChanged={() => void loadWorkspace(selected, true)}
+        />}
         {active === 'fiscus' && selected && <FiscusChat workspaceId={selected.id} getToken={getSessionToken}/ >}
         {active === 'settings' && <>
           <SectionTitle title="Settings" subtitle="Account, device storage and synchronization"/>
