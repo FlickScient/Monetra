@@ -39,7 +39,10 @@ export async function apiRequest<T>(
 
     // Keep the abort timer alive while parsing the body too. A server that sends
     // headers and then stalls must not leave the native app stuck indefinitely.
-    const payload = await response.json().catch(() => null);
+    const payload = await response.json().catch(error => {
+      if (controller.signal.aborted) throw error;
+      return null;
+    });
     if (!response.ok) {
       const message = payload && typeof payload.error === 'string'
         ? payload.error
