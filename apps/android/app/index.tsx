@@ -30,9 +30,6 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"overview" | "wallets" | "activity" | "fiscus">("overview");
-  const [messages, setMessages] = useState<Array<{ role: "user" | "model"; content: string }>>([]);
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
   const [transactionModal, setTransactionModal] = useState(false);
   const [txType, setTxType] = useState<"income" | "expense">("expense");
   const [txAmount, setTxAmount] = useState("");
@@ -168,33 +165,6 @@ export default function HomeScreen() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save this transaction locally.");
     } finally { setTxSaving(false); }
-  }
-
-  async function sendFiscus() {
-    const content = draft.trim();
-    if (!content || sending) return;
-    setDraft("");
-    const next = [...messages, { role: "user" as const, content }];
-    setMessages(next);
-    setSending(true);
-    setError("");
-    try {
-      const token = await getToken();
-      const url = process.env.EXPO_PUBLIC_FISCUS_FUNCTION_URL;
-      const key = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-      if (!token || !url || !key) throw new Error("Fiscus is not configured for this installation.");
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, apikey: key },
-        body: JSON.stringify({ action: "chat", workspaceId, messages: next.slice(-12) })
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Fiscus could not reply.");
-      const reply = result.reply ?? result.response ?? result.message;
-      if (typeof reply !== "string") throw new Error("Unexpected Fiscus response.");
-      setMessages([...next, { role: "model", content: reply }]);
-    } catch (e) { setError(e instanceof Error ? e.message : "Fiscus is unavailable."); }
-    finally { setSending(false); }
   }
 
   if (!isLoaded) return <View style={s.center}><ActivityIndicator color={P.olive} size="large" /></View>;
