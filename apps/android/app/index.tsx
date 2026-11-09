@@ -5,8 +5,8 @@ import { useAuth, useUser } from "@clerk/expo";
 import { AuthView, UserButton } from "@clerk/expo/native";
 import * as SecureStore from "expo-secure-store";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { readAllCachedWorkspaces, readCachedWorkspace } from "@/lib/database";
-import { pendingOperationCount, queueOfflineOperation, syncWorkspace, type SyncResult } from "@/lib/sync";
+import { pendingOperationCount, readAllCachedWorkspaces, readCachedWorkspace } from "@/lib/database";
+import { queueOfflineOperation, syncWorkspace, type SyncResult } from "@/lib/sync";
 import { FiscusPanel } from "@/components/fiscus-panel";
 
 type Workspace = { id: string; name: string; type: string };
@@ -352,7 +352,7 @@ export default function HomeScreen() {
             const saved = allocatedFor(goal);
             const target = Number(goal.targetMinor || 0);
             const percent = target > 0 ? Math.min(100, Math.round(saved / target * 100)) : 0;
-            return <View key={goal.id} style={s.moduleCard}><Text style={s.rowTitle}>{goal.name}</Text><Text style={s.moduleAmount}>{money(saved, goal.currency || "BDT")}</Text><Text style={s.muted}>of {money(target, goal.currency || "BDT")} · {percent}%</Text><View style={s.progressTrack}><View style={[s.progressFill, { width: percent + "%" }]} /></View><Text style={s.muted}>{goal.targetDate ? "Target " + goal.targetDate : "No target date"} · {goal.status}</Text></View>;
+            return <View key={goal.id} style={s.moduleCard}><Text style={s.rowTitle}>{goal.name}</Text><Text style={s.moduleAmount}>{money(saved, goal.currency || "BDT")}</Text><Text style={s.muted}>of {money(target, goal.currency || "BDT")} · {percent}%</Text><View style={s.progressTrack}><View style={[s.progressFill, { width: (percent + "%") as `${number}%` }]} /></View><Text style={s.muted}>{goal.targetDate ? "Target " + goal.targetDate : "No target date"} · {goal.status}</Text></View>;
           })}
           {!goals.length && <Text style={s.empty}>No savings goals in this workspace.</Text>}
         </>}
@@ -451,7 +451,7 @@ const s = StyleSheet.create({
   scroll: { flex: 1 }, body: { paddingHorizontal: 20, paddingBottom: 25 }, heading: { color: P.ink, fontSize: 23, fontWeight: "800", marginTop: 15, letterSpacing: -0.6 },
   subheading: { color: P.muted, fontSize: 12, marginTop: 5, marginBottom: 17 }, balance: { backgroundColor: P.olive, borderRadius: 24, padding: 22, marginBottom: 12 },
   balanceLabel: { color: "#D8DDCE", fontSize: 10, fontWeight: "800", letterSpacing: 1.1 }, balanceValue: { color: "#FFF", fontSize: 32, fontWeight: "800", marginTop: 12, letterSpacing: -1 },
-  balanceFoot: { flexDirection: "row", justifyContent: "space-between", marginTop: 20 }, balanceFootText: { color: "#E2E6D9", fontSize: 10, fontWeight: "600" },
+  balanceFoot: { flexDirection: "row", justifyContent: "space-between", marginTop: 16 }, balanceFootText: { color: "#D8DDCE", fontSize: 9, fontWeight: "700", letterSpacing: 0.7 }, balanceCaption: { color: "#E2E6D9", fontSize: 11, marginTop: 6 }, balanceDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.18)", marginTop: 17 }, balanceBreakdown: { color: "#FFF", fontSize: 13, fontWeight: "800", marginTop: 5 },
   stats: { flexDirection: "row", gap: 10, marginBottom: 24 }, stat: { flex: 1, backgroundColor: P.paper, borderRadius: 18, padding: 15 },
   statLabel: { color: P.muted, fontSize: 9, fontWeight: "800", letterSpacing: 1 }, statValue: { fontSize: 16, fontWeight: "800", marginTop: 9 },
   section: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }, sectionTitle: { color: P.ink, fontSize: 16, fontWeight: "800" },
