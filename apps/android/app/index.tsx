@@ -5,7 +5,7 @@ import { AuthView, UserButton } from "@clerk/expo/native";
 import * as SecureStore from "expo-secure-store";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { readAllCachedWorkspaces, readCachedWorkspace } from "@/lib/database";
-import { pendingOperationCount, syncWorkspace, type SyncResult } from "@/lib/sync";
+import { pendingOperationCount, queueOfflineOperation, syncWorkspace, type SyncResult } from "@/lib/sync";
 import { FiscusPanel } from "@/components/fiscus-panel";
 
 type Workspace = { id: string; name: string; type: string };
@@ -33,6 +33,13 @@ export default function HomeScreen() {
   const [messages, setMessages] = useState<Array<{ role: "user" | "model"; content: string }>>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [transactionModal, setTransactionModal] = useState(false);
+  const [txType, setTxType] = useState<"income" | "expense">("expense");
+  const [txAmount, setTxAmount] = useState("");
+  const [txDescription, setTxDescription] = useState("");
+  const [txWalletId, setTxWalletId] = useState("");
+  const [txCategoryId, setTxCategoryId] = useState("");
+  const [txSaving, setTxSaving] = useState(false);
 
   const loadLocal = useCallback(async (uid: string, id: string) => {
     const cached = await readCachedWorkspace(uid, id);
@@ -119,6 +126,50 @@ export default function HomeScreen() {
   const balance = wallets.filter((x) => x.status === "active").reduce((sum, x) => sum + Number(x.currentBalanceMinor || 0), 0);
   const active = workspaces.find((w) => w.id === workspaceId);
 
+  async function saveTransaction() {
+    if (!user?.id || !workspaceId || txSaving) return;
+    const amount = Number(txAmount.replace(/,/g, ""));
+    const amountMinor = Math.round(amount * 100);
+    if (!Number.isFinite(amount) || amountMinor <= 0 || !Number.isSafeInteger(amountMinor)) {
+      setError("Enter a valid amount greater than zero.");
+      return;
+    }
+    if (!txWalletId) {
+      setError("Choose a wallet before saving.");
+      return;
+    }
+    if (!txDescription.trim()) {
+      setError("Add a short description.");
+      return;
+    }
+    setTxSaving(true);
+    setError("");
+    try {
+      await queueOfflineOperation({
+        userId: user.id,
+        workspaceId,
+        type: "transaction.create",
+        payload: {
+          walletId: txWalletId,
+          transactionType: txType,
+          amountMinor,
+          categoryId: txCategoryId || null,
+          description: txDescription.trim(),
+          occurredAt: new Date().toISOString()
+        }
+      });
+      setTransactionModal(false);
+      setTxAmount("");
+      setTxDescription("");
+      setTxCategoryId("");
+      await loadLocal(user.id, workspaceId);
+      await syncNow(workspaceId);
+      setTab("overview");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save this transaction locally.");
+    } finally { setTxSaving(false); }
+  }
+
   async function sendFiscus() {
     const content = draft.trim();
     if (!content || sending) return;
@@ -188,7 +239,7 @@ export default function HomeScreen() {
             <View style={s.stat}><Text style={s.statLabel}>INCOME</Text><Text style={[s.statValue, { color: P.green }]}>{money(income)}</Text></View>
             <View style={s.stat}><Text style={s.statLabel}>EXPENSE</Text><Text style={[s.statValue, { color: P.red }]}>{money(expense)}</Text></View>
           </View>
-          <View style={s.section}><Text style={s.sectionTitle}>Recent activity</Text><Text style={s.muted}>{transactions.length} records</Text></View>
+          <View style={s.section}><Text style={s.sectionTitle}>Recent activity</Text><Pressable onPress={() => setTransactionModal(true)} style={s.addButton}><Text style={s.addButtonText}>＋ Add</Text></Pressable></View>
           {transactions.slice(0, 10).map((x) => <View key={x.id} style={s.row}>
             <View style={[s.txIcon, { backgroundColor: x.transactionType === "income" ? "#E5F0E7" : "#F6E9E5" }]}><Text style={{ color: x.transactionType === "income" ? P.green : P.red, fontWeight: "800" }}>{x.transactionType === "income" ? "↓" : "↑"}</Text></View>
             <View style={s.rowMain}><Text style={s.rowTitle}>{x.description || "Transaction"}</Text><Text style={s.muted}>{new Date(x.occurredAt).toLocaleDateString("en-BD", { day: "numeric", month: "short" })}</Text></View>
@@ -209,6 +260,26 @@ export default function HomeScreen() {
 
         <Text style={s.footer}>Pending sync actions: {pending} · {sync.message}</Text>
       </ScrollView>
+      <Modal visible={transactionModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setTransactionModal(false)}>
+        <SafeAreaView style={s.modalScreen}>
+          <View style={s.modalHeader}><Text style={s.modalTitle}>New transaction</Text><Pressable onPress={() => setTransactionModal(false)}><Text style={s.modalClose}>Close</Text></Pressable></View>
+          <ScrollView contentContainerStyle={s.modalBody} keyboardShouldPersistTaps="handled">
+            <View style={s.typeSwitch}>
+              {(["expense", "income"] as const).map((type) => <Pressable key={type} onPress={() => { setTxType(type); setTxCategoryId(""); }} style={[s.typeOption, txType === type && s.typeOptionOn]}><Text style={[s.typeOptionText, txType === type && s.typeOptionTextOn]}>{type.toUpperCase()}</Text></Pressable>)}
+            </View>
+            <Text style={s.formLabel}>Amount (৳)</Text>
+            <TextInput value={txAmount} onChangeText={setTxAmount} keyboardType="decimal-pad" placeholder="0.00" style={s.formInput} />
+            <Text style={s.formLabel}>Description</Text>
+            <TextInput value={txDescription} onChangeText={setTxDescription} placeholder="What was this for?" style={s.formInput} maxLength={500} />
+            <Text style={s.formLabel}>Wallet</Text>
+            <View style={s.choiceWrap}>{wallets.filter((w) => w.status === "active").map((w) => <Pressable key={w.id} onPress={() => setTxWalletId(w.id)} style={[s.choice, txWalletId === w.id && s.choiceOn]}><Text style={[s.choiceText, txWalletId === w.id && s.choiceTextOn]}>{w.name}</Text></Pressable>)}</View>
+            <Text style={s.formLabel}>Category (optional)</Text>
+            <View style={s.choiceWrap}>{(data.categories ?? []).filter((x) => x.categoryType === txType).map((category) => <Pressable key={category.id} onPress={() => setTxCategoryId(txCategoryId === category.id ? "" : category.id)} style={[s.choice, txCategoryId === category.id && s.choiceOn]}><Text style={[s.choiceText, txCategoryId === category.id && s.choiceTextOn]}>{category.name}</Text></Pressable>)}</View>
+            <Text style={s.formHint}>Offline entries are saved on this device and marked pending until Neon confirms synchronization.</Text>
+            <Pressable disabled={txSaving} onPress={() => void saveTransaction()} style={[s.primary, txSaving && { opacity: 0.6 }]}><Text style={s.primaryText}>{txSaving ? "Saving…" : "Save transaction"}</Text></Pressable>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
       <View style={s.nav}>
         {(["overview", "wallets", "activity", "fiscus"] as const).map((name) => <Pressable key={name} style={s.navItem} onPress={() => setTab(name)}><Text style={[s.navGlyph, tab === name && s.navActive]}>{name === "overview" ? "⌂" : name === "wallets" ? "▣" : name === "activity" ? "≡" : "✳"}</Text><Text style={[s.navText, tab === name && s.navActive]}>{name[0].toUpperCase() + name.slice(1)}</Text></Pressable>)}
       </View>
@@ -244,6 +315,17 @@ const s = StyleSheet.create({
   empty: { color: P.muted, backgroundColor: P.paper, padding: 22, borderRadius: 16, textAlign: "center", lineHeight: 20, marginTop: 8 },
   alert: { backgroundColor: "#F5EBD8", padding: 12, borderRadius: 12, marginTop: 8 }, alertText: { color: "#7C551D", fontSize: 11, lineHeight: 17 },
   footer: { color: P.muted, fontSize: 10, textAlign: "center", paddingVertical: 16 },
+  addButton: { backgroundColor: P.olive, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 12 }, addButtonText: { color: "#FFF", fontSize: 10, fontWeight: "800" },
+  modalScreen: { flex: 1, backgroundColor: P.bg }, modalHeader: { padding: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  modalTitle: { color: P.ink, fontSize: 20, fontWeight: "800" }, modalClose: { color: P.olive, fontSize: 12, fontWeight: "700" },
+  modalBody: { padding: 20, paddingBottom: 40 }, typeSwitch: { flexDirection: "row", gap: 8, marginBottom: 20 },
+  typeOption: { flex: 1, padding: 13, borderRadius: 13, borderWidth: 1, borderColor: P.line, alignItems: "center" },
+  typeOptionOn: { backgroundColor: P.olive, borderColor: P.olive }, typeOptionText: { color: P.muted, fontSize: 11, fontWeight: "800" }, typeOptionTextOn: { color: "#FFF" },
+  formLabel: { color: P.ink, fontSize: 11, fontWeight: "800", marginBottom: 7, marginTop: 13 },
+  formInput: { backgroundColor: P.paper, borderWidth: 1, borderColor: P.line, borderRadius: 13, padding: 14, color: P.ink, fontSize: 14 },
+  choiceWrap: { flexDirection: "row", flexWrap: "wrap", gap: 7 }, choice: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 18, borderWidth: 1, borderColor: P.line, backgroundColor: P.paper },
+  choiceOn: { backgroundColor: P.olive, borderColor: P.olive }, choiceText: { color: P.muted, fontSize: 10, fontWeight: "600" }, choiceTextOn: { color: "#FFF" },
+  formHint: { color: P.muted, fontSize: 10, lineHeight: 16, marginVertical: 18 },
   nav: { flexDirection: "row", justifyContent: "space-around", backgroundColor: P.paper, borderTopWidth: 1, borderTopColor: P.line, paddingTop: 10, paddingBottom: 6 },
   navItem: { alignItems: "center", minWidth: 62, gap: 3 }, navGlyph: { color: P.muted, fontSize: 21 }, navText: { color: P.muted, fontSize: 9, fontWeight: "600" }, navActive: { color: P.olive, fontWeight: "800" },
   chat: { backgroundColor: P.paper, borderRadius: 20, padding: 12, minHeight: 430 }, chatHistory: { height: 330 }, welcome: { flex: 1, minHeight: 280, alignItems: "center", justifyContent: "center", padding: 20 },
