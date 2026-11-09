@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, AppState, Modal, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import * as Network from "expo-network";
 import { useAuth, useUser } from "@clerk/expo";
 import { AuthView, UserButton } from "@clerk/expo/native";
 import * as SecureStore from "expo-secure-store";
@@ -132,6 +133,20 @@ export default function HomeScreen() {
     })();
     return () => { alive = false; };
   }, [isLoaded, isSignedIn, user?.id, getToken, loadLocal]);
+
+  useEffect(() => {
+    if (!isSignedIn || !user?.id || !workspaceId) return;
+    const networkSubscription = Network.addNetworkStateListener((state) => {
+      if (state.isConnected && state.isInternetReachable !== false) void syncNow(workspaceId);
+    });
+    const appStateSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void syncNow(workspaceId);
+    });
+    return () => {
+      networkSubscription.remove();
+      appStateSubscription.remove();
+    };
+  }, [isSignedIn, user?.id, workspaceId, syncNow]);
 
   const data = snapshot?.data ?? {};
   const wallets = data.wallets ?? [];
