@@ -61,6 +61,14 @@ export async function readCachedWorkspace(userId: string, workspaceId: string) {
   );
 }
 
+export async function readAllCachedWorkspaces(userId: string) {
+  const db = await getDatabase();
+  return db.getAllAsync<CachedWorkspace>(
+    "SELECT * FROM workspace_cache WHERE user_id = ? ORDER BY updated_at DESC",
+    userId
+  );
+}
+
 export async function saveCachedWorkspace(userId: string, workspaceId: string, snapshot: unknown, cursor: string) {
   const db = await getDatabase();
   await db.runAsync(
