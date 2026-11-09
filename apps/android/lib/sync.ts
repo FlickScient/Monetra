@@ -52,7 +52,7 @@ function makeUuid() {
   return Crypto.randomUUID();
 }
 
-export async function syncWorkspace(userId: string, workspaceId: string, token: string): Promise<SyncResult> {
+async function performSyncWorkspace(userId: string, workspaceId: string, token: string): Promise<SyncResult> {
   const db = await getDatabase();
   try {
     // A full, consistent snapshot is only needed when this user/workspace has no local copy.
@@ -145,4 +145,18 @@ export async function syncWorkspace(userId: string, workspaceId: string, token: 
     }
     return { status: "needs-attention", message };
   }
+}
+
+
+const inFlightSyncs = new Map<string, Promise<SyncResult>>();
+
+export function syncWorkspace(userId: string, workspaceId: string, token: string): Promise<SyncResult> {
+  const key = userId + ":" + workspaceId;
+  const existing = inFlightSyncs.get(key);
+  if (existing) return existing;
+  const task = performSyncWorkspace(userId, workspaceId, token).finally(() => {
+    inFlightSyncs.delete(key);
+  });
+  inFlightSyncs.set(key, task);
+  return task;
 }
