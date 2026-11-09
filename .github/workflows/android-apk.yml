@@ -100,6 +100,30 @@ jobs:
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
         run: ./gradlew assembleRelease --no-daemon
 
+      - name: Install and launch APK on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            APK="apps/android/android/app/build/outputs/apk/release/app-release.apk"
+            adb wait-for-device
+            adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
+            adb install -r "$APK"
+            adb shell monkey -p com.flickscient.monetra 1
+            sleep 25
+            if ! adb shell pidof com.flickscient.monetra >/dev/null; then
+              echo "::error::Monetra process exited after launch. Recent Android crash log:"
+              adb logcat -d -t 5000 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|Fatal signal|libc|monetra|clerk|ReactNativeJS' | tail -n 250 || true
+              exit 1
+            fi
+            echo "Monetra remained running for 25 seconds after a cold launch."
+            adb logcat -d -t 3000 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|Fatal signal|ReactNativeJS' | tail -n 100 || true
+
       - name: Upload standalone APK artifact
         uses: actions/upload-artifact@v4
         with:
