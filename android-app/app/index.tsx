@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet,
+  ActivityIndicator, Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet,
   Text, TextInput, View, type StyleProp, type ViewStyle,
 } from 'react-native';
 import { useAuth, useClerk, useUser } from '@clerk/expo';
@@ -93,6 +93,14 @@ export default function HomeScreen() {
   const [walletId, setWalletId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [walletModal, setWalletModal] = useState(false);
+  const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
+  const [walletName, setWalletName] = useState('');
+  const [walletType, setWalletType] = useState('cash');
+  const [walletOpeningBalance, setWalletOpeningBalance] = useState('0');
+  const [walletCreditLimit, setWalletCreditLimit] = useState('0');
+  const [walletNotes, setWalletNotes] = useState('');
 
   const getSessionToken = useCallback(async () => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -272,43 +280,128 @@ export default function HomeScreen() {
     setSaving(true);
     try {
       let token: string | null = null;
-      try { token = await getSessionToken(); } catch { /* A cached session may still be usable offline. */ }
-      const saveLocally = async () => {
-        await queueOperation(selected.id, operationId, 'transaction.create', payload);
-        const current = await readSnapshot<Snapshot>(selected.id);
-        if (current) {
-          const wallet = current.data.wallets.find(row => row.id === walletId);
-          if (wallet) {
-            const delta = transactionType === 'income' ? payload.amountMinor : -payload.amountMinor;
-            wallet.currentBalanceMinor += wallet.walletType === 'credit_card' ? -delta : delta;
-          }
-          current.data.transactions.push({ id: operationId, ...payload, voidedAt: null } as Transaction);
-          await writeSnapshot(selected.id, current);
-          setSnapshot(current);
-        }
-        setOffline(true);
-        setNotice('Saved on this device. It will sync when you reconnect.');
-      };
-      if (!token) {
-        await saveLocally();
+      try { token = await getSessionToken(); } catch { /* Offline creation can still be queued securely. */ }
+      if (editingTransactionId) {
+        if (!token) throw new Error('Editing an existing transaction requires an internet connection. Your saved record was not changed.');
+        await apiRequest(`/api/transactions/${editingTransactionId}`, token, {
+          method: 'PATCH', workspaceId: selected.id, body: payload,
+        });
+        await loadWorkspace(selected, true);
+        setNotice('Transaction updated.');
       } else {
-        try {
-          await apiRequest('/api/transactions', token, {
-            method: 'POST', workspaceId: selected.id, body: payload,
-            headers: { 'idempotency-key': operationId },
-          });
-          await loadWorkspace(selected, true);
-          setNotice('Transaction saved to your Monetra account.');
-        } catch (error) {
-          const apiError = error as Error & { status?: number };
-          if (apiError.status) throw error;
+        const saveLocally = async () => {
+          await queueOperation(selected.id, operationId, 'transaction.create', payload);
+          const current = await readSnapshot<Snapshot>(selected.id);
+          if (current) {
+            const wallet = current.data.wallets.find(row => row.id === walletId);
+            if (wallet) {
+              const delta = transactionType === 'income' ? payload.amountMinor : -payload.amountMinor;
+              wallet.currentBalanceMinor += wallet.walletType === 'credit_card' ? -delta : delta;
+            }
+            current.data.transactions.push({ id: operationId, ...payload, voidedAt: null } as Transaction);
+            await writeSnapshot(selected.id, current);
+            setSnapshot(current);
+          }
+          setOffline(true);
+          setNotice('Saved on this device. It will sync when you reconnect.');
+        };
+        if (!token) {
           await saveLocally();
+        } else {
+          try {
+            await apiRequest('/api/transactions', token, {
+              method: 'POST', workspaceId: selected.id, body: payload,
+              headers: { 'idempotency-key': operationId },
+            });
+            await loadWorkspace(selected, true);
+            setNotice('Transaction saved to your Monetra account.');
+          } catch (error) {
+            const apiError = error as Error & { status?: number };
+            if (apiError.status) throw error;
+            await saveLocally();
+          }
         }
       }
-      setModal(false); setAmount(''); setDescription(''); setCategoryId('');
+      setModal(false); setAmount(''); setDescription(''); setCategoryId(''); setEditingTransactionId(null);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not save this transaction.');
     } finally { setSaving(false); }
+  }
+
+  function editTransaction(tx: Transaction) {
+    setEditingTransactionId(tx.id);
+    setTransactionType(tx.transactionType === 'income' ? 'income' : 'expense');
+    setWalletId(tx.walletId);
+    setCategoryId(tx.categoryId ?? '');
+    setAmount((Number(tx.amountMinor) / 100).toFixed(2));
+    setDescription(tx.description);
+    setModal(true);
+  }
+
+  function deleteTransaction(tx: Transaction) {
+    Alert.alert('Delete transaction?', 'This will reverse the wallet balance and keep an audit record.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => { void (async () => {
+        try {
+          const token = await getSessionToken();
+          if (!token || !selected) throw new Error('Deleting a transaction requires an internet connection.');
+          await apiRequest(`/api/transactions/${tx.id}`, token, { method: 'DELETE', workspaceId: selected.id });
+          await loadWorkspace(selected, true);
+          setNotice('Transaction deleted and wallet balance reversed.');
+        } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not delete transaction.'); }
+      })(); } },
+    ]);
+  }
+
+  function openWalletEditor(wallet?: Wallet) {
+    setEditingWalletId(wallet?.id ?? null);
+    setWalletName(wallet?.name ?? '');
+    setWalletType(wallet?.walletType ?? 'cash');
+    setWalletOpeningBalance(wallet ? (Number(wallet.currentBalanceMinor) / 100).toFixed(2) : '0');
+    setWalletCreditLimit(wallet ? (Number(wallet.creditLimitMinor ?? 0) / 100).toFixed(2) : '0');
+    setWalletNotes('');
+    setWalletModal(true);
+  }
+
+  async function saveWallet() {
+    if (!walletName.trim() || !selected || !Number.isFinite(Number(walletOpeningBalance)) || Number(walletOpeningBalance) < 0) {
+      setNotice('Enter a wallet name and a valid opening balance.');
+      return;
+    }
+    if (walletType === 'credit_card' && (!Number.isFinite(Number(walletCreditLimit)) || Number(walletCreditLimit) < 0)) {
+      setNotice('Enter a valid credit limit.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const token = await getSessionToken();
+      if (!token) throw new Error('A connection is required to create or edit wallets.');
+      const body = editingWalletId
+        ? { name: walletName.trim(), notes: walletNotes || null, ...(walletType === 'credit_card' ? { creditLimitMinor: Math.round(Number(walletCreditLimit) * 100) } : {}) }
+        : { name: walletName.trim(), walletType, currency: 'BDT', openingBalanceMinor: Math.round(Number(walletOpeningBalance) * 100), creditLimitMinor: walletType === 'credit_card' ? Math.round(Number(walletCreditLimit) * 100) : 0, notes: walletNotes || null };
+      await apiRequest(editingWalletId ? `/api/wallets/${editingWalletId}` : '/api/wallets', token, {
+        method: editingWalletId ? 'PATCH' : 'POST', workspaceId: selected.id, body,
+      });
+      await loadWorkspace(selected, true);
+      setWalletModal(false);
+      setNotice(editingWalletId ? 'Wallet updated.' : 'Wallet created.');
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not save wallet.'); }
+    finally { setSaving(false); }
+  }
+
+  function archiveWallet(wallet: Wallet) {
+    Alert.alert('Archive wallet?', 'A wallet can only be archived after its balance is zero and it has no active savings allocations.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Archive', style: 'destructive', onPress: () => { void (async () => {
+        try {
+          const token = await getSessionToken();
+          if (!token || !selected) throw new Error('Archiving a wallet requires an internet connection.');
+          await apiRequest(`/api/wallets/${wallet.id}`, token, { method: 'DELETE', workspaceId: selected.id });
+          await loadWorkspace(selected, true);
+          setNotice('Wallet archived.');
+        } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not archive wallet.'); }
+      })(); } },
+    ]);
   }
 
   if (!isAuthLoaded || !isUserLoaded) {
@@ -371,14 +464,26 @@ export default function HomeScreen() {
           {!transactions.length && <Empty title="No activity yet" detail="Your transactions will appear here once added."/>}
         </>}
         {active === 'wallets' && <>
-          <SectionTitle title="Wallets" subtitle="Cash, mobile banking, bank accounts and cards"/>
+          <SectionTitle title="Wallets" subtitle="Cash, mobile banking, bank accounts and cards" action={<Pressable style={styles.smallButton} onPress={() => openWalletEditor()}><Text style={styles.smallButtonText}>+ Add wallet</Text></Pressable>}/>
           <Panel><Text style={styles.heroLabel}>TOTAL AVAILABLE BALANCE</Text><Text style={styles.panelBig}>{money(assets-liabilities)}</Text><Text style={styles.muted}>{wallets.length} wallet(s) in {workspaceLabel}</Text></Panel>
-          {wallets.map(wallet => <RowItem key={wallet.id} title={wallet.name} subtitle={wallet.walletType.replace('_',' ').toUpperCase()+' · '+wallet.status} amount={money(wallet.currentBalanceMinor,wallet.currency)}/>)}
+          {wallets.map(wallet => <Panel key={wallet.id}>
+            <RowItem title={wallet.name} subtitle={wallet.walletType.replace('_',' ').toUpperCase()+' · '+wallet.status} amount={money(wallet.currentBalanceMinor,wallet.currency)}/>
+            <View style={{flexDirection:'row',gap:9,marginTop:8}}>
+              <Pressable style={styles.secondaryButton} onPress={() => openWalletEditor(wallet)}><Text style={styles.secondaryButtonText}>Edit</Text></Pressable>
+              <Pressable style={styles.secondaryButton} onPress={() => archiveWallet(wallet)}><Text style={styles.secondaryButtonText}>Archive</Text></Pressable>
+            </View>
+          </Panel>)}
           {!wallets.length && <Empty title="No wallets found" detail="Your existing website wallets should appear here after signing in with the same Monetra account."/>}
         </>}
         {active === 'transactions' && <>
           <SectionTitle title="Transactions" subtitle="Your full transaction history" action={<Pressable style={styles.smallButton} onPress={() => setModal(true)}><Text style={styles.smallButtonText}>+ Add</Text></Pressable>}/>
-          {transactions.slice(0,100).map(tx => <RowItem key={tx.id} title={tx.description} subtitle={dateLabel(tx.occurredAt)+' · '+tx.transactionType.toUpperCase()} amount={(tx.transactionType === 'income' ? '+' : '−')+money(tx.amountMinor)} positive={tx.transactionType === 'income'}/>)}
+          {transactions.slice(0,100).map(tx => <Panel key={tx.id}>
+            <RowItem title={tx.description} subtitle={dateLabel(tx.occurredAt)+' · '+tx.transactionType.toUpperCase()} amount={(tx.transactionType === 'income' ? '+' : '−')+money(tx.amountMinor)} positive={tx.transactionType === 'income'}/>
+            <View style={{flexDirection:'row',gap:9,marginTop:7}}>
+              <Pressable style={styles.secondaryButton} onPress={() => editTransaction(tx)}><Text style={styles.secondaryButtonText}>Edit</Text></Pressable>
+              <Pressable style={styles.secondaryButton} onPress={() => deleteTransaction(tx)}><Text style={styles.secondaryButtonText}>Delete</Text></Pressable>
+            </View>
+          </Panel>)}
           {!transactions.length && <Empty title="No transactions yet" detail="Add your first income or expense entry."/>}
         </>}
         {active === 'income' && <>
@@ -438,14 +543,36 @@ export default function HomeScreen() {
       <Pressable style={styles.fab} onPress={()=>{setTransactionType('expense');setModal(true);}}><Text style={styles.fabText}>＋</Text></Pressable>
       <Modal visible={modal} transparent animationType="slide" onRequestClose={()=>setModal(false)}>
         <View style={styles.modalBackdrop}><View style={styles.modalCard}>
-          <View style={styles.modalHeader}><Text style={styles.modalTitle}>New transaction</Text><Pressable onPress={()=>setModal(false)}><Text style={styles.close}>✕</Text></Pressable></View>
+          <View style={styles.modalHeader}><Text style={styles.modalTitle}>{editingTransactionId ? 'Edit transaction' : 'New transaction'}</Text><Pressable onPress={()=>setModal(false)}><Text style={styles.close}>✕</Text></Pressable></View>
           <View style={styles.typeSwitch}><Pressable onPress={()=>setTransactionType('expense')} style={[styles.typeButton,transactionType==='expense'&&styles.typeActive]}><Text style={[styles.typeText,transactionType==='expense'&&styles.typeTextActive]}>Expense</Text></Pressable><Pressable onPress={()=>setTransactionType('income')} style={[styles.typeButton,transactionType==='income'&&styles.typeActive]}><Text style={[styles.typeText,transactionType==='income'&&styles.typeTextActive]}>Income</Text></Pressable></View>
           <Text style={styles.fieldLabel}>Amount (৳)</Text><TextInput keyboardType="decimal-pad" value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={theme.colors.muted} style={styles.input}/>
           <Text style={styles.fieldLabel}>Description</Text><TextInput value={description} onChangeText={setDescription} placeholder="What was this for?" placeholderTextColor={theme.colors.muted} style={styles.input}/>
           <Text style={styles.fieldLabel}>Wallet</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{wallets.filter(w=>w.status==='active').map(w=><Pressable key={w.id} onPress={()=>setWalletId(w.id)} style={[styles.choice, walletId===w.id&&styles.choiceActive]}><Text style={[styles.choiceText,walletId===w.id&&styles.choiceTextActive]}>{w.name}</Text></Pressable>)}</ScrollView>
           <Text style={styles.fieldLabel}>Category</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{categoryList.map(c=><Pressable key={c.id} onPress={()=>setCategoryId(c.id)} style={[styles.choice,categoryId===c.id&&styles.choiceActive]}><Text style={[styles.choiceText,categoryId===c.id&&styles.choiceTextActive]}>{c.name}</Text></Pressable>)}</ScrollView>
-          <Pressable disabled={saving} onPress={()=>void saveTransaction()} style={[styles.primaryButton,{marginTop:20}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':'Save transaction'}</Text></Pressable>
+          <Pressable disabled={saving} onPress={()=>void saveTransaction()} style={[styles.primaryButton,{marginTop:20}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':editingTransactionId?'Update transaction':'Save transaction'}</Text></Pressable>
           {offline?<Text style={styles.muted}>Offline entries are queued locally and sync when you reconnect.</Text>:null}
+        </View></View>
+      </Modal>
+      <Modal visible={walletModal} transparent animationType="slide" onRequestClose={() => setWalletModal(false)}>
+        <View style={styles.modalBackdrop}><View style={styles.modalCard}>
+          <View style={styles.modalHeader}><Text style={styles.modalTitle}>{editingWalletId ? 'Edit wallet' : 'New wallet'}</Text><Pressable onPress={() => setWalletModal(false)}><Text style={styles.close}>✕</Text></Pressable></View>
+          <Text style={styles.fieldLabel}>WALLET NAME</Text>
+          <TextInput value={walletName} onChangeText={setWalletName} placeholder="e.g. Main bKash" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          {!editingWalletId ? <>
+            <Text style={styles.fieldLabel}>WALLET TYPE</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {['cash','bkash','nagad','rocket','bank','savings','debit_card','credit_card','custom'].map(type=><Pressable key={type} onPress={()=>setWalletType(type)} style={[styles.choice,walletType===type&&styles.choiceActive]}><Text style={[styles.choiceText,walletType===type&&styles.choiceTextActive]}>{type.replace('_',' ')}</Text></Pressable>)}
+            </ScrollView>
+            <Text style={styles.fieldLabel}>OPENING BALANCE (৳)</Text>
+            <TextInput keyboardType="decimal-pad" value={walletOpeningBalance} onChangeText={setWalletOpeningBalance} placeholder="0.00" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          </> : null}
+          {walletType === 'credit_card' ? <>
+            <Text style={styles.fieldLabel}>CREDIT LIMIT (৳)</Text>
+            <TextInput keyboardType="decimal-pad" value={walletCreditLimit} onChangeText={setWalletCreditLimit} placeholder="0.00" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          </> : null}
+          <Text style={styles.fieldLabel}>NOTES (OPTIONAL)</Text>
+          <TextInput value={walletNotes} onChangeText={setWalletNotes} placeholder="Add a note" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <Pressable disabled={saving} onPress={() => void saveWallet()} style={[styles.primaryButton,{marginTop:20}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':editingWalletId?'Update wallet':'Create wallet'}</Text></Pressable>
         </View></View>
       </Modal>
     </View>
