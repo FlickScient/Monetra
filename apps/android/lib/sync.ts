@@ -1,3 +1,4 @@
+import * as Crypto from "expo-crypto";
 import { getDatabase, readCachedWorkspace, saveCachedWorkspace } from "./database";
 
 const API_URL = (process.env.EXPO_PUBLIC_MONETRA_API_URL || "https://monetra-4rax.vercel.app").replace(/\/+$/, "");
@@ -48,12 +49,7 @@ export async function queueOfflineOperation(input: {
 }
 
 function makeUuid() {
-  // RFC 4122 v4 using the platform crypto implementation where available.
-  const bytes = Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
-  return [hex.slice(0,8), hex.slice(8,12), hex.slice(12,16), hex.slice(16,20), hex.slice(20)].join("-");
+  return Crypto.randomUUID();
 }
 
 export async function syncWorkspace(userId: string, workspaceId: string, token: string): Promise<SyncResult> {
