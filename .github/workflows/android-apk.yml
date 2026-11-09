@@ -1,77 +1,71 @@
-name: Monetra Android Build
+name: Monetra Native Android APK
 
 on:
   workflow_dispatch:
-  pull_request:
+  push:
+    branches: [android-native]
     paths:
-      - "native-app/**"
-      - "lib/offline/**"
-      - "capacitor.config.ts"
-      - "package.json"
-      - "package-lock.json"
-      - "scripts/configure-android-sso.mjs"
-      - "android/database/**"
-      - "public/sqlite/**"
+      - "apps/android/**"
       - ".github/workflows/android-apk.yml"
 
+permissions:
+  contents: read
+
 concurrency:
-  group: monetra-android-${{ github.ref }}
+  group: monetra-native-android-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   android-debug-apk:
-    if: hashFiles('native-app/src/App.tsx') != ''
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/android
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "17"
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
-      - name: Install Android compile SDK
+
+      - name: Install Android SDK packages
         run: |
           yes | sdkmanager --licenses >/dev/null
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
       - name: Install dependencies
-        run: npm ci
-      - name: Type-check standalone native app
-        run: npx tsc --noEmit -p native-app/tsconfig.json
-      - name: Validate native app runtime configuration
+        run: npm install
+
+      - name: Type-check native app
+        run: npx tsc --noEmit
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Assemble installable debug APK
+        working-directory: apps/android/android
         env:
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-        run: |
-          test -n "$VITE_CLERK_PUBLISHABLE_KEY" || (echo "Missing VITE_CLERK_PUBLISHABLE_KEY secret" && exit 1)
-          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY" || (echo "Missing VITE_SUPABASE_PUBLISHABLE_KEY secret" && exit 1)
-      - name: Build standalone native app bundle
-        env:
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-          VITE_MONETRA_API_URL: https://monetra-4rax.vercel.app
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-        run: npm run build:native
-      - name: Generate Android project and sync plugins
-        run: |
-          npx cap add android
-          npx cap sync android
-          node scripts/configure-android-sso.mjs
-      - name: Assemble debug APK
-        run: |
-          cd android-native
-          ./gradlew --no-daemon assembleDebug
-      - name: Upload debug APK
+          EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_MONETRA_API_URL: https://monetra-4rax.vercel.app
+          EXPO_PUBLIC_FISCUS_FUNCTION_URL: ${{ secrets.EXPO_PUBLIC_FISCUS_FUNCTION_URL }}
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: monetra-android-debug
-          path: android-native/app/build/outputs/apk/debug/app-debug.apk
+          name: monetra-native-android-debug-apk
+          path: apps/android/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 14
