@@ -604,10 +604,10 @@ export default function HomeScreen() {
         </View>
         <Pressable onPress={() => void signOut()} style={styles.avatar}><Text style={styles.avatarText}>{(user?.firstName?.[0] ?? 'M').toUpperCase()}</Text></Pressable>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.workspaceTabs}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: 56, flexGrow: 0, flexShrink: 0 }} contentContainerStyle={styles.workspaceTabs}>
         {workspaces.map(workspace => <Pressable key={workspace.id} onPress={() => { selectedWorkspaceId.current = workspace.id; setSelected(workspace); void loadWorkspace(workspace); }} style={[styles.workspaceTab, selected?.id === workspace.id && styles.workspaceTabActive]}><Text style={[styles.workspaceTabText, selected?.id === workspace.id && styles.workspaceTabTextActive]}>{workspace.type === 'personal' ? 'Personal' : workspace.type === 'family' ? 'Family' : 'Business'}</Text></Pressable>)}
       </ScrollView>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moduleTabs}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: 46, flexGrow: 0, flexShrink: 0 }} contentContainerStyle={styles.moduleTabs}>
         {modules.map(item => <Pressable key={item.key} onPress={() => setActive(item.key)} style={[styles.moduleTab, active === item.key && styles.moduleTabActive]}><Text style={[styles.moduleTabText, active === item.key && styles.moduleTabTextActive]}>{item.short}</Text></Pressable>)}
       </ScrollView>
       {notice ? <Pressable onPress={() => setNotice('')} style={styles.notice}><Text style={styles.noticeText}>{offline ? '● OFFLINE  ' : '●  '}{notice}</Text></Pressable> : null}
@@ -823,12 +823,12 @@ const styles=StyleSheet.create({
   headerMeta:{fontSize:8,color:theme.colors.muted,fontWeight:'800',letterSpacing:1,marginTop:3},
   avatar:{width:40,height:40,borderRadius:14,backgroundColor:theme.colors.greenDeep,alignItems:'center',justifyContent:'center'},
   avatarText:{color:'#fff',fontWeight:'900',fontSize:15},
-  workspaceTabs:{paddingHorizontal:16,paddingVertical:8,gap:8},
+  workspaceTabs:{paddingHorizontal:16,paddingVertical:4,gap:8,alignItems:'center'},
   workspaceTab:{paddingHorizontal:16,paddingVertical:9,borderRadius:12,backgroundColor:theme.colors.surface,borderWidth:1,borderColor:theme.colors.line},
   workspaceTabActive:{backgroundColor:theme.colors.greenDeep,borderColor:theme.colors.greenDeep},
   workspaceTabText:{color:theme.colors.muted,fontSize:11,fontWeight:'700'},
   workspaceTabTextActive:{color:'#fff'},
-  moduleTabs:{paddingHorizontal:16,paddingBottom:10,gap:7},
+  moduleTabs:{paddingHorizontal:16,paddingVertical:4,gap:7,alignItems:'center'},
   moduleTab:{paddingHorizontal:13,paddingVertical:8,borderRadius:999,backgroundColor:theme.colors.surfaceSoft,borderWidth:1,borderColor:theme.colors.line},
   moduleTabActive:{backgroundColor:theme.colors.greenSoft,borderColor:theme.colors.green},
   moduleTabText:{fontSize:10,color:theme.colors.muted,fontWeight:'700'},
