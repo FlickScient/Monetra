@@ -35,6 +35,13 @@ export function getDatabase() {
           last_error TEXT,
           PRIMARY KEY (user_id, workspace_id)
         );
+        CREATE TABLE IF NOT EXISTS fiscus_local_cache (
+          user_id TEXT NOT NULL,
+          workspace_id TEXT NOT NULL,
+          messages_json TEXT NOT NULL DEFAULT '[]',
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (user_id, workspace_id)
+        );
       `);
       return db;
     }).catch((error) => {
@@ -77,5 +84,24 @@ export async function saveCachedWorkspace(userId: string, workspaceId: string, s
      ON CONFLICT(user_id, workspace_id) DO UPDATE SET
        snapshot_json = excluded.snapshot_json, cursor = excluded.cursor, updated_at = excluded.updated_at`,
     userId, workspaceId, JSON.stringify(snapshot), cursor, new Date().toISOString()
+  );
+}
+
+export async function readFiscusCache(userId: string, workspaceId: string) {
+  const db = await getDatabase();
+  return db.getFirstAsync<{ messages_json: string }>(
+    "SELECT messages_json FROM fiscus_local_cache WHERE user_id = ? AND workspace_id = ?",
+    userId, workspaceId
+  );
+}
+
+export async function saveFiscusCache(userId: string, workspaceId: string, messages: unknown) {
+  const db = await getDatabase();
+  await db.runAsync(
+    `INSERT INTO fiscus_local_cache(user_id,workspace_id,messages_json,updated_at)
+     VALUES(?,?,?,?)
+     ON CONFLICT(user_id,workspace_id) DO UPDATE SET
+       messages_json=excluded.messages_json,updated_at=excluded.updated_at`,
+    userId, workspaceId, JSON.stringify(messages), new Date().toISOString()
   );
 }
