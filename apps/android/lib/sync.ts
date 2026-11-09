@@ -1,6 +1,6 @@
 import { getDatabase, readCachedWorkspace, saveCachedWorkspace } from "./database";
 
-const API_URL = process.env.EXPO_PUBLIC_MONETRA_API_URL?.replace(/\/+$/, "");
+const API_URL = (process.env.EXPO_PUBLIC_MONETRA_API_URL || "https://monetra-4rax.vercel.app").replace(/\/+$/, "");
 
 export type SyncResult = { status: "synced" | "offline" | "needs-attention"; message: string; cursor?: string };
 
