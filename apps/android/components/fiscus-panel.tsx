@@ -31,14 +31,21 @@ export function FiscusPanel({ workspaceId, userId, getToken }: {
   const call = useCallback(async (action: string, payload: Record<string, unknown> = {}) => {
     const token = await getToken();
     if (!token || !URL || !KEY) throw new Error("Fiscus connection or sign-in is unavailable.");
-    const response = await fetch(URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, apikey: KEY },
-      body: JSON.stringify({ action, workspaceId, ...payload })
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "Fiscus could not complete the request.");
-    return data;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+    try {
+      const response = await fetch(URL, {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, apikey: KEY },
+        body: JSON.stringify({ action, workspaceId, ...payload })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Fiscus could not complete the request.");
+      return data;
+    } finally {
+      clearTimeout(timeout);
+    }
   }, [getToken, workspaceId]);
 
   const loadMemories = useCallback(async () => {
