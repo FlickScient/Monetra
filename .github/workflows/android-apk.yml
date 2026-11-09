@@ -1,77 +1,141 @@
-name: Monetra Android Build
+name: Monetra Native Android APK
 
 on:
   workflow_dispatch:
-  pull_request:
+  push:
+    branches: [android-native]
     paths:
-      - "native-app/**"
-      - "lib/offline/**"
-      - "capacitor.config.ts"
-      - "package.json"
-      - "package-lock.json"
-      - "scripts/configure-android-sso.mjs"
-      - "android/database/**"
-      - "public/sqlite/**"
+      - "apps/android/**"
+      - "public/icon.png"
+      - ".github/workflows/android-apk.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/android/**"
+      - "public/icon.png"
       - ".github/workflows/android-apk.yml"
 
+permissions:
+  contents: read
+
 concurrency:
-  group: monetra-android-${{ github.ref }}
+  group: monetra-native-android-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  android-debug-apk:
-    if: hashFiles('native-app/src/App.tsx') != ''
+  android-standalone-apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/android
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
-      - name: Install Android compile SDK
+          java-version: "17"
+
+      - name: Install Android SDK packages
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "Android SDK command-line tools were not found on the GitHub runner."
+            exit 1
+          fi
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
       - name: Install dependencies
-        run: npm ci
-      - name: Type-check standalone native app
-        run: npx tsc --noEmit -p native-app/tsconfig.json
-      - name: Validate native app runtime configuration
-        env:
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: npm install --no-audit --no-fund
+
+      - name: Audit production dependencies (non-blocking for APK validation)
+        id: dependency-audit
+        continue-on-error: true
         run: |
-          test -n "$VITE_CLERK_PUBLISHABLE_KEY" || (echo "Missing VITE_CLERK_PUBLISHABLE_KEY secret" && exit 1)
-          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY" || (echo "Missing VITE_SUPABASE_PUBLISHABLE_KEY secret" && exit 1)
-      - name: Build standalone native app bundle
-        env:
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-          VITE_MONETRA_API_URL: https://monetra-4rax.vercel.app
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-        run: npm run build:native
-      - name: Generate Android project and sync plugins
-        run: |
-          npx cap add android
-          npx cap sync android
-          node scripts/configure-android-sso.mjs
-      - name: Assemble debug APK
-        run: |
-          cd android-native
-          ./gradlew --no-daemon assembleDebug
-      - name: Upload debug APK
+          npm audit --omit=dev --audit-level=high --json > npm-audit-report.json || {
+            echo "::warning::Dependency audit reported vulnerabilities. See the uploaded npm-audit-report artifact; this APK is not production-cleared."
+          }
+
+      - name: Upload dependency audit report
+        if: always() && hashFiles('apps/android/npm-audit-report.json') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: monetra-android-debug
-          path: android-native/app/build/outputs/apk/debug/app-debug.apk
+          name: monetra-native-dependency-audit
+          path: apps/android/npm-audit-report.json
+          retention-days: 14
+
+      - name: Validate Expo SDK dependency compatibility
+        run: npx expo install --check
+
+      - name: Verify Monetra launcher icon
+        run: test -s assets/icon.png
+
+      - name: Type-check native app
+        run: npx tsc --noEmit
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Assemble standalone release APK (bundled JavaScript, no dev launcher)
+        working-directory: apps/android/android
+        env:
+          EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_MONETRA_API_URL: https://monetra-4rax.vercel.app
+          EXPO_PUBLIC_FISCUS_FUNCTION_URL: ${{ secrets.EXPO_PUBLIC_FISCUS_FUNCTION_URL }}
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Upload standalone APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: monetra-native-android-standalone-apk
+          path: apps/android/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Install and launch APK on Android emulator
+        timeout-minutes: 15
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            APK="apps/android/android/app/build/outputs/apk/release/app-release.apk"
+            adb wait-for-device
+            adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
+            adb install -r "$APK"
+            adb shell monkey -p com.flickscient.monetra 1
+            sleep 25
+            if ! adb shell pidof com.flickscient.monetra >/dev/null; then
+              echo "::error::Monetra process exited after launch. Recent Android crash log:"
+              adb logcat -d -t 5000 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|Fatal signal|libc|monetra|clerk|ReactNativeJS' | tail -n 250 || true
+              exit 1
+            fi
+            echo "Monetra remained running for 25 seconds after a cold launch."
+            adb logcat -d -t 3000 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|Fatal signal|ReactNativeJS' | tail -n 100 || true
+
+      - name: Upload standalone APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: monetra-native-android-standalone-apk
+          path: apps/android/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14

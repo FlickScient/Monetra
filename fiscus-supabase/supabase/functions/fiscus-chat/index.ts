@@ -17,10 +17,14 @@ const clerkJwks = await (async () => {
 
 type IncomingMessage = { role: "user" | "model"; content: string };
 type RequestBody = {
-  action?: "chat" | "restore" | "clear" | "history" | "new" | "select" | "delete";
+  action?: "chat" | "restore" | "clear" | "history" | "new" | "select" | "delete" | "preferences" | "memory-list" | "memory-add" | "memory-delete";
   conversationId?: string;
   workspaceId?: string;
   messages?: unknown;
+  memoryEnabled?: unknown;
+  memoryType?: unknown;
+  memoryContent?: unknown;
+  memoryId?: unknown;
 };
 
 const encoder = new TextEncoder();
@@ -216,7 +220,7 @@ const handleAuthenticatedRequest = clerkJwks
   }
 
   const action = body.action ?? "chat";
-  if (!["chat", "restore", "clear", "history", "new", "select", "delete"].includes(action)) {
+  if (!["chat", "restore", "clear", "history", "new", "select", "delete", "preferences", "memory-list", "memory-add", "memory-delete"].includes(action)) {
     return json({ error: "Unsupported action." }, 400);
   }
 
@@ -269,6 +273,84 @@ const handleAuthenticatedRequest = clerkJwks
     if (grantError) {
       console.error("FISCUS_WORKSPACE_GRANT_FAILED");
       return json({ error: "Workspace authorization could not be established.", code: "WORKSPACE_AUTH_ERROR" }, 503);
+    }
+
+    if (action === "preferences") {
+      if (typeof body.memoryEnabled === "boolean") {
+        const { data, error: preferenceError } = await userDb
+          .from("user_preferences")
+          .upsert({
+            clerk_user_id: clerkUserId,
+            workspace_id: workspaceId,
+            memory_enabled: body.memoryEnabled,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "clerk_user_id,workspace_id" })
+          .select("memory_enabled,locale,currency,response_style")
+          .single();
+        if (preferenceError || !data) throw new Error("preference_update_failed");
+        return json({ preferences: data });
+      }
+      const { data, error: preferenceError } = await userDb
+        .from("user_preferences")
+        .select("memory_enabled,locale,currency,response_style")
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (preferenceError) throw new Error("preference_read_failed");
+      return json({ preferences: data ?? { memory_enabled: false, locale: "en", currency: "BDT", response_style: "balanced" } });
+    }
+
+    if (action === "memory-list") {
+      const { data, error: memoryError } = await userDb
+        .from("user_memories")
+        .select("id,memory_type,content,created_at,updated_at,expires_at")
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId)
+        .eq("user_approved", true)
+        .order("updated_at", { ascending: false })
+        .limit(50);
+      if (memoryError) throw new Error("memory_list_failed");
+      return json({ memories: data ?? [] });
+    }
+
+    if (action === "memory-add") {
+      if (
+        typeof body.memoryType !== "string" ||
+        !["preference", "goal", "context"].includes(body.memoryType) ||
+        typeof body.memoryContent !== "string" ||
+        !body.memoryContent.trim() ||
+        body.memoryContent.trim().length > 1200
+      ) {
+        return json({ error: "Provide a memory type and 1–1200 characters of content.", code: "INVALID_MEMORY" }, 400);
+      }
+      const { data, error: memoryError } = await userDb
+        .from("user_memories")
+        .insert({
+          clerk_user_id: clerkUserId,
+          workspace_id: workspaceId,
+          memory_type: body.memoryType,
+          content: body.memoryContent.trim(),
+          user_approved: true,
+          source: "user",
+        })
+        .select("id,memory_type,content,created_at,updated_at,expires_at")
+        .single();
+      if (memoryError || !data) throw new Error("memory_create_failed");
+      return json({ memory: data });
+    }
+
+    if (action === "memory-delete") {
+      if (typeof body.memoryId !== "string" || !isUuid(body.memoryId)) {
+        return json({ error: "Choose a valid memory.", code: "INVALID_MEMORY_ID" }, 400);
+      }
+      const { error: memoryError } = await userDb
+        .from("user_memories")
+        .delete()
+        .eq("id", body.memoryId)
+        .eq("clerk_user_id", clerkUserId)
+        .eq("workspace_id", workspaceId);
+      if (memoryError) throw new Error("memory_delete_failed");
+      return json({ deleted: true });
     }
 
     if (action === "history") {
