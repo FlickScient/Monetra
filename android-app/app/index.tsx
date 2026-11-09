@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { apiRequest, Workspace } from '@/src/lib/api';
 import { queueOperation, readPendingOperations, readSnapshot, readWorkspaceIndex, removePendingOperation, writeSnapshot, writeWorkspaceIndex } from '@/src/lib/offline';
 import { theme } from '@/src/theme';
+import { FiscusChat } from '@/src/components/FiscusChat';
 
 type Wallet = { id: string; name: string; walletType: string; currency: string; currentBalanceMinor: number; status: string; creditLimitMinor?: number; notes?: string | null };
 type Category = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
@@ -155,7 +156,7 @@ export default function HomeScreen() {
     selectedWorkspaceId.current = chosen?.id ?? null;
     setSelected(chosen);
     return chosen;
-  }, [getToken]);
+  }, [getSessionToken]);
 
   const loadWorkspace = useCallback(async (workspace: Workspace, silent = false) => {
     if (!silent) setSyncing(true);
@@ -209,7 +210,7 @@ export default function HomeScreen() {
       setSyncing(false);
       setRefreshing(false);
     }
-  }, [getToken]);
+  }, [getSessionToken]);
 
   const initialize = useCallback(async () => {
     setLoading(true);
@@ -523,12 +524,7 @@ export default function HomeScreen() {
           <Panel><Text style={styles.itemTitle}>Recurring transactions</Text>{(data?.recurringTransactions??[]).map((row:any)=><RowItem key={row.id} title={row.description} subtitle={row.frequency+' · '+row.nextRun} amount={money(row.amountMinor)}/>)}{!data?.recurringTransactions?.length&&<Text style={styles.muted}>No recurring items in this workspace snapshot.</Text>}</Panel>
           <Panel><Text style={styles.itemTitle}>Wallet reconciliations</Text><Text style={styles.muted}>{data?.walletReconciliations?.length??0} reconciliation record(s) synced.</Text></Panel>
         </>}
-        {active === 'fiscus' && <>
-          <SectionTitle title="Fiscus A.I." subtitle="Your financial intelligence companion"/>
-          <Panel style={styles.hero}><Text style={styles.heroLabel}>WORKSPACE CONTEXT</Text><Text style={styles.heroValue}>{money(assets-liabilities)}</Text><Text style={styles.heroHint}>Net worth · {transactions.length} transactions loaded</Text></Panel>
-          <Panel><Text style={styles.itemTitle}>Current financial picture</Text><Text style={styles.muted}>Monthly income: {money(income)}. Monthly expenses: {money(expense)}. Open receivables: {money(debts.filter(d=>d.direction==='receivable').reduce((s,d)=>s+d.outstandingMinor,0))}. Open payables: {money(debts.filter(d=>d.direction==='payable').reduce((s,d)=>s+d.outstandingMinor,0))}.</Text></Panel>
-          <Panel><Text style={styles.itemTitle}>AI chat</Text><Text style={styles.muted}>The native chat interface and secure AI conversation history are not wired yet. This screen is showing verified workspace context only—not pretending to generate AI advice.</Text></Panel>
-        </>}
+        {active === 'fiscus' && selected && <FiscusChat workspaceId={selected.id} getToken={getSessionToken}/ >}
         {active === 'settings' && <>
           <SectionTitle title="Settings" subtitle="Account, device storage and synchronization"/>
           <Panel><Text style={styles.itemTitle}>Signed in</Text><Text style={styles.muted}>{user?.primaryEmailAddress?.emailAddress??'Monetra account'}</Text></Panel>
