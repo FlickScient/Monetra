@@ -106,6 +106,7 @@ export default function HomeScreen() {
   const [walletCreditLimit, setWalletCreditLimit] = useState('0');
   const [walletNotes, setWalletNotes] = useState('');
   const [debtModal, setDebtModal] = useState(false);
+  const [editingDebtId, setEditingDebtId] = useState<string | null>(null);
   const [debtDirection, setDebtDirection] = useState<'receivable' | 'payable'>('payable');
   const [debtName, setDebtName] = useState('');
   const [debtAmount, setDebtAmount] = useState('');
@@ -115,6 +116,7 @@ export default function HomeScreen() {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
   const [goalModal, setGoalModal] = useState(false);
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   const [goalName, setGoalName] = useState('');
   const [goalTarget, setGoalTarget] = useState('');
   const [goalTargetDate, setGoalTargetDate] = useState('');
@@ -440,6 +442,41 @@ export default function HomeScreen() {
     ]);
   }
 
+  function openDebtEditor(debt: Debt) {
+    setEditingDebtId(debt.id); setDebtDirection(debt.direction); setDebtName(debt.counterpartyName);
+    setDebtAmount((Number(debt.principalMinor)/100).toFixed(2)); setDebtDueDate(debt.dueDate ?? '');
+    setDebtNote(debt.note ?? ''); setDebtModal(true);
+  }
+
+  function archiveDebt(debt: Debt) {
+    Alert.alert('Archive Due & Debt record?', 'This hides the record from active lists while preserving its payment history.', [
+      {text:'Cancel',style:'cancel'},
+      {text:'Archive',style:'destructive',onPress:()=>{void (async()=>{
+        try { const token=await getSessionToken(); if(!token||!selected)throw new Error('Archiving this record requires an internet connection.');
+          await apiRequest(`/api/due-debt/${debt.id}`,token,{method:'DELETE',workspaceId:selected.id});
+          await loadWorkspace(selected,true); setNotice('Due & Debt record archived.');
+        } catch(error) {setNotice(error instanceof Error?error.message:'Could not archive record.');}
+      })();}},
+    ]);
+  }
+
+  function openGoalEditor(goal: Goal) {
+    setEditingGoalId(goal.id); setGoalName(goal.name); setGoalTarget((Number(goal.targetMinor)/100).toFixed(2));
+    setGoalTargetDate(goal.targetDate ?? ''); setGoalModal(true);
+  }
+
+  function archiveGoal(goal: Goal) {
+    Alert.alert('Archive savings goal?', 'Money allocated to this goal will be released back to its wallets. The history is preserved.', [
+      {text:'Cancel',style:'cancel'},
+      {text:'Archive',style:'destructive',onPress:()=>{void (async()=>{
+        try { const token=await getSessionToken(); if(!token||!selected)throw new Error('Archiving a savings goal requires an internet connection.');
+          await apiRequest(`/api/goals/${goal.id}`,token,{method:'DELETE',workspaceId:selected.id});
+          await loadWorkspace(selected,true); setNotice('Savings goal archived and its allocations released.');
+        } catch(error) {setNotice(error instanceof Error?error.message:'Could not archive savings goal.');}
+      })();}},
+    ]);
+  }
+
   async function saveDebt() {
     if (!selected || !debtName.trim() || !Number.isFinite(Number(debtAmount)) || Number(debtAmount) <= 0) { setNotice('Enter a name and a valid principal amount.'); return; }
     if (debtDueDate && !/^\\d{4}-\\d{2}-\\d{2}$/.test(debtDueDate)) { setNotice('Due date must use YYYY-MM-DD format.'); return; }
@@ -447,9 +484,9 @@ export default function HomeScreen() {
     try {
       const token = await getSessionToken();
       if (!token) throw new Error('Creating Due & Debt records requires an internet connection.');
-      await apiRequest('/api/due-debt', token, { method:'POST', workspaceId:selected.id, body:{direction:debtDirection,counterpartyName:debtName.trim(),principalMinor:Math.round(Number(debtAmount)*100),currency:'BDT',dueDate:debtDueDate||null,note:debtNote||null} });
+      await apiRequest(editingDebtId ? `/api/due-debt/${editingDebtId}` : '/api/due-debt', token, { method:editingDebtId?'PATCH':'POST', workspaceId:selected.id, body:{direction:debtDirection,counterpartyName:debtName.trim(),principalMinor:Math.round(Number(debtAmount)*100),currency:'BDT',dueDate:debtDueDate||null,note:debtNote||null} });
       await loadWorkspace(selected,true);
-      setDebtModal(false); setDebtName(''); setDebtAmount(''); setDebtDueDate(''); setDebtNote(''); setNotice('Due & Debt record created.');
+      setDebtModal(false); setEditingDebtId(null); setDebtName(''); setDebtAmount(''); setDebtDueDate(''); setDebtNote(''); setNotice(editingDebtId?'Due & Debt record updated.':'Due & Debt record created.');
     } catch(error) { setNotice(error instanceof Error ? error.message : 'Could not create record.'); }
     finally { setSaving(false); }
   }
@@ -474,9 +511,9 @@ export default function HomeScreen() {
     try {
       const token = await getSessionToken();
       if (!token) throw new Error('Creating savings goals requires an internet connection.');
-      await apiRequest('/api/goals',token,{method:'POST',workspaceId:selected.id,body:{name:goalName.trim(),targetMinor:Math.round(Number(goalTarget)*100),currency:'BDT',targetDate:goalTargetDate||null}});
+      await apiRequest(editingGoalId ? `/api/goals/${editingGoalId}` : '/api/goals',token,{method:editingGoalId?'PATCH':'POST',workspaceId:selected.id,body:{name:goalName.trim(),targetMinor:Math.round(Number(goalTarget)*100),currency:'BDT',targetDate:goalTargetDate||null}});
       await loadWorkspace(selected,true);
-      setGoalModal(false); setGoalName(''); setGoalTarget(''); setGoalTargetDate(''); setNotice('Savings goal created.');
+      setGoalModal(false); setEditingGoalId(null); setGoalName(''); setGoalTarget(''); setGoalTargetDate(''); setNotice(editingGoalId?'Savings goal updated.':'Savings goal created.');
     } catch(error) { setNotice(error instanceof Error ? error.message : 'Could not create savings goal.'); }
     finally { setSaving(false); }
   }
@@ -597,20 +634,26 @@ export default function HomeScreen() {
         {active === 'debts' && <>
           <SectionTitle title="Due & Debt" subtitle="Receivables and payables · separate from wallet assets" action={<Pressable style={styles.smallButton} onPress={() => setDebtModal(true)}><Text style={styles.smallButtonText}>+ Add record</Text></Pressable>}/>
           <View style={styles.metricGrid}><Panel style={styles.metric}><Text style={styles.metricLabel}>TO RECEIVE</Text><Text style={styles.metricValue}>{money(debts.filter(d=>d.direction==='receivable').reduce((s,d)=>s+d.outstandingMinor,0))}</Text></Panel><Panel style={styles.metric}><Text style={styles.metricLabel}>TO PAY</Text><Text style={styles.metricValue}>{money(debts.filter(d=>d.direction==='payable').reduce((s,d)=>s+d.outstandingMinor,0))}</Text></Panel></View>
-          {debts.map(debt=><Panel key={debt.id}>
+          {debts.filter(debt=>debt.status!=='archived').map(debt=><Panel key={debt.id}>
             <RowItem title={debt.counterpartyName} subtitle={(debt.direction==='receivable'?'They owe you':'You owe')+' · Due '+(debt.dueDate||'not set')} amount={money(debt.outstandingMinor)} positive={debt.direction==='receivable'}/>
             <Text style={styles.muted}>Principal {money(debt.principalMinor)} · Paid {money(Number(debt.principalMinor)-Number(debt.outstandingMinor))}</Text>
-            {debt.outstandingMinor>0 ? <Pressable style={[styles.smallButton,{alignSelf:'flex-start',marginTop:8}]} onPress={()=>{setPaymentDebtId(debt.id);setPaymentAmount((debt.outstandingMinor/100).toFixed(2));setPaymentNote('');}}><Text style={styles.smallButtonText}>Record payment</Text></Pressable> : <Text style={styles.muted}>Settled</Text>}
+            <View style={{flexDirection:'row',gap:8,marginTop:8}}>
+              {debt.outstandingMinor>0 ? <Pressable style={styles.smallButton} onPress={()=>{setPaymentDebtId(debt.id);setPaymentAmount((debt.outstandingMinor/100).toFixed(2));setPaymentNote('');}}><Text style={styles.smallButtonText}>Record payment</Text></Pressable> : null}
+              <Pressable style={styles.secondaryButton} onPress={()=>openDebtEditor(debt)}><Text style={styles.secondaryButtonText}>Edit</Text></Pressable>
+              <Pressable style={styles.secondaryButton} onPress={()=>archiveDebt(debt)}><Text style={styles.secondaryButtonText}>Archive</Text></Pressable>
+            </View>
           </Panel>)}
           {!debts.length&&<Empty title="No due or debt records" detail="Create a receivable or payable to track outstanding principal and partial payments."/>}
         </>}
         {active === 'savings' && <>
           <SectionTitle title="Savings Goals" subtitle="Targets and wallet allocations" action={<Pressable style={styles.smallButton} onPress={() => setGoalModal(true)}><Text style={styles.smallButtonText}>+ New goal</Text></Pressable>}/>
-          {goals.map(goal=>{const saved=goal.allocations.reduce((s,a)=>s+Number(a.amountMinor),0);const percent=goal.targetMinor>0?Math.min(100,saved/goal.targetMinor*100):0;return <Panel key={goal.id}><Text style={styles.itemTitle}>{goal.name}</Text><Text style={styles.panelBig}>{money(saved)} <Text style={styles.muted}>/ {money(goal.targetMinor)}</Text></Text><View style={styles.progress}><View style={[styles.progressFill,{width:`${percent}%`}]}/></View><Text style={styles.muted}>{Math.round(percent)}% funded · {goal.targetDate?'Target '+goal.targetDate:'No target date'}</Text>
+          {goals.filter(goal=>goal.status!=='archived').map(goal=>{const saved=goal.allocations.reduce((sum,a)=>sum+Number(a.amountMinor),0);const percent=goal.targetMinor>0?Math.min(100,saved/goal.targetMinor*100):0;return <Panel key={goal.id}><Text style={styles.itemTitle}>{goal.name}</Text><Text style={styles.panelBig}>{money(saved)} <Text style={styles.muted}>/ {money(goal.targetMinor)}</Text></Text><View style={styles.progress}><View style={[styles.progressFill,{width:`${percent}%`}]}/></View><Text style={styles.muted}>{Math.round(percent)}% funded · {goal.targetDate?'Target '+goal.targetDate:'No target date'}</Text>
             {goal.allocations.map(allocation=>{const wallet=wallets.find(w=>w.id===allocation.walletId);return <RowItem key={allocation.id} title={wallet?.name??'Wallet'} subtitle="Allocated" amount={money(allocation.amountMinor)}/>;})}
             <View style={{flexDirection:'row',gap:8,marginTop:8}}>
               <Pressable style={styles.smallButton} onPress={()=>{setAllocationGoalId(goal.id);setAllocationAction('allocate');setAllocationWalletId('');setAllocationAmount('');}}><Text style={styles.smallButtonText}>Allocate</Text></Pressable>
               <Pressable style={styles.secondaryButton} onPress={()=>{setAllocationGoalId(goal.id);setAllocationAction('release');setAllocationWalletId('');setAllocationAmount('');}}><Text style={styles.secondaryButtonText}>Release</Text></Pressable>
+              <Pressable style={styles.secondaryButton} onPress={()=>openGoalEditor(goal)}><Text style={styles.secondaryButtonText}>Edit</Text></Pressable>
+              <Pressable style={styles.secondaryButton} onPress={()=>archiveGoal(goal)}><Text style={styles.secondaryButtonText}>Archive</Text></Pressable>
             </View>
           </Panel>;})}
           {!goals.length&&<Empty title="No savings goals yet" detail="Create your first goal to track money set aside across wallets."/>}
@@ -685,13 +728,13 @@ export default function HomeScreen() {
       </Modal>
       <Modal visible={debtModal} transparent animationType="slide" onRequestClose={() => setDebtModal(false)}>
         <View style={styles.modalBackdrop}><View style={styles.modalCard}>
-          <View style={styles.modalHeader}><Text style={styles.modalTitle}>New Due & Debt record</Text><Pressable onPress={()=>setDebtModal(false)}><Text style={styles.close}>✕</Text></Pressable></View>
+          <View style={styles.modalHeader}><Text style={styles.modalTitle}>{editingDebtId?'Edit Due & Debt record':'New Due & Debt record'}</Text><Pressable onPress={()=>{setDebtModal(false);setEditingDebtId(null);}}><Text style={styles.close}>✕</Text></Pressable></View>
           <View style={styles.typeSwitch}><Pressable onPress={()=>setDebtDirection('payable')} style={[styles.typeButton,debtDirection==='payable'&&styles.typeActive]}><Text style={[styles.typeText,debtDirection==='payable'&&styles.typeTextActive]}>I owe</Text></Pressable><Pressable onPress={()=>setDebtDirection('receivable')} style={[styles.typeButton,debtDirection==='receivable'&&styles.typeActive]}><Text style={[styles.typeText,debtDirection==='receivable'&&styles.typeTextActive]}>Owed to me</Text></Pressable></View>
           <Text style={styles.fieldLabel}>PERSON / ORGANIZATION</Text><TextInput value={debtName} onChangeText={setDebtName} placeholder="Name" placeholderTextColor={theme.colors.muted} style={styles.input}/>
           <Text style={styles.fieldLabel}>PRINCIPAL (৳)</Text><TextInput keyboardType="decimal-pad" value={debtAmount} onChangeText={setDebtAmount} placeholder="0.00" placeholderTextColor={theme.colors.muted} style={styles.input}/>
           <Text style={styles.fieldLabel}>DUE DATE (YYYY-MM-DD, OPTIONAL)</Text><TextInput value={debtDueDate} onChangeText={setDebtDueDate} placeholder="2026-12-31" placeholderTextColor={theme.colors.muted} style={styles.input}/>
           <Text style={styles.fieldLabel}>NOTE (OPTIONAL)</Text><TextInput value={debtNote} onChangeText={setDebtNote} placeholder="Details" placeholderTextColor={theme.colors.muted} style={styles.input}/>
-          <Pressable disabled={saving} onPress={()=>void saveDebt()} style={[styles.primaryButton,{marginTop:16}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':'Create record'}</Text></Pressable>
+          <Pressable disabled={saving} onPress={()=>void saveDebt()} style={[styles.primaryButton,{marginTop:16}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':editingDebtId?'Update record':'Create record'}</Text></Pressable>
         </View></View>
       </Modal>
       <Modal visible={!!paymentDebtId} transparent animationType="slide" onRequestClose={()=>setPaymentDebtId(null)}>
@@ -704,11 +747,11 @@ export default function HomeScreen() {
       </Modal>
       <Modal visible={goalModal} transparent animationType="slide" onRequestClose={()=>setGoalModal(false)}>
         <View style={styles.modalBackdrop}><View style={styles.modalCard}>
-          <View style={styles.modalHeader}><Text style={styles.modalTitle}>New savings goal</Text><Pressable onPress={()=>setGoalModal(false)}><Text style={styles.close}>✕</Text></Pressable></View>
+          <View style={styles.modalHeader}><Text style={styles.modalTitle}>{editingGoalId?'Edit savings goal':'New savings goal'}</Text><Pressable onPress={()=>{setGoalModal(false);setEditingGoalId(null);}}><Text style={styles.close}>✕</Text></Pressable></View>
           <Text style={styles.fieldLabel}>GOAL NAME</Text><TextInput value={goalName} onChangeText={setGoalName} placeholder="e.g. Emergency fund" placeholderTextColor={theme.colors.muted} style={styles.input}/>
           <Text style={styles.fieldLabel}>TARGET AMOUNT (৳)</Text><TextInput keyboardType="decimal-pad" value={goalTarget} onChangeText={setGoalTarget} placeholder="0.00" placeholderTextColor={theme.colors.muted} style={styles.input}/>
           <Text style={styles.fieldLabel}>TARGET DATE (YYYY-MM-DD, OPTIONAL)</Text><TextInput value={goalTargetDate} onChangeText={setGoalTargetDate} placeholder="2027-06-30" placeholderTextColor={theme.colors.muted} style={styles.input}/>
-          <Pressable disabled={saving} onPress={()=>void saveGoal()} style={[styles.primaryButton,{marginTop:16}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':'Create goal'}</Text></Pressable>
+          <Pressable disabled={saving} onPress={()=>void saveGoal()} style={[styles.primaryButton,{marginTop:16}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':editingGoalId?'Update goal':'Create goal'}</Text></Pressable>
         </View></View>
       </Modal>
       <Modal visible={!!allocationGoalId} transparent animationType="slide" onRequestClose={()=>setAllocationGoalId(null)}>
