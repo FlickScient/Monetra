@@ -125,9 +125,14 @@ export default function HomeScreen() {
   const data = snapshot?.data ?? {};
   const wallets = data.wallets ?? [];
   const transactions = [...(data.transactions ?? [])].filter((x) => !x.voidedAt).sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
-  const income = transactions.filter((x) => x.transactionType === "income").reduce((sum, x) => sum + Number(x.amountMinor || 0), 0);
-  const expense = transactions.filter((x) => x.transactionType === "expense").reduce((sum, x) => sum + Number(x.amountMinor || 0), 0);
-  const balance = wallets.filter((x) => x.status === "active").reduce((sum, x) => sum + Number(x.currentBalanceMinor || 0), 0);
+  const monthKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka", year: "numeric", month: "2-digit" }).format(new Date());
+  const inThisMonth = (value: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka", year: "numeric", month: "2-digit" }).format(new Date(value)) === monthKey;
+  const monthlyTransactions = transactions.filter((x) => inThisMonth(x.occurredAt));
+  const income = monthlyTransactions.filter((x) => x.transactionType === "income").reduce((sum, x) => sum + Number(x.amountMinor || 0), 0);
+  const expense = monthlyTransactions.filter((x) => x.transactionType === "expense").reduce((sum, x) => sum + Number(x.amountMinor || 0), 0);
+  const totalAssets = wallets.filter((w) => w.status === "active" && w.walletType !== "credit_card").reduce((sum, w) => sum + Number(w.currentBalanceMinor || 0), 0);
+  const totalLiabilities = wallets.filter((w) => w.status === "active" && w.walletType === "credit_card").reduce((sum, w) => sum + Number(w.currentBalanceMinor || 0), 0);
+  const netWorth = totalAssets - totalLiabilities;
   const active = workspaces.find((w) => w.id === workspaceId);
   const debts = data.dueDebts ?? [];
   const payments = data.dueDebtPayments ?? [];
@@ -266,8 +271,10 @@ export default function HomeScreen() {
           <Text style={s.heading}>Good to see you{user?.firstName ? ", " + user.firstName : ""}.</Text>
           <Text style={s.subheading}>{active?.name ?? "Workspace"} · {new Date().toLocaleDateString("en-BD", { month: "long", year: "numeric" })}</Text>
           <View style={s.balance}>
-            <Text style={s.balanceLabel}>TOTAL WALLET BALANCE</Text><Text style={s.balanceValue}>{money(balance)}</Text>
-            <View style={s.balanceFoot}><Text style={s.balanceFootText}>{wallets.length} active wallets</Text><Text style={s.balanceFootText}>LIVE LEDGER</Text></View>
+            <Text style={s.balanceLabel}>TOTAL NET WORTH</Text><Text style={s.balanceValue}>{money(netWorth)}</Text>
+            <Text style={s.balanceCaption}>What you own, minus what you owe.</Text>
+            <View style={s.balanceDivider} />
+            <View style={s.balanceFoot}><View><Text style={s.balanceFootText}>TOTAL ASSETS</Text><Text style={s.balanceBreakdown}>{money(totalAssets)}</Text></View><View><Text style={s.balanceFootText}>LIABILITIES</Text><Text style={s.balanceBreakdown}>{money(totalLiabilities)}</Text></View></View>
           </View>
           <View style={s.stats}>
             <View style={s.stat}><Text style={s.statLabel}>INCOME</Text><Text style={[s.statValue, { color: P.green }]}>{money(income)}</Text></View>
