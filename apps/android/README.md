@@ -28,7 +28,7 @@ Clerk's native components require a development/native build; Expo Go is not sup
 - SQLCipher encrypts the local SQLite database. A random 256-bit database key is stored through Android secure storage backed by Android Keystore; the app refuses to open an unencrypted SQLite build.
 - SQLite caches a per-user, per-workspace bootstrap snapshot and sync cursor.
 - Cached workspaces are isolated by Clerk user ID and workspace ID.
-- On reconnect, pending operations are pushed with their original operation IDs, then the incremental change feed is pulled.
+- On network reconnect and app resume, pending operations are pushed with their original operation IDs, then the incremental change feed is pulled. Concurrent sync requests for the same user/workspace are serialized.
 - The current backend push endpoint supports transaction creation, transfers, and debt payments only. Other mutation types must not be queued until matching validated server handlers exist.
 - Fiscus conversations are cached locally; its AI response generation still requires internet. Approved memory settings and records are managed through the existing workspace-scoped Fiscus backend. The new memory actions in this branch must be deployed to the Fiscus Edge Function before the native memory panel is live.
 
