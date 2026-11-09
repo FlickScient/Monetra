@@ -98,13 +98,21 @@ export async function syncWorkspace(userId: string, workspaceId: string, token: 
       const snapshot = JSON.parse(current.snapshot_json) as Record<string, any>;
       const data = snapshot.data as Record<string, unknown[]>;
 
+      const snapshotKeys: Record<string, string> = {
+        ledger_accounts: "ledgerAccounts", ledger_entries: "ledgerEntries",
+        savings_goals: "savingsGoals", goal_allocations: "goalAllocations",
+        goal_allocation_events: "goalAllocationEvents", due_debts: "dueDebts",
+        due_debt_payments: "dueDebtPayments", monthly_budgets: "monthlyBudgets",
+        recurring_transactions: "recurringTransactions", wallet_reconciliations: "walletReconciliations",
+        finance_audit_events: "financeAuditEvents"
+      };
       for (const change of (page.changes ?? []) as Array<{ entityType: string; entityId: string; operation: "upsert" | "delete"; payload: Record<string, unknown> | null }>) {
-        const table = change.entityType;
-        if (!Array.isArray(data[table])) continue;
-        const rows = data[table] as Array<Record<string, unknown>>;
+        const key = snapshotKeys[change.entityType] ?? change.entityType;
+        if (!Array.isArray(data[key])) continue;
+        const rows = data[key] as Array<Record<string, unknown>>;
         const next = rows.filter((row) => row.id !== change.entityId);
         if (change.operation === "upsert" && change.payload) next.push(change.payload);
-        data[table] = next;
+        data[key] = next;
       }
 
       const nextCursor = String(page.nextCursor ?? cursor);
