@@ -63,9 +63,14 @@ export function FiscusPanel({ workspaceId, userId, getToken }: {
         const restored = await call("restore");
         if (!alive) return;
         if (Array.isArray(restored.messages)) {
-          setMessages(restored.messages.slice(-40));
+          const restoredMessages = restored.messages.slice(-40);
+          setMessages(restoredMessages);
           setConversationId(restored.conversationId ?? null);
-          await saveFiscusCache(userId, workspaceId, restored.messages.slice(-40));
+          await saveFiscusCache(userId, workspaceId, restoredMessages);
+        } else if (restored.hasConversation === false) {
+          setMessages([]);
+          setConversationId(null);
+          await saveFiscusCache(userId, workspaceId, []);
         }
         await loadMemories();
         await loadHistory();
@@ -151,7 +156,7 @@ export function FiscusPanel({ workspaceId, userId, getToken }: {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={st.root}>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={st.root}>
       <View style={st.topRow}>
         <View><Text style={st.title}>Fiscus</Text><Text style={st.subtitle}>Your financial intelligence</Text></View>
         <View style={st.actions}>
