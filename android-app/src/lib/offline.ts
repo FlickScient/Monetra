@@ -1,9 +1,25 @@
 import * as SQLite from 'expo-sqlite';
+import * as SecureStore from 'expo-secure-store';
+import { getRandomBytesAsync } from 'expo-crypto';
 
 let database: Promise<SQLite.SQLiteDatabase> | null = null;
 
 async function getDatabase() {
-  if (!database) database = SQLite.openDatabaseAsync('monetra-offline.db');
+  if (!database) {
+    database = (async () => {
+      let key = await SecureStore.getItemAsync('monetra.offline.sqlcipher-key');
+      if (!key) {
+        const bytes = await getRandomBytesAsync(32);
+        key = Array.from(bytes).map(value => value.toString(16).padStart(2, '0')).join('');
+        await SecureStore.setItemAsync('monetra.offline.sqlcipher-key', key);
+      }
+      const connection = await SQLite.openDatabaseAsync('monetra-offline.db');
+      const cipher = await connection.getFirstAsync<{ cipher_version: string }>('PRAGMA cipher_version');
+      if (!cipher?.cipher_version) throw new Error('Encrypted offline storage is unavailable in this build. Finance data will not be cached.');
+      await connection.execAsync("PRAGMA key = 'monetra-" + key + "';");
+      return connection;
+    })();
+  }
   const db = await database;
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
