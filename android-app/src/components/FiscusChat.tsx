@@ -92,7 +92,7 @@ export function FiscusChat({ workspaceId, getToken }: { workspaceId: string; get
     try {
       const data = await invokeFiscus(getToken, workspaceId, 'chat', { messages: next.slice(-12) });
       if (typeof data.answer !== 'string' || !data.answer.trim()) throw new Error('Fiscus returned an empty answer.');
-      setMessages(current => [...current, { role: 'model', content: data.answer }].slice(-40));
+      setMessages(current => [...current, { role: 'model' as const, content: data.answer as string }].slice(-40));
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : 'Fiscus could not answer. Please try again.');
     } finally {

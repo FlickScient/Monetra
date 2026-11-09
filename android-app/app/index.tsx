@@ -135,7 +135,7 @@ export default function HomeScreen() {
     } finally {
       if (timer) clearTimeout(timer);
     }
-  }, [getSessionToken]);
+  }, [getToken]);
 
   useEffect(() => {
     if (isAuthLoaded && isUserLoaded) {
