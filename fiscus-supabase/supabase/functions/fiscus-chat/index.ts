@@ -276,10 +276,7 @@ const handleAuthenticatedRequest = clerkJwks
     }
 
     if (action === "preferences") {
-      if (request.method === "POST") {
-        if (typeof body.memoryEnabled !== "boolean") {
-          return json({ error: "memoryEnabled must be a boolean.", code: "INVALID_PREFERENCE" }, 400);
-        }
+      if (typeof body.memoryEnabled === "boolean") {
         const { data, error: preferenceError } = await userDb
           .from("user_preferences")
           .upsert({
