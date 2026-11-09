@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet,
   Text, TextInput, View,
@@ -6,7 +6,7 @@ import {
 import { useAuth, useClerk, useUser } from '@clerk/expo';
 import { useRouter } from 'expo-router';
 import { apiRequest, Workspace } from '@/src/lib/api';
-import { queueOperation, readPendingOperations, readSnapshot, removePendingOperation, writeSnapshot } from '@/src/lib/offline';
+import { queueOperation, readPendingOperations, readSnapshot, readWorkspaceIndex, removePendingOperation, writeSnapshot, writeWorkspaceIndex } from '@/src/lib/offline';
 import { theme } from '@/src/theme';
 
 type Wallet = { id: string; name: string; walletType: string; currency: string; currentBalanceMinor: number; status: string; creditLimitMinor?: number };
@@ -51,10 +51,10 @@ const dateLabel = (value: string) => {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('en-BD', { timeZone: 'Asia/Dhaka', day: '2-digit', month: 'short', year: 'numeric' });
 };
 
-function Panel({ children, style }: { children: React.ReactNode; style?: object }) {
+function Panel({ children, style }: { children: ReactNode; style?: object }) {
   return <View style={[styles.panel, style]}>{children}</View>;
 }
-function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
+function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return <View style={styles.sectionHead}><View style={{ flex: 1 }}><Text style={styles.sectionTitle}>{title}</Text>{subtitle ? <Text style={styles.sectionSub}>{subtitle}</Text> : null}</View>{action}</View>;
 }
 function Empty({ title, detail }: { title: string; detail: string }) {
@@ -89,7 +89,16 @@ export default function HomeScreen() {
   const loadWorkspaceList = useCallback(async () => {
     const token = await getToken();
     if (!token) throw new Error('Your sign-in session has expired.');
-    const rows = await apiRequest<Workspace[]>('/api/workspaces', token);
+    let rows: Workspace[];
+    try {
+      rows = await apiRequest<Workspace[]>('/api/workspaces', token);
+      await writeWorkspaceIndex(rows);
+      setOffline(false);
+    } catch (error) {
+      rows = await readWorkspaceIndex<Workspace>();
+      if (!rows.length) throw error;
+      setOffline(true);
+    }
     setWorkspaces(rows);
     const chosen = rows.find(row => row.id === selected?.id) ?? rows.find(row => row.type === 'personal') ?? rows[0] ?? null;
     setSelected(chosen);
@@ -166,7 +175,6 @@ export default function HomeScreen() {
   const thisMonth = transactions.filter(t => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit' }).format(new Date(t.occurredAt)).slice(0,7) === monthKey);
   const income = thisMonth.filter(t => t.transactionType === 'income').reduce((s,t) => s + Number(t.amountMinor), 0);
   const expense = thisMonth.filter(t => t.transactionType === 'expense').reduce((s,t) => s + Number(t.amountMinor), 0);
-  const pendingCount = selected ? 0 : 0;
 
   async function refresh() {
     setRefreshing(true);
@@ -234,7 +242,7 @@ export default function HomeScreen() {
     <View style={styles.root}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.brand}>monetra<span>.</span></Text>
+          <Text style={styles.brand}>monetra.</Text>
           <Text style={styles.headerMeta}>{workspaceLabel.toUpperCase()} WORKSPACE · {currentLabel.toUpperCase()}</Text>
         </View>
         <Pressable onPress={() => void signOut()} style={styles.avatar}><Text style={styles.avatarText}>{(user?.firstName?.[0] ?? 'M').toUpperCase()}</Text></Pressable>
