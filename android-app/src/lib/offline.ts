@@ -21,6 +21,10 @@ async function getDatabase() {
     );
     CREATE INDEX IF NOT EXISTS pending_operations_workspace_idx
       ON pending_operations(workspace_id, created_at);
+    CREATE TABLE IF NOT EXISTS workspace_index (
+      workspace_id TEXT PRIMARY KEY NOT NULL,
+      payload TEXT NOT NULL
+    );
   `);
   return db;
 }
@@ -69,4 +73,20 @@ export async function readPendingOperations(workspaceId: string): Promise<Queued
 export async function removePendingOperation(operationId: string) {
   const db = await getDatabase();
   await db.runAsync('DELETE FROM pending_operations WHERE operation_id = ?', operationId);
+}
+
+export async function writeWorkspaceIndex(workspaces: unknown[]) {
+  const db = await getDatabase();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM workspace_index');
+    for (const workspace of workspaces as { id: string }[]) {
+      await db.runAsync('INSERT OR REPLACE INTO workspace_index (workspace_id, payload) VALUES (?, ?)', workspace.id, JSON.stringify(workspace));
+    }
+  });
+}
+
+export async function readWorkspaceIndex<T>(): Promise<T[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ payload: string }>('SELECT payload FROM workspace_index ORDER BY rowid');
+  return rows.flatMap(row => { try { return [JSON.parse(row.payload) as T]; } catch { return []; } });
 }
