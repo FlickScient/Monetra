@@ -505,7 +505,7 @@ export default function HomeScreen() {
         (Number(tx.amountMinor)/100).toFixed(2),
       ]),
     ];
-    const csv = rows.map(row=>row.map(escapeCell).join(',')).join('\\n');
+    const csv = rows.map(row=>row.map(escapeCell).join(',')).join('\n');
     try { await Share.share({title:`Monetra ${reportMonth} CSV report`,message:csv}); }
     catch(error) { setNotice(error instanceof Error?error.message:'Could not open the share sheet.'); }
   }
@@ -653,7 +653,7 @@ export default function HomeScreen() {
         {active === 'income' && <>
           <SectionTitle title="Income & Expense" subtitle="Monthly cash flow · Bangladesh time"/>
           <Text style={styles.fieldLabel}>REPORT MONTH (YYYY-MM)</Text>
-          <TextInput value={reportMonth} onChangeText={value=>setReportMonth(value.slice(0,7))} maxLength={7} placeholder="2026-11" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <TextInput value={reportMonth} onChangeText={value=>{const digits=value.replace(/\D/g,'').slice(0,6);setReportMonth(digits.length>4?digits.slice(0,4)+'-'+digits.slice(4):digits);}} maxLength={7} placeholder="2026-11" placeholderTextColor={theme.colors.muted} style={styles.input}/>
           <View style={styles.metricGrid}><Panel style={styles.metric}><Text style={styles.metricLabel}>INCOME</Text><Text style={styles.metricValue}>{money(reportIncome)}</Text></Panel><Panel style={styles.metric}><Text style={styles.metricLabel}>EXPENSE</Text><Text style={styles.metricValue}>{money(reportExpense)}</Text></Panel></View>
           <Panel><Text style={styles.metricLabel}>NET CASH FLOW</Text><Text style={[styles.panelBig, reportIncome-reportExpense>=0?styles.positive:styles.negative]}>{money(reportIncome-reportExpense)}</Text><Text style={styles.muted}>Transfers and opening balances are not included. Period: {reportMonth}.</Text></Panel>
           {reportTransactions.filter(tx=>tx.transactionType!=='transfer').slice(0,100).map(tx => <RowItem key={tx.id} title={tx.description} subtitle={dateLabel(tx.occurredAt)} amount={(tx.transactionType==='income'?'+':'−')+money(tx.amountMinor)} positive={tx.transactionType==='income'}/> )}
@@ -662,7 +662,7 @@ export default function HomeScreen() {
         {active === 'reports' && <>
           <SectionTitle title="Reports" subtitle="Monthly summary and category breakdown" action={<Pressable style={styles.smallButton} onPress={()=>void shareReportCsv()}><Text style={styles.smallButtonText}>Share CSV</Text></Pressable>}/>
           <Text style={styles.fieldLabel}>REPORT MONTH (YYYY-MM)</Text>
-          <TextInput value={reportMonth} onChangeText={value=>setReportMonth(value.slice(0,7))} maxLength={7} placeholder="2026-11" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <TextInput value={reportMonth} onChangeText={value=>{const digits=value.replace(/\D/g,'').slice(0,6);setReportMonth(digits.length>4?digits.slice(0,4)+'-'+digits.slice(4):digits);}} maxLength={7} placeholder="2026-11" placeholderTextColor={theme.colors.muted} style={styles.input}/>
           <View style={styles.metricGrid}><Panel style={styles.metric}><Text style={styles.metricLabel}>INCOME</Text><Text style={styles.metricValue}>{money(reportIncome)}</Text></Panel><Panel style={styles.metric}><Text style={styles.metricLabel}>EXPENSE</Text><Text style={styles.metricValue}>{money(reportExpense)}</Text></Panel></View>
           <Panel><Text style={styles.itemTitle}>Spending by category</Text>{categories.filter(c=>c.categoryType==='expense').map(category=>{const total=reportTransactions.filter(t=>t.transactionType==='expense'&&t.categoryId===category.id).reduce((sum,t)=>sum+Number(t.amountMinor),0);return total>0?<View key={category.id} style={styles.reportRow}><Text style={styles.muted}>{category.name}</Text><Text style={styles.itemAmount}>{money(total)}</Text></View>:null;})}</Panel>
           <Text style={styles.muted}>CSV share includes this month’s transaction date, type, description, category, source wallet, destination wallet and amount.</Text>
