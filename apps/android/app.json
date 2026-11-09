@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Monetra",
+    "slug": "monetra",
+    "scheme": "monetra",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "android": {
+      "package": "com.flickscient.monetra",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#F4F3EC"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "@clerk/expo",
+      ["expo-sqlite", { "enableFTS": false }]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
