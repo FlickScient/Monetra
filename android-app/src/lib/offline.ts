@@ -6,7 +6,7 @@ let database: Promise<SQLite.SQLiteDatabase> | null = null;
 
 async function getDatabase() {
   if (!database) {
-    database = (async () => {
+    const opening = (async () => {
       let key = await SecureStore.getItemAsync('monetra.offline.sqlcipher-key');
       if (!key) {
         const bytes = await getRandomBytesAsync(32);
@@ -19,6 +19,11 @@ async function getDatabase() {
       await connection.execAsync("PRAGMA key = 'monetra-" + key + "';");
       return connection;
     })();
+    // A rejected open must not poison the singleton for the rest of the app session.
+    database = opening.catch(error => {
+      database = null;
+      throw error;
+    });
   }
   const db = await database;
   await db.execAsync(`

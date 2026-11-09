@@ -26,6 +26,8 @@ const config: ExpoConfig = {
     clerkPublishableKey:
       process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ??
       'pk_test_bm90YWJsZS1oZXJvbi02MDYuY2xlcmsuYWNjb3VudHMuZGV2JA',
+    supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://osfitgjwkjhhexgcazwj.supabase.co',
+    supabasePublishableKey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? 'sb_publishable_0kIBTUEf57t8d85BxB6owg__ZE01Ma8',
   },
 };
 
