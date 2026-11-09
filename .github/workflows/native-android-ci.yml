@@ -6,6 +6,7 @@ on:
     paths:
       - "android-app/**"
       - "Main.png"
+      - "tsconfig.json"
       - ".github/workflows/native-android-ci.yml"
   pull_request:
     paths:
