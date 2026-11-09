@@ -161,6 +161,8 @@ export default function HomeScreen() {
         setNotice('Connected to Monetra. Encrypted offline cache is unavailable on this device.');
       }
     } catch (networkError) {
+      const status = (networkError as { status?: number } | null)?.status;
+      if (typeof status === 'number' && status < 500) throw networkError;
       try {
         rows = await readWorkspaceIndex<Workspace>();
       } catch (cacheError) {
@@ -215,6 +217,8 @@ export default function HomeScreen() {
       }
       if (pending.length) setNotice('Workspace synced. Pending changes were submitted with their original operation IDs.');
     } catch (error) {
+      const status = (error as { status?: number } | null)?.status;
+      if (typeof status === 'number' && status < 500) throw error;
       let cached: Snapshot | null = null;
       try { cached = await readSnapshot<Snapshot>(workspace.id); }
       catch (cacheError) { console.warn('MONETRA_OFFLINE_CACHE_READ_FAILED: snapshot', cacheError); }
@@ -493,7 +497,7 @@ export default function HomeScreen() {
   if (!isAuthLoaded || !isUserLoaded) {
     if (authWaitExpired) {
       return <View style={styles.center}>
-        <Text style={styles.errorTitle}>Secure sign-in isn’t responding</Text>
+        <Text style={styles.errorTitle}>Secure sign-in timed out</Text>
         <Text style={styles.errorMessage}>Monetra is waiting for Clerk to finish initializing. Check your connection, then retry. Your finance data has not been changed.</Text>
         <Pressable onPress={() => { setAuthWaitExpired(false); setAuthRetryKey(value => value + 1); }} style={styles.retryButton}>
           <Text style={styles.retryText}>Retry sign-in</Text>

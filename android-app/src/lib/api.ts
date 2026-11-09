@@ -56,6 +56,9 @@ export async function apiRequest<T>(
     if (controller.signal.aborted) {
       throw new Error(`Monetra server did not respond within ${Math.ceil(timeoutMs / 1000)} seconds. Check your connection and try again.`);
     }
+    // Preserve HTTP status codes so callers can distinguish validation/auth errors
+    // from connectivity failures before deciding whether to queue an offline write.
+    if (cause instanceof Error && typeof (cause as ApiError).status === 'number') throw cause;
     throw new Error(cause instanceof Error ? cause.message : 'Network unavailable');
   } finally {
     clearTimeout(timeout);
