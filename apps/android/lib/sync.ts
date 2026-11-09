@@ -10,20 +10,27 @@ function endpoint(path: string) {
 }
 
 async function request(path: string, token: string, workspaceId: string, init?: RequestInit) {
-  const response = await fetch(endpoint(path), {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      "x-workspace-id": workspaceId,
-      ...(init?.headers ?? {})
-    },
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(typeof body.error === "string" ? body.error : `Sync failed (${response.status})`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(endpoint(path), {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "x-workspace-id": workspaceId,
+        ...(init?.headers ?? {})
+      },
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(typeof body.error === "string" ? body.error : `Sync failed (${response.status})`);
+    }
+    return response.json();
+  } finally {
+    clearTimeout(timeout);
   }
-  return response.json();
 }
 
 export async function queueOfflineOperation(input: {
@@ -137,7 +144,7 @@ export async function syncWorkspace(userId: string, workspaceId: string, token: 
        ON CONFLICT(user_id,workspace_id) DO UPDATE SET last_error=excluded.last_error`,
       userId, workspaceId, message
     );
-    if (/network request failed|failed to fetch|networkerror/i.test(message)) {
+    if (/network request failed|failed to fetch|networkerror|aborterror|aborted|timeout/i.test(message)) {
       return { status: "offline", message: "Offline. Your last saved workspace remains available." };
     }
     return { status: "needs-attention", message };
