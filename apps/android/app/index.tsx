@@ -364,7 +364,7 @@ export default function HomeScreen() {
             const spent = transactions.filter((x) => x.transactionType === "expense" && x.categoryId === budget.categoryId && String(x.occurredAt).slice(0,7) === String(budget.monthStart).slice(0,7)).reduce((sum, x) => sum + Number(x.amountMinor || 0), 0);
             const limit = Number(budget.limitMinor || 0);
             const percent = limit > 0 ? Math.min(100, Math.round(spent / limit * 100)) : 0;
-            return <View key={budget.id} style={s.moduleCard}><Text style={s.rowTitle}>{category?.name || "Category"}</Text><Text style={s.moduleAmount}>{money(spent)}</Text><Text style={s.muted}>of {money(limit)} · {budget.monthStart}</Text><View style={s.progressTrack}><View style={[s.progressFill, { width: percent + "%", backgroundColor: percent >= 100 ? P.red : P.olive }]} /></View><Text style={s.muted}>{Math.max(0, limit - spent) > 0 ? money(limit - spent) + " remaining" : "Budget limit reached"}</Text></View>;
+            return <View key={budget.id} style={s.moduleCard}><Text style={s.rowTitle}>{category?.name || "Category"}</Text><Text style={s.moduleAmount}>{money(spent)}</Text><Text style={s.muted}>of {money(limit)} · {budget.monthStart}</Text><View style={s.progressTrack}><View style={[s.progressFill, { width: (percent + "%") as `${number}%`, backgroundColor: percent >= 100 ? P.red : P.olive }]} /></View><Text style={s.muted}>{Math.max(0, limit - spent) > 0 ? money(limit - spent) + " remaining" : "Budget limit reached"}</Text></View>;
           })}
           {!budgets.length && <Text style={s.empty}>No monthly budgets in this workspace.</Text>}
         </>}
