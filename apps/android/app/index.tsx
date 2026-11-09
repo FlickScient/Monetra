@@ -111,8 +111,13 @@ export default function HomeScreen() {
         setWorkspaceId(active.id);
         await loadLocal(user.id, active.id);
         if (token) {
-          const result = await syncWorkspace(user.id, active.id, token);
-          if (alive) setSync(result);
+          let activeResult: SyncResult | null = null;
+          // Cache every owned workspace on first online launch so each can be opened offline later.
+          for (const candidate of rows) {
+            const result = await syncWorkspace(user.id, candidate.id, token);
+            if (candidate.id === active.id) activeResult = result;
+          }
+          if (alive && activeResult) setSync(activeResult);
           await loadLocal(user.id, active.id);
         }
       } catch (e) {
