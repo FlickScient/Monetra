@@ -103,6 +103,23 @@ export default function HomeScreen() {
   const [walletOpeningBalance, setWalletOpeningBalance] = useState('0');
   const [walletCreditLimit, setWalletCreditLimit] = useState('0');
   const [walletNotes, setWalletNotes] = useState('');
+  const [debtModal, setDebtModal] = useState(false);
+  const [debtDirection, setDebtDirection] = useState<'receivable' | 'payable'>('payable');
+  const [debtName, setDebtName] = useState('');
+  const [debtAmount, setDebtAmount] = useState('');
+  const [debtDueDate, setDebtDueDate] = useState('');
+  const [debtNote, setDebtNote] = useState('');
+  const [paymentDebtId, setPaymentDebtId] = useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentNote, setPaymentNote] = useState('');
+  const [goalModal, setGoalModal] = useState(false);
+  const [goalName, setGoalName] = useState('');
+  const [goalTarget, setGoalTarget] = useState('');
+  const [goalTargetDate, setGoalTargetDate] = useState('');
+  const [allocationGoalId, setAllocationGoalId] = useState<string | null>(null);
+  const [allocationWalletId, setAllocationWalletId] = useState('');
+  const [allocationAmount, setAllocationAmount] = useState('');
+  const [allocationAction, setAllocationAction] = useState<'allocate' | 'release'>('allocate');
 
   const getSessionToken = useCallback(async () => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -407,6 +424,60 @@ export default function HomeScreen() {
     ]);
   }
 
+  async function saveDebt() {
+    if (!selected || !debtName.trim() || !Number.isFinite(Number(debtAmount)) || Number(debtAmount) <= 0) { setNotice('Enter a name and a valid principal amount.'); return; }
+    if (debtDueDate && !/^\\d{4}-\\d{2}-\\d{2}$/.test(debtDueDate)) { setNotice('Due date must use YYYY-MM-DD format.'); return; }
+    setSaving(true);
+    try {
+      const token = await getSessionToken();
+      if (!token) throw new Error('Creating Due & Debt records requires an internet connection.');
+      await apiRequest('/api/due-debt', token, { method:'POST', workspaceId:selected.id, body:{direction:debtDirection,counterpartyName:debtName.trim(),principalMinor:Math.round(Number(debtAmount)*100),currency:'BDT',dueDate:debtDueDate||null,note:debtNote||null} });
+      await loadWorkspace(selected,true);
+      setDebtModal(false); setDebtName(''); setDebtAmount(''); setDebtDueDate(''); setDebtNote(''); setNotice('Due & Debt record created.');
+    } catch(error) { setNotice(error instanceof Error ? error.message : 'Could not create record.'); }
+    finally { setSaving(false); }
+  }
+
+  async function recordDebtPayment() {
+    if (!selected || !paymentDebtId || !Number.isFinite(Number(paymentAmount)) || Number(paymentAmount)<=0) { setNotice('Enter a valid payment amount.'); return; }
+    setSaving(true);
+    try {
+      const token = await getSessionToken();
+      if (!token) throw new Error('Recording a debt payment requires an internet connection.');
+      await apiRequest(`/api/due-debt/${paymentDebtId}/payments`,token,{method:'POST',workspaceId:selected.id,body:{amountMinor:Math.round(Number(paymentAmount)*100),note:paymentNote||null},headers:{'idempotency-key':uuid()}});
+      await loadWorkspace(selected,true);
+      setPaymentDebtId(null); setPaymentAmount(''); setPaymentNote(''); setNotice('Debt payment recorded.');
+    } catch(error) { setNotice(error instanceof Error ? error.message : 'Could not record payment.'); }
+    finally { setSaving(false); }
+  }
+
+  async function saveGoal() {
+    if (!selected || !goalName.trim() || !Number.isFinite(Number(goalTarget)) || Number(goalTarget)<=0) { setNotice('Enter a goal name and a valid target amount.'); return; }
+    if (goalTargetDate && !/^\\d{4}-\\d{2}-\\d{2}$/.test(goalTargetDate)) { setNotice('Target date must use YYYY-MM-DD format.'); return; }
+    setSaving(true);
+    try {
+      const token = await getSessionToken();
+      if (!token) throw new Error('Creating savings goals requires an internet connection.');
+      await apiRequest('/api/goals',token,{method:'POST',workspaceId:selected.id,body:{name:goalName.trim(),targetMinor:Math.round(Number(goalTarget)*100),currency:'BDT',targetDate:goalTargetDate||null}});
+      await loadWorkspace(selected,true);
+      setGoalModal(false); setGoalName(''); setGoalTarget(''); setGoalTargetDate(''); setNotice('Savings goal created.');
+    } catch(error) { setNotice(error instanceof Error ? error.message : 'Could not create savings goal.'); }
+    finally { setSaving(false); }
+  }
+
+  async function saveGoalAllocation() {
+    if (!selected || !allocationGoalId || !allocationWalletId || !Number.isFinite(Number(allocationAmount)) || Number(allocationAmount)<=0) { setNotice('Choose a wallet and enter a valid allocation amount.'); return; }
+    setSaving(true);
+    try {
+      const token = await getSessionToken();
+      if (!token) throw new Error('Changing savings allocations requires an internet connection.');
+      await apiRequest(`/api/goals/${allocationGoalId}/allocations`,token,{method:'POST',workspaceId:selected.id,body:{walletId:allocationWalletId,amountMinor:Math.round(Number(allocationAmount)*100),action:allocationAction}});
+      await loadWorkspace(selected,true);
+      setAllocationGoalId(null); setAllocationWalletId(''); setAllocationAmount(''); setNotice(allocationAction==='allocate'?'Money allocated to savings goal.':'Money released from savings goal.');
+    } catch(error) { setNotice(error instanceof Error ? error.message : 'Could not update savings allocation.'); }
+    finally { setSaving(false); }
+  }
+
   if (!isAuthLoaded || !isUserLoaded) {
     if (authWaitExpired) {
       return <View style={styles.center}>
@@ -508,15 +579,25 @@ export default function HomeScreen() {
           <Panel><Text style={styles.itemTitle}>Wallet health</Text>{wallets.filter(w=>w.currentBalanceMinor<0).map(w=><RowItem key={w.id} title={w.name} subtitle="Negative balance · review spending" amount={money(w.currentBalanceMinor)}/>)}{!wallets.some(w=>w.currentBalanceMinor<0)&&<Text style={styles.muted}>No negative wallet balances in this snapshot.</Text>}</Panel>
         </>}
         {active === 'debts' && <>
-          <SectionTitle title="Due & Debt" subtitle="Receivables and payables · separate from wallet assets"/>
+          <SectionTitle title="Due & Debt" subtitle="Receivables and payables · separate from wallet assets" action={<Pressable style={styles.smallButton} onPress={() => setDebtModal(true)}><Text style={styles.smallButtonText}>+ Add record</Text></Pressable>}/>
           <View style={styles.metricGrid}><Panel style={styles.metric}><Text style={styles.metricLabel}>TO RECEIVE</Text><Text style={styles.metricValue}>{money(debts.filter(d=>d.direction==='receivable').reduce((s,d)=>s+d.outstandingMinor,0))}</Text></Panel><Panel style={styles.metric}><Text style={styles.metricLabel}>TO PAY</Text><Text style={styles.metricValue}>{money(debts.filter(d=>d.direction==='payable').reduce((s,d)=>s+d.outstandingMinor,0))}</Text></Panel></View>
-          {debts.map(debt=><RowItem key={debt.id} title={debt.counterpartyName} subtitle={(debt.direction==='receivable'?'They owe you':'You owe')+' · Due '+(debt.dueDate||'not set')} amount={money(debt.outstandingMinor)} positive={debt.direction==='receivable'}/>)}
-          {!debts.length&&<Empty title="No due or debt records" detail="Your existing receivables and payables will appear here."/>}
+          {debts.map(debt=><Panel key={debt.id}>
+            <RowItem title={debt.counterpartyName} subtitle={(debt.direction==='receivable'?'They owe you':'You owe')+' · Due '+(debt.dueDate||'not set')} amount={money(debt.outstandingMinor)} positive={debt.direction==='receivable'}/>
+            <Text style={styles.muted}>Principal {money(debt.principalMinor)} · Paid {money(Number(debt.principalMinor)-Number(debt.outstandingMinor))}</Text>
+            {debt.outstandingMinor>0 ? <Pressable style={[styles.smallButton,{alignSelf:'flex-start',marginTop:8}]} onPress={()=>{setPaymentDebtId(debt.id);setPaymentAmount((debt.outstandingMinor/100).toFixed(2));setPaymentNote('');}}><Text style={styles.smallButtonText}>Record payment</Text></Pressable> : <Text style={styles.muted}>Settled</Text>}
+          </Panel>)}
+          {!debts.length&&<Empty title="No due or debt records" detail="Create a receivable or payable to track outstanding principal and partial payments."/>}
         </>}
         {active === 'savings' && <>
-          <SectionTitle title="Savings Goals" subtitle="Targets and wallet allocations"/>
-          {goals.map(goal=>{const saved=goal.allocations.reduce((s,a)=>s+Number(a.amountMinor),0);const percent=goal.targetMinor>0?Math.min(100,saved/goal.targetMinor*100):0;return <Panel key={goal.id}><Text style={styles.itemTitle}>{goal.name}</Text><Text style={styles.panelBig}>{money(saved)} <Text style={styles.muted}>/ {money(goal.targetMinor)}</Text></Text><View style={styles.progress}><View style={[styles.progressFill,{width:`${percent}%`}]}/></View><Text style={styles.muted}>{Math.round(percent)}% funded · {goal.targetDate?'Target '+goal.targetDate:'No target date'}</Text></Panel>;})}
-          {!goals.length&&<Empty title="No savings goals yet" detail="Create a goal on the Monetra website; native goal management is being added."/>}
+          <SectionTitle title="Savings Goals" subtitle="Targets and wallet allocations" action={<Pressable style={styles.smallButton} onPress={() => setGoalModal(true)}><Text style={styles.smallButtonText}>+ New goal</Text></Pressable>}/>
+          {goals.map(goal=>{const saved=goal.allocations.reduce((s,a)=>s+Number(a.amountMinor),0);const percent=goal.targetMinor>0?Math.min(100,saved/goal.targetMinor*100):0;return <Panel key={goal.id}><Text style={styles.itemTitle}>{goal.name}</Text><Text style={styles.panelBig}>{money(saved)} <Text style={styles.muted}>/ {money(goal.targetMinor)}</Text></Text><View style={styles.progress}><View style={[styles.progressFill,{width:`${percent}%`}]}/></View><Text style={styles.muted}>{Math.round(percent)}% funded · {goal.targetDate?'Target '+goal.targetDate:'No target date'}</Text>
+            {goal.allocations.map(allocation=>{const wallet=wallets.find(w=>w.id===allocation.walletId);return <RowItem key={allocation.id} title={wallet?.name??'Wallet'} subtitle="Allocated" amount={money(allocation.amountMinor)}/>;})}
+            <View style={{flexDirection:'row',gap:8,marginTop:8}}>
+              <Pressable style={styles.smallButton} onPress={()=>{setAllocationGoalId(goal.id);setAllocationAction('allocate');setAllocationWalletId('');setAllocationAmount('');}}><Text style={styles.smallButtonText}>Allocate</Text></Pressable>
+              <Pressable style={styles.secondaryButton} onPress={()=>{setAllocationGoalId(goal.id);setAllocationAction('release');setAllocationWalletId('');setAllocationAmount('');}}><Text style={styles.secondaryButtonText}>Release</Text></Pressable>
+            </View>
+          </Panel>;})}
+          {!goals.length&&<Empty title="No savings goals yet" detail="Create your first goal to track money set aside across wallets."/>}
         </>}
         {active === 'tools' && <>
           <SectionTitle title="Money Tools" subtitle="Budgets, recurring activity and reconciliations"/>
@@ -571,6 +652,42 @@ export default function HomeScreen() {
           <Text style={styles.fieldLabel}>NOTES (OPTIONAL)</Text>
           <TextInput value={walletNotes} onChangeText={setWalletNotes} placeholder="Add a note" placeholderTextColor={theme.colors.muted} style={styles.input}/>
           <Pressable disabled={saving} onPress={() => void saveWallet()} style={[styles.primaryButton,{marginTop:20}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':editingWalletId?'Update wallet':'Create wallet'}</Text></Pressable>
+        </View></View>
+      </Modal>
+      <Modal visible={debtModal} transparent animationType="slide" onRequestClose={() => setDebtModal(false)}>
+        <View style={styles.modalBackdrop}><View style={styles.modalCard}>
+          <View style={styles.modalHeader}><Text style={styles.modalTitle}>New Due & Debt record</Text><Pressable onPress={()=>setDebtModal(false)}><Text style={styles.close}>✕</Text></Pressable></View>
+          <View style={styles.typeSwitch}><Pressable onPress={()=>setDebtDirection('payable')} style={[styles.typeButton,debtDirection==='payable'&&styles.typeActive]}><Text style={[styles.typeText,debtDirection==='payable'&&styles.typeTextActive]}>I owe</Text></Pressable><Pressable onPress={()=>setDebtDirection('receivable')} style={[styles.typeButton,debtDirection==='receivable'&&styles.typeActive]}><Text style={[styles.typeText,debtDirection==='receivable'&&styles.typeTextActive]}>Owed to me</Text></Pressable></View>
+          <Text style={styles.fieldLabel}>PERSON / ORGANIZATION</Text><TextInput value={debtName} onChangeText={setDebtName} placeholder="Name" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <Text style={styles.fieldLabel}>PRINCIPAL (৳)</Text><TextInput keyboardType="decimal-pad" value={debtAmount} onChangeText={setDebtAmount} placeholder="0.00" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <Text style={styles.fieldLabel}>DUE DATE (YYYY-MM-DD, OPTIONAL)</Text><TextInput value={debtDueDate} onChangeText={setDebtDueDate} placeholder="2026-12-31" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <Text style={styles.fieldLabel}>NOTE (OPTIONAL)</Text><TextInput value={debtNote} onChangeText={setDebtNote} placeholder="Details" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <Pressable disabled={saving} onPress={()=>void saveDebt()} style={[styles.primaryButton,{marginTop:16}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':'Create record'}</Text></Pressable>
+        </View></View>
+      </Modal>
+      <Modal visible={!!paymentDebtId} transparent animationType="slide" onRequestClose={()=>setPaymentDebtId(null)}>
+        <View style={styles.modalBackdrop}><View style={styles.modalCard}>
+          <View style={styles.modalHeader}><Text style={styles.modalTitle}>Record payment</Text><Pressable onPress={()=>setPaymentDebtId(null)}><Text style={styles.close}>✕</Text></Pressable></View>
+          <Text style={styles.fieldLabel}>PAYMENT AMOUNT (৳)</Text><TextInput keyboardType="decimal-pad" value={paymentAmount} onChangeText={setPaymentAmount} placeholder="0.00" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <Text style={styles.fieldLabel}>NOTE (OPTIONAL)</Text><TextInput value={paymentNote} onChangeText={setPaymentNote} placeholder="Payment details" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <Pressable disabled={saving} onPress={()=>void recordDebtPayment()} style={[styles.primaryButton,{marginTop:16}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':'Confirm payment'}</Text></Pressable>
+        </View></View>
+      </Modal>
+      <Modal visible={goalModal} transparent animationType="slide" onRequestClose={()=>setGoalModal(false)}>
+        <View style={styles.modalBackdrop}><View style={styles.modalCard}>
+          <View style={styles.modalHeader}><Text style={styles.modalTitle}>New savings goal</Text><Pressable onPress={()=>setGoalModal(false)}><Text style={styles.close}>✕</Text></Pressable></View>
+          <Text style={styles.fieldLabel}>GOAL NAME</Text><TextInput value={goalName} onChangeText={setGoalName} placeholder="e.g. Emergency fund" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <Text style={styles.fieldLabel}>TARGET AMOUNT (৳)</Text><TextInput keyboardType="decimal-pad" value={goalTarget} onChangeText={setGoalTarget} placeholder="0.00" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <Text style={styles.fieldLabel}>TARGET DATE (YYYY-MM-DD, OPTIONAL)</Text><TextInput value={goalTargetDate} onChangeText={setGoalTargetDate} placeholder="2027-06-30" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <Pressable disabled={saving} onPress={()=>void saveGoal()} style={[styles.primaryButton,{marginTop:16}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':'Create goal'}</Text></Pressable>
+        </View></View>
+      </Modal>
+      <Modal visible={!!allocationGoalId} transparent animationType="slide" onRequestClose={()=>setAllocationGoalId(null)}>
+        <View style={styles.modalBackdrop}><View style={styles.modalCard}>
+          <View style={styles.modalHeader}><Text style={styles.modalTitle}>{allocationAction==='allocate'?'Allocate to goal':'Release from goal'}</Text><Pressable onPress={()=>setAllocationGoalId(null)}><Text style={styles.close}>✕</Text></Pressable></View>
+          <Text style={styles.fieldLabel}>WALLET</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{wallets.filter(w=>w.status==='active'&&w.walletType!=='credit_card').map(w=><Pressable key={w.id} onPress={()=>setAllocationWalletId(w.id)} style={[styles.choice,allocationWalletId===w.id&&styles.choiceActive]}><Text style={[styles.choiceText,allocationWalletId===w.id&&styles.choiceTextActive]}>{w.name}</Text></Pressable>)}</ScrollView>
+          <Text style={styles.fieldLabel}>AMOUNT (৳)</Text><TextInput keyboardType="decimal-pad" value={allocationAmount} onChangeText={setAllocationAmount} placeholder="0.00" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <Pressable disabled={saving} onPress={()=>void saveGoalAllocation()} style={[styles.primaryButton,{marginTop:16}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':allocationAction==='allocate'?'Allocate':'Release'}</Text></Pressable>
         </View></View>
       </Modal>
     </View>
