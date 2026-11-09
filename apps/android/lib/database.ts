@@ -1,11 +1,33 @@
 import * as SQLite from "expo-sqlite";
+import * as SecureStore from "expo-secure-store";
+import * as Crypto from "expo-crypto";
 
 const DATABASE_NAME = "monetra-v1.db";
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 export function getDatabase() {
   if (!databasePromise) {
-    databasePromise = SQLite.openDatabaseAsync(DATABASE_NAME).then(async (db) => {
+    databasePromise = (async () => {
+      const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
+      const cipher = await db.getFirstAsync<{ cipher_version: string }>("PRAGMA cipher_version");
+      if (!cipher?.cipher_version) {
+        await db.closeAsync();
+        throw new Error("Secure local storage is unavailable. This build must include SQLCipher; refusing to store finance data unencrypted.");
+      }
+      const keyName = "monetra-sqlcipher-key-v1";
+      let databaseKey = await SecureStore.getItemAsync(keyName);
+      if (!databaseKey) {
+        const bytes = await Crypto.getRandomBytesAsync(32);
+        databaseKey = Array.from(bytes).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+        await SecureStore.setItemAsync(keyName, databaseKey);
+      }
+      if (!/^[a-f0-9]{64}$/i.test(databaseKey)) {
+        await db.closeAsync();
+        throw new Error("The local database encryption key is invalid.");
+      }
+      await db.execAsync(`PRAGMA key = "x'${databaseKey}'";`);
+      // Force key verification before any schema reads or writes.
+      await db.getFirstAsync("SELECT count(*) AS count FROM sqlite_master");
       await db.execAsync(`
         PRAGMA journal_mode = WAL;
         PRAGMA foreign_keys = ON;
@@ -44,7 +66,7 @@ export function getDatabase() {
         );
       `);
       return db;
-    }).catch((error) => {
+    })().catch((error) => {
       databasePromise = null;
       throw error;
     });
