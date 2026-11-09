@@ -21,7 +21,8 @@ export async function apiRequest<T>(
 ): Promise<T> {
   let response: Response;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 15000);
+  const timeoutMs = options.timeoutMs ?? 15000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     response = await fetch(`${API_URL}${path}`, {
       method: options.method ?? 'GET',
@@ -37,7 +38,7 @@ export async function apiRequest<T>(
     });
   } catch (cause) {
     if (controller.signal.aborted) {
-      throw new Error('Monetra server did not respond within 15 seconds. Check your connection and try again.');
+      throw new Error(`Monetra server did not respond within ${Math.ceil(timeoutMs / 1000)} seconds. Check your connection and try again.`);
     }
     throw new Error(cause instanceof Error ? cause.message : 'Network unavailable');
   } finally {
