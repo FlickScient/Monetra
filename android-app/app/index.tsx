@@ -13,7 +13,7 @@ import { MoneyTools } from '@/src/components/MoneyTools';
 
 type Wallet = { id: string; name: string; walletType: string; currency: string; currentBalanceMinor: number; status: string; creditLimitMinor?: number; notes?: string | null };
 type Category = { id: string; name: string; categoryType: 'income' | 'expense'; color: string };
-type Transaction = { id: string; transactionType: 'income' | 'expense' | 'transfer'; walletId: string; amountMinor: number; description: string; occurredAt: string; categoryId?: string | null; voidedAt?: string | null };
+type Transaction = { id: string; transactionType: 'income' | 'expense' | 'transfer'; walletId: string; destinationWalletId?: string | null; amountMinor: number; description: string; occurredAt: string; categoryId?: string | null; voidedAt?: string | null };
 type Debt = { id: string; direction: 'receivable' | 'payable'; counterpartyName: string; principalMinor: number; dueDate: string | null; note?: string | null; status: string };
 type DebtPayment = { id: string; dueDebtId: string; amountMinor: number; paidAt: string; note?: string | null };
 type GoalAllocation = { id: string; goalId: string; walletId: string; amountMinor: number };
@@ -89,10 +89,11 @@ export default function HomeScreen() {
   const selectedWorkspaceId = useRef<string | null>(null);
   const initializedUserId = useRef<string | null>(null);
   const [modal, setModal] = useState(false);
-  const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense');
+  const [transactionType, setTransactionType] = useState<'income' | 'expense' | 'transfer'>('expense');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [walletId, setWalletId] = useState('');
+  const [destinationWalletId, setDestinationWalletId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [saving, setSaving] = useState(false);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
@@ -288,13 +289,13 @@ export default function HomeScreen() {
   }
 
   async function saveTransaction() {
-    if (!selected || !walletId || !description.trim() || !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+    if (!selected || !walletId || (transactionType === 'transfer' && (!destinationWalletId || destinationWalletId === walletId)) || !description.trim() || !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
       setNotice('Choose a wallet and enter a valid amount and description.');
       return;
     }
     const payload = {
-      walletId, transactionType, amountMinor: Math.round(Number(amount) * 100),
-      categoryId: categoryId || null, description: description.trim(), occurredAt: editingTransactionOccurredAt ?? new Date().toISOString(),
+      walletId, transactionType, ...(transactionType === 'transfer' ? { destinationWalletId } : { categoryId: categoryId || null }), amountMinor: Math.round(Number(amount) * 100),
+      description: description.trim(), occurredAt: editingTransactionOccurredAt ?? new Date().toISOString(),
     };
     const operationId = uuid();
     setSaving(true);
@@ -326,23 +327,32 @@ export default function HomeScreen() {
           setNotice('Saved on this device. It will sync when you reconnect.');
         };
         if (!token) {
+          if (transactionType === 'transfer') throw new Error('Transfers need an internet connection. No transfer was recorded.');
           await saveLocally();
         } else {
           try {
-            await apiRequest('/api/transactions', token, {
-              method: 'POST', workspaceId: selected.id, body: payload,
-              headers: { 'idempotency-key': operationId },
-            });
+            if (transactionType === 'transfer') {
+              await apiRequest('/api/transfers', token, {
+                method: 'POST', workspaceId: selected.id,
+                body: { walletId, destinationWalletId, amountMinor: payload.amountMinor, description: payload.description, occurredAt: payload.occurredAt },
+                headers: { 'idempotency-key': operationId },
+              });
+            } else {
+              await apiRequest('/api/transactions', token, {
+                method: 'POST', workspaceId: selected.id, body: payload,
+                headers: { 'idempotency-key': operationId },
+              });
+            }
             await loadWorkspace(selected, true);
             setNotice('Transaction saved to your Monetra account.');
           } catch (error) {
             const apiError = error as Error & { status?: number };
-            if (apiError.status) throw error;
+            if (apiError.status || transactionType === 'transfer') throw error;
             await saveLocally();
           }
         }
       }
-      setModal(false); setAmount(''); setDescription(''); setCategoryId(''); setEditingTransactionId(null); setEditingTransactionOccurredAt(null);
+      setModal(false); setAmount(''); setDescription(''); setCategoryId(''); setDestinationWalletId(''); setEditingTransactionId(null); setEditingTransactionOccurredAt(null);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not save this transaction.');
     } finally { setSaving(false); }
@@ -351,8 +361,9 @@ export default function HomeScreen() {
   function editTransaction(tx: Transaction) {
     setEditingTransactionId(tx.id);
     setEditingTransactionOccurredAt(tx.occurredAt);
-    setTransactionType(tx.transactionType === 'income' ? 'income' : 'expense');
+    setTransactionType(tx.transactionType);
     setWalletId(tx.walletId);
+    setDestinationWalletId(tx.destinationWalletId ?? '');
     setCategoryId(tx.categoryId ?? '');
     setAmount((Number(tx.amountMinor) / 100).toFixed(2));
     setDescription(tx.description);
@@ -508,7 +519,7 @@ export default function HomeScreen() {
 
   const currentLabel = modules.find(item => item.key === active)?.label ?? 'Overview';
   const workspaceLabel = selected?.type === 'personal' ? 'Personal' : selected?.type === 'family' ? 'Family' : 'Business';
-  const categoryList = categories.filter(c => c.categoryType === transactionType);
+  const categoryList = transactionType === 'transfer' ? [] : categories.filter(c => c.categoryType === transactionType);
 
   return (
     <View style={styles.root}>
@@ -625,15 +636,23 @@ export default function HomeScreen() {
         {modules.slice(0,5).map(item=><Pressable key={item.key} onPress={()=>setActive(item.key)} style={styles.bottomItem}><View style={[styles.bottomDot,active===item.key&&styles.bottomDotActive]}/><Text style={[styles.bottomText,active===item.key&&styles.bottomTextActive]}>{item.short}</Text></Pressable>)}
         <Pressable onPress={()=>setActive('settings')} style={styles.bottomItem}><View style={[styles.bottomDot,active==='settings'&&styles.bottomDotActive]}/><Text style={[styles.bottomText,active==='settings'&&styles.bottomTextActive]}>More</Text></Pressable>
       </View>
-      <Pressable style={styles.fab} onPress={()=>{setEditingTransactionId(null);setEditingTransactionOccurredAt(null);setTransactionType('expense');setModal(true);}}><Text style={styles.fabText}>＋</Text></Pressable>
+      <Pressable style={styles.fab} onPress={()=>{setEditingTransactionId(null);setEditingTransactionOccurredAt(null);setTransactionType('expense');setDestinationWalletId('');setModal(true);}}><Text style={styles.fabText}>＋</Text></Pressable>
       <Modal visible={modal} transparent animationType="slide" onRequestClose={()=>setModal(false)}>
         <View style={styles.modalBackdrop}><View style={styles.modalCard}>
           <View style={styles.modalHeader}><Text style={styles.modalTitle}>{editingTransactionId ? 'Edit transaction' : 'New transaction'}</Text><Pressable onPress={()=>{setModal(false);setEditingTransactionId(null);setEditingTransactionOccurredAt(null);}}><Text style={styles.close}>✕</Text></Pressable></View>
-          <View style={styles.typeSwitch}><Pressable onPress={()=>setTransactionType('expense')} style={[styles.typeButton,transactionType==='expense'&&styles.typeActive]}><Text style={[styles.typeText,transactionType==='expense'&&styles.typeTextActive]}>Expense</Text></Pressable><Pressable onPress={()=>setTransactionType('income')} style={[styles.typeButton,transactionType==='income'&&styles.typeActive]}><Text style={[styles.typeText,transactionType==='income'&&styles.typeTextActive]}>Income</Text></Pressable></View>
+          <View style={styles.typeSwitch}>
+            <Pressable onPress={()=>setTransactionType('expense')} style={[styles.typeButton,transactionType==='expense'&&styles.typeActive]}><Text style={[styles.typeText,transactionType==='expense'&&styles.typeTextActive]}>Expense</Text></Pressable>
+            <Pressable onPress={()=>setTransactionType('income')} style={[styles.typeButton,transactionType==='income'&&styles.typeActive]}><Text style={[styles.typeText,transactionType==='income'&&styles.typeTextActive]}>Income</Text></Pressable>
+            <Pressable onPress={()=>setTransactionType('transfer')} style={[styles.typeButton,transactionType==='transfer'&&styles.typeActive]}><Text style={[styles.typeText,transactionType==='transfer'&&styles.typeTextActive]}>Transfer</Text></Pressable>
+          </View>
           <Text style={styles.fieldLabel}>Amount (৳)</Text><TextInput keyboardType="decimal-pad" value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={theme.colors.muted} style={styles.input}/>
           <Text style={styles.fieldLabel}>Description</Text><TextInput value={description} onChangeText={setDescription} placeholder="What was this for?" placeholderTextColor={theme.colors.muted} style={styles.input}/>
-          <Text style={styles.fieldLabel}>Wallet</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{wallets.filter(w=>w.status==='active').map(w=><Pressable key={w.id} onPress={()=>setWalletId(w.id)} style={[styles.choice, walletId===w.id&&styles.choiceActive]}><Text style={[styles.choiceText,walletId===w.id&&styles.choiceTextActive]}>{w.name}</Text></Pressable>)}</ScrollView>
-          <Text style={styles.fieldLabel}>Category</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{categoryList.map(c=><Pressable key={c.id} onPress={()=>setCategoryId(c.id)} style={[styles.choice,categoryId===c.id&&styles.choiceActive]}><Text style={[styles.choiceText,categoryId===c.id&&styles.choiceTextActive]}>{c.name}</Text></Pressable>)}</ScrollView>
+          <Text style={styles.fieldLabel}>{transactionType==='transfer'?'From wallet':'Wallet'}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{wallets.filter(w=>w.status==='active'&&(transactionType!=='transfer'||w.walletType!=='credit_card')).map(w=><Pressable key={w.id} onPress={()=>setWalletId(w.id)} style={[styles.choice, walletId===w.id&&styles.choiceActive]}><Text style={[styles.choiceText,walletId===w.id&&styles.choiceTextActive]}>{w.name}</Text></Pressable>)}</ScrollView>
+          {transactionType==='transfer'?<>
+            <Text style={styles.fieldLabel}>TO WALLET</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{wallets.filter(w=>w.status==='active'&&w.id!==walletId).map(w=><Pressable key={w.id} onPress={()=>setDestinationWalletId(w.id)} style={[styles.choice,destinationWalletId===w.id&&styles.choiceActive]}><Text style={[styles.choiceText,destinationWalletId===w.id&&styles.choiceTextActive]}>{w.name}</Text></Pressable>)}</ScrollView>
+          </>:<>
+            <Text style={styles.fieldLabel}>Category</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{categoryList.map(c=><Pressable key={c.id} onPress={()=>setCategoryId(c.id)} style={[styles.choice,categoryId===c.id&&styles.choiceActive]}><Text style={[styles.choiceText,categoryId===c.id&&styles.choiceTextActive]}>{c.name}</Text></Pressable>)}</ScrollView>
+          </>}
           <Pressable disabled={saving} onPress={()=>void saveTransaction()} style={[styles.primaryButton,{marginTop:20}]}><Text style={styles.primaryButtonText}>{saving?'Saving…':editingTransactionId?'Update transaction':'Save transaction'}</Text></Pressable>
           {offline?<Text style={styles.muted}>Offline entries are queued locally and sync when you reconnect.</Text>:null}
         </View></View>
