@@ -17,12 +17,15 @@ export type ApiError = Error & { status?: number };
 export async function apiRequest<T>(
   path: string,
   token: string,
-  options: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; workspaceId?: string; body?: unknown; headers?: Record<string, string> } = {},
+  options: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; workspaceId?: string; body?: unknown; headers?: Record<string, string>; timeoutMs?: number } = {},
 ): Promise<T> {
   let response: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 15000);
   try {
     response = await fetch(`${API_URL}${path}`, {
       method: options.method ?? 'GET',
+      signal: controller.signal,
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: 'application/json',
@@ -33,7 +36,12 @@ export async function apiRequest<T>(
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     });
   } catch (cause) {
+    if (controller.signal.aborted) {
+      throw new Error('Monetra server did not respond within 15 seconds. Check your connection and try again.');
+    }
     throw new Error(cause instanceof Error ? cause.message : 'Network unavailable');
+  } finally {
+    clearTimeout(timeout);
   }
 
   const payload = await response.json().catch(() => null);
