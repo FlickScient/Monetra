@@ -25,6 +25,7 @@ concurrency:
 jobs:
   android-standalone-apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: apps/android
@@ -101,6 +102,7 @@ jobs:
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Install and launch APK on Android emulator
+        timeout-minutes: 10
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
