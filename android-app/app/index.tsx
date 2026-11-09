@@ -90,10 +90,10 @@ export default function HomeScreen() {
   const [saving, setSaving] = useState(false);
 
   const loadWorkspaceList = useCallback(async () => {
-    const token = await getToken();
-    if (!token) throw new Error('Your sign-in session has expired.');
     let rows: Workspace[];
     try {
+      const token = await getToken();
+      if (!token) throw new Error('Your sign-in session has expired.');
       rows = await apiRequest<Workspace[]>('/api/workspaces', token);
       await writeWorkspaceIndex(rows);
       setOffline(false);
@@ -206,18 +206,9 @@ export default function HomeScreen() {
     const operationId = uuid();
     setSaving(true);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('Your session expired. Sign in again.');
-      try {
-        await apiRequest('/api/transactions', token, {
-          method: 'POST', workspaceId: selected.id, body: payload,
-          headers: { 'idempotency-key': operationId },
-        });
-        await loadWorkspace(selected, true);
-        setNotice('Transaction saved to your Monetra account.');
-      } catch (error) {
-        const apiError = error as Error & { status?: number };
-        if (apiError.status) throw error;
+      let token: string | null = null;
+      try { token = await getToken(); } catch { /* A cached session may still be usable offline. */ }
+      const saveLocally = async () => {
         await queueOperation(selected.id, operationId, 'transaction.create', payload);
         const current = await readSnapshot<Snapshot>(selected.id);
         if (current) {
@@ -226,14 +217,28 @@ export default function HomeScreen() {
             const delta = transactionType === 'income' ? payload.amountMinor : -payload.amountMinor;
             wallet.currentBalanceMinor += wallet.walletType === 'credit_card' ? -delta : delta;
           }
-          current.data.transactions.push({
-            id: operationId, ...payload, voidedAt: null,
-          } as Transaction);
+          current.data.transactions.push({ id: operationId, ...payload, voidedAt: null } as Transaction);
           await writeSnapshot(selected.id, current);
           setSnapshot(current);
         }
         setOffline(true);
         setNotice('Saved on this device. It will sync when you reconnect.');
+      };
+      if (!token) {
+        await saveLocally();
+      } else {
+        try {
+          await apiRequest('/api/transactions', token, {
+            method: 'POST', workspaceId: selected.id, body: payload,
+            headers: { 'idempotency-key': operationId },
+          });
+          await loadWorkspace(selected, true);
+          setNotice('Transaction saved to your Monetra account.');
+        } catch (error) {
+          const apiError = error as Error & { status?: number };
+          if (apiError.status) throw error;
+          await saveLocally();
+        }
       }
       setModal(false); setAmount(''); setDescription(''); setCategoryId('');
     } catch (error) {
