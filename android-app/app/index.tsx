@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet,
   Text, TextInput, View, type StyleProp, type ViewStyle,
@@ -81,6 +81,9 @@ export default function HomeScreen() {
   const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const selectedWorkspaceId = useRef<string | null>(null);
+  const initializedUserId = useRef<string | null>(null);
   const [modal, setModal] = useState(false);
   const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense');
   const [amount, setAmount] = useState('');
@@ -94,26 +97,43 @@ export default function HomeScreen() {
     try {
       const token = await getToken();
       if (!token) throw new Error('Your sign-in session has expired.');
+      // A cache failure must never turn a successful online response into a failed login.
       rows = await apiRequest<Workspace[]>('/api/workspaces', token);
-      await writeWorkspaceIndex(rows);
       setOffline(false);
-    } catch (error) {
-      rows = await readWorkspaceIndex<Workspace>();
-      if (!rows.length) throw error;
+      try {
+        await writeWorkspaceIndex(rows);
+      } catch (cacheError) {
+        console.warn('MONETRA_OFFLINE_CACHE_UNAVAILABLE: workspace index', cacheError);
+        setNotice('Connected to Monetra. Encrypted offline cache is unavailable on this device.');
+      }
+    } catch (networkError) {
+      try {
+        rows = await readWorkspaceIndex<Workspace>();
+      } catch (cacheError) {
+        console.warn('MONETRA_OFFLINE_CACHE_READ_FAILED: workspace index', cacheError);
+        rows = [];
+      }
+      if (!rows.length) throw networkError;
       setOffline(true);
     }
     setWorkspaces(rows);
-    const chosen = rows.find(row => row.id === selected?.id) ?? rows.find(row => row.type === 'personal') ?? rows[0] ?? null;
+    const chosen = rows.find(row => row.id === selectedWorkspaceId.current) ?? rows.find(row => row.type === 'personal') ?? rows[0] ?? null;
+    selectedWorkspaceId.current = chosen?.id ?? null;
     setSelected(chosen);
     return chosen;
-  }, [getToken, selected?.id]);
+  }, [getToken]);
 
   const loadWorkspace = useCallback(async (workspace: Workspace, silent = false) => {
     if (!silent) setSyncing(true);
     try {
       const token = await getToken();
       if (!token) throw new Error('Your sign-in session has expired.');
-      const pending = await readPendingOperations(workspace.id);
+      let pending: Awaited<ReturnType<typeof readPendingOperations>> = [];
+      try {
+        pending = await readPendingOperations(workspace.id);
+      } catch (cacheError) {
+        console.warn('MONETRA_OFFLINE_QUEUE_UNAVAILABLE:', cacheError);
+      }
       if (pending.length) {
         const supported = pending.filter(item => item.operationType === 'transaction.create');
         if (supported.length) {
@@ -121,16 +141,29 @@ export default function HomeScreen() {
             method: 'POST', workspaceId: workspace.id,
             body: { operations: supported.map(item => ({ operationId: item.operationId, type: item.operationType, payload: JSON.parse(item.payload) })) },
           });
-          for (const item of result.results) if (item.ok) await removePendingOperation(item.operationId);
+          for (const item of result.results) {
+            if (item.ok) {
+              try { await removePendingOperation(item.operationId); }
+              catch (cacheError) { console.warn('MONETRA_OFFLINE_QUEUE_CLEANUP_FAILED:', cacheError); }
+            }
+          }
         }
       }
       const fresh = await apiRequest<Snapshot>('/api/sync/bootstrap', token, { workspaceId: workspace.id });
-      await writeSnapshot(workspace.id, fresh);
+      // Render authoritative server data first; encrypted local caching is best-effort.
       setSnapshot(fresh);
       setOffline(false);
+      try {
+        await writeSnapshot(workspace.id, fresh);
+      } catch (cacheError) {
+        console.warn('MONETRA_OFFLINE_CACHE_UNAVAILABLE: snapshot', cacheError);
+        setNotice('Connected to Monetra. Your data loaded, but encrypted offline caching is unavailable on this device.');
+      }
       if (pending.length) setNotice('Workspace synced. Pending changes were submitted with their original operation IDs.');
     } catch (error) {
-      const cached = await readSnapshot<Snapshot>(workspace.id);
+      let cached: Snapshot | null = null;
+      try { cached = await readSnapshot<Snapshot>(workspace.id); }
+      catch (cacheError) { console.warn('MONETRA_OFFLINE_CACHE_READ_FAILED: snapshot', cacheError); }
       if (cached) {
         setSnapshot(cached);
         setOffline(true);
@@ -146,25 +179,32 @@ export default function HomeScreen() {
 
   const initialize = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const chosen = await loadWorkspaceList();
       if (chosen) await loadWorkspace(chosen);
-      else setNotice('No finance workspace is available for this account.');
+      else throw new Error('No finance workspace is available for this account.');
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not open your finance workspace.');
+      const message = error instanceof Error ? error.message : 'Could not open your finance workspace.';
+      setNotice(message);
+      setLoadError(message);
     } finally {
       setLoading(false);
     }
   }, [loadWorkspaceList, loadWorkspace]);
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) router.replace('/sign-in');
-    if (isLoaded && isSignedIn) void initialize();
-  }, [isLoaded, isSignedIn, initialize, router]);
-
-  useEffect(() => {
-    if (selected?.id && isSignedIn && !loading) void loadWorkspace(selected);
-  }, [selected?.id]);
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      initializedUserId.current = null;
+      router.replace('/sign-in');
+      return;
+    }
+    const userId = user?.id ?? 'signed-in-user';
+    if (initializedUserId.current === userId) return;
+    initializedUserId.current = userId;
+    void initialize();
+  }, [isLoaded, isSignedIn, user?.id, initialize, router]);
 
   const data = snapshot?.data;
   const wallets = data?.wallets ?? [];
@@ -246,8 +286,21 @@ export default function HomeScreen() {
     } finally { setSaving(false); }
   }
 
-  if (!isLoaded || loading) return <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.green}/><Text style={styles.loadingText}>Preparing your Monetra workspace…</Text></View>;
-  if (!isSignedIn) return <View style={styles.center}><ActivityIndicator color={theme.colors.green}/></View>;
+  if (!isLoaded) return <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.green}/><Text style={styles.loadingText}>Preparing secure sign-in…</Text></View>;
+  if (!isSignedIn) return <View style={styles.center}><ActivityIndicator color={theme.colors.green}/><Text style={styles.loadingText}>Opening sign-in…</Text></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.green}/><Text style={styles.loadingText}>Preparing your Monetra workspace…</Text></View>;
+  if (loadError && !snapshot) return (
+    <View style={styles.center}>
+      <Text style={styles.errorTitle}>Couldn’t load your workspace</Text>
+      <Text style={styles.errorMessage}>{loadError}</Text>
+      <Pressable onPress={() => void initialize()} style={styles.retryButton}>
+        <Text style={styles.retryText}>Try again</Text>
+      </Pressable>
+      <Pressable onPress={() => void signOut()} style={styles.signOutButton}>
+        <Text style={styles.signOutText}>Sign out</Text>
+      </Pressable>
+    </View>
+  );
 
   const currentLabel = modules.find(item => item.key === active)?.label ?? 'Overview';
   const workspaceLabel = selected?.type === 'personal' ? 'Personal' : selected?.type === 'family' ? 'Family' : 'Business';
@@ -263,7 +316,7 @@ export default function HomeScreen() {
         <Pressable onPress={() => void signOut()} style={styles.avatar}><Text style={styles.avatarText}>{(user?.firstName?.[0] ?? 'M').toUpperCase()}</Text></Pressable>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.workspaceTabs}>
-        {workspaces.map(workspace => <Pressable key={workspace.id} onPress={() => setSelected(workspace)} style={[styles.workspaceTab, selected?.id === workspace.id && styles.workspaceTabActive]}><Text style={[styles.workspaceTabText, selected?.id === workspace.id && styles.workspaceTabTextActive]}>{workspace.type === 'personal' ? 'Personal' : workspace.type === 'family' ? 'Family' : 'Business'}</Text></Pressable>)}
+        {workspaces.map(workspace => <Pressable key={workspace.id} onPress={() => { selectedWorkspaceId.current = workspace.id; setSelected(workspace); void loadWorkspace(workspace); }} style={[styles.workspaceTab, selected?.id === workspace.id && styles.workspaceTabActive]}><Text style={[styles.workspaceTabText, selected?.id === workspace.id && styles.workspaceTabTextActive]}>{workspace.type === 'personal' ? 'Personal' : workspace.type === 'family' ? 'Family' : 'Business'}</Text></Pressable>)}
       </ScrollView>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moduleTabs}>
         {modules.map(item => <Pressable key={item.key} onPress={() => setActive(item.key)} style={[styles.moduleTab, active === item.key && styles.moduleTabActive]}><Text style={[styles.moduleTabText, active === item.key && styles.moduleTabTextActive]}>{item.short}</Text></Pressable>)}
@@ -367,6 +420,12 @@ const styles=StyleSheet.create({
   root:{flex:1,backgroundColor:theme.colors.background},
   center:{flex:1,backgroundColor:theme.colors.background,alignItems:'center',justifyContent:'center'},
   loadingText:{color:theme.colors.muted,fontSize:13,marginTop:14},
+  errorTitle:{color:theme.colors.text,fontSize:22,fontWeight:'900',textAlign:'center'},
+  errorMessage:{color:theme.colors.muted,fontSize:12,lineHeight:19,textAlign:'center',marginTop:10,maxWidth:300},
+  retryButton:{backgroundColor:theme.colors.greenDeep,paddingHorizontal:26,paddingVertical:13,borderRadius:12,marginTop:22},
+  retryText:{color:'#fff',fontSize:12,fontWeight:'900'},
+  signOutButton:{paddingHorizontal:22,paddingVertical:12,marginTop:8},
+  signOutText:{color:theme.colors.muted,fontSize:11,fontWeight:'800'},
   header:{paddingHorizontal:18,paddingTop:18,paddingBottom:10,flexDirection:'row',alignItems:'center'},
   brand:{fontSize:25,fontWeight:'900',color:theme.colors.text,letterSpacing:-1},
   headerMeta:{fontSize:8,color:theme.colors.muted,fontWeight:'800',letterSpacing:1,marginTop:3},
