@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  ActivityIndicator, Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet,
+  ActivityIndicator, Alert, Modal, Pressable, RefreshControl, ScrollView, Share, StyleSheet,
   Text, TextInput, View, type StyleProp, type ViewStyle,
 } from 'react-native';
 import { useAuth, useClerk, useUser } from '@clerk/expo';
@@ -98,6 +98,9 @@ export default function HomeScreen() {
   const [saving, setSaving] = useState(false);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [editingTransactionOccurredAt, setEditingTransactionOccurredAt] = useState<string | null>(null);
+  const [transactionSearch, setTransactionSearch] = useState('');
+  const [transactionFilter, setTransactionFilter] = useState<'all'|'income'|'expense'|'transfer'>('all');
+  const [reportMonth, setReportMonth] = useState(() => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dhaka',year:'numeric',month:'2-digit'}).format(new Date()).slice(0,7));
   const [walletModal, setWalletModal] = useState(false);
   const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
   const [walletName, setWalletName] = useState('');
@@ -279,6 +282,17 @@ export default function HomeScreen() {
     ...goal,
     allocations: (data?.goalAllocations ?? []).filter(allocation => allocation.goalId === goal.id),
   })), [data]);
+  const filteredTransactions = transactions.filter(tx => {
+    const query = transactionSearch.trim().toLowerCase();
+    const walletName = wallets.find(wallet=>wallet.id===tx.walletId)?.name ?? '';
+    const categoryName = categories.find(category=>category.id===tx.categoryId)?.name ?? '';
+    const matchesQuery = !query || [tx.description,walletName,categoryName,String(Number(tx.amountMinor)/100)].some(value=>value.toLowerCase().includes(query));
+    return matchesQuery && (transactionFilter==='all' || tx.transactionType===transactionFilter);
+  });
+  const reportTransactions = transactions.filter(tx => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dhaka',year:'numeric',month:'2-digit'}).format(new Date(tx.occurredAt)).slice(0,7)===reportMonth);
+  const reportIncome = reportTransactions.filter(tx=>tx.transactionType==='income').reduce((sum,tx)=>sum+Number(tx.amountMinor),0);
+  const reportExpense = reportTransactions.filter(tx=>tx.transactionType==='expense').reduce((sum,tx)=>sum+Number(tx.amountMinor),0);
+
   const assets = wallets.filter(w => w.walletType !== 'credit_card').reduce((sum,w) => sum + Number(w.currentBalanceMinor), 0);
   const liabilities = wallets.filter(w => w.walletType === 'credit_card').reduce((sum,w) => sum + Number(w.currentBalanceMinor), 0);
   const monthKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit' }).format(new Date()).slice(0,7);
@@ -477,6 +491,25 @@ export default function HomeScreen() {
     ]);
   }
 
+  async function shareReportCsv() {
+    const escapeCell = (value: unknown) => '"' + String(value ?? '').replace(/"/g,'""') + '"';
+    const rows = [
+      ['Date','Type','Description','Category','Wallet','Destination wallet','Amount BDT'],
+      ...reportTransactions.map(tx=>[
+        tx.occurredAt,
+        tx.transactionType,
+        tx.description,
+        categories.find(category=>category.id===tx.categoryId)?.name ?? '',
+        wallets.find(wallet=>wallet.id===tx.walletId)?.name ?? '',
+        wallets.find(wallet=>wallet.id===tx.destinationWalletId)?.name ?? '',
+        (Number(tx.amountMinor)/100).toFixed(2),
+      ]),
+    ];
+    const csv = rows.map(row=>row.map(escapeCell).join(',')).join('\\n');
+    try { await Share.share({title:`Monetra ${reportMonth} CSV report`,message:csv}); }
+    catch(error) { setNotice(error instanceof Error?error.message:'Could not open the share sheet.'); }
+  }
+
   async function saveDebt() {
     if (!selected || !debtName.trim() || !Number.isFinite(Number(debtAmount)) || Number(debtAmount) <= 0) { setNotice('Enter a name and a valid principal amount.'); return; }
     if (debtDueDate && !/^\\d{4}-\\d{2}-\\d{2}$/.test(debtDueDate)) { setNotice('Due date must use YYYY-MM-DD format.'); return; }
@@ -603,27 +636,36 @@ export default function HomeScreen() {
           {!wallets.length && <Empty title="No wallets found" detail="Your existing website wallets should appear here after signing in with the same Monetra account."/>}
         </>}
         {active === 'transactions' && <>
-          <SectionTitle title="Transactions" subtitle="Your full transaction history" action={<Pressable style={styles.smallButton} onPress={() => setModal(true)}><Text style={styles.smallButtonText}>+ Add</Text></Pressable>}/>
-          {transactions.slice(0,100).map(tx => <Panel key={tx.id}>
-            <RowItem title={tx.description} subtitle={dateLabel(tx.occurredAt)+' · '+tx.transactionType.toUpperCase()} amount={(tx.transactionType === 'income' ? '+' : '−')+money(tx.amountMinor)} positive={tx.transactionType === 'income'}/>
+          <SectionTitle title="Transactions" subtitle="Search, filter, edit and manage your records" action={<Pressable style={styles.smallButton} onPress={() => {setEditingTransactionId(null);setEditingTransactionOccurredAt(null);setTransactionType('expense');setDestinationWalletId('');setModal(true);}}><Text style={styles.smallButtonText}>+ Add</Text></Pressable>}/>
+          <TextInput value={transactionSearch} onChangeText={setTransactionSearch} placeholder="Search description, wallet, category or amount…" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{maxHeight:42}}>
+            {(['all','income','expense','transfer'] as const).map(value=><Pressable key={value} onPress={()=>setTransactionFilter(value)} style={[styles.choice,transactionFilter===value&&styles.choiceActive]}><Text style={[styles.choiceText,transactionFilter===value&&styles.choiceTextActive]}>{value==='all'?'All':value[0].toUpperCase()+value.slice(1)}</Text></Pressable>)}
+          </ScrollView>
+          {filteredTransactions.slice(0,100).map(tx => <Panel key={tx.id}>
+            <RowItem title={tx.description} subtitle={dateLabel(tx.occurredAt)+' · '+tx.transactionType.toUpperCase()} amount={(tx.transactionType==='income'?'+':tx.transactionType==='transfer'?'↔ ':'−')+money(tx.amountMinor)} positive={tx.transactionType==='income'}/>
             <View style={{flexDirection:'row',gap:9,marginTop:7}}>
               <Pressable style={styles.secondaryButton} onPress={() => editTransaction(tx)}><Text style={styles.secondaryButtonText}>Edit</Text></Pressable>
               <Pressable style={styles.secondaryButton} onPress={() => deleteTransaction(tx)}><Text style={styles.secondaryButtonText}>Delete</Text></Pressable>
             </View>
           </Panel>)}
-          {!transactions.length && <Empty title="No transactions yet" detail="Add your first income or expense entry."/>}
+          {!filteredTransactions.length && <Empty title="No matching transactions" detail="Try another search or transaction type."/>}
         </>}
         {active === 'income' && <>
-          <SectionTitle title="Income & Expense" subtitle="Month-to-date cash flow · Bangladesh time"/>
-          <View style={styles.metricGrid}><Panel style={styles.metric}><Text style={styles.metricLabel}>INCOME</Text><Text style={styles.metricValue}>{money(income)}</Text></Panel><Panel style={styles.metric}><Text style={styles.metricLabel}>EXPENSE</Text><Text style={styles.metricValue}>{money(expense)}</Text></Panel></View>
-          <Panel><Text style={styles.metricLabel}>NET CASH FLOW</Text><Text style={[styles.panelBig, income-expense>=0?styles.positive:styles.negative]}>{money(income-expense)}</Text><Text style={styles.muted}>Transfers and opening balances are not included.</Text></Panel>
-          {thisMonth.filter(tx => tx.transactionType !== 'transfer').slice(0,50).map(tx => <RowItem key={tx.id} title={tx.description} subtitle={dateLabel(tx.occurredAt)} amount={(tx.transactionType==='income'?'+':'−')+money(tx.amountMinor)} positive={tx.transactionType==='income'}/>)}
+          <SectionTitle title="Income & Expense" subtitle="Monthly cash flow · Bangladesh time"/>
+          <Text style={styles.fieldLabel}>REPORT MONTH (YYYY-MM)</Text>
+          <TextInput value={reportMonth} onChangeText={value=>setReportMonth(value.slice(0,7))} maxLength={7} placeholder="2026-11" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <View style={styles.metricGrid}><Panel style={styles.metric}><Text style={styles.metricLabel}>INCOME</Text><Text style={styles.metricValue}>{money(reportIncome)}</Text></Panel><Panel style={styles.metric}><Text style={styles.metricLabel}>EXPENSE</Text><Text style={styles.metricValue}>{money(reportExpense)}</Text></Panel></View>
+          <Panel><Text style={styles.metricLabel}>NET CASH FLOW</Text><Text style={[styles.panelBig, reportIncome-reportExpense>=0?styles.positive:styles.negative]}>{money(reportIncome-reportExpense)}</Text><Text style={styles.muted}>Transfers and opening balances are not included. Period: {reportMonth}.</Text></Panel>
+          {reportTransactions.filter(tx=>tx.transactionType!=='transfer').slice(0,100).map(tx => <RowItem key={tx.id} title={tx.description} subtitle={dateLabel(tx.occurredAt)} amount={(tx.transactionType==='income'?'+':'−')+money(tx.amountMinor)} positive={tx.transactionType==='income'}/> )}
+          {!reportTransactions.length&&<Empty title="No activity for this month" detail="Choose another month or add a transaction."/>}
         </>}
         {active === 'reports' && <>
-          <SectionTitle title="Reports" subtitle="A snapshot of your recorded financial activity"/>
-          <View style={styles.metricGrid}><Panel style={styles.metric}><Text style={styles.metricLabel}>INCOME</Text><Text style={styles.metricValue}>{money(income)}</Text></Panel><Panel style={styles.metric}><Text style={styles.metricLabel}>EXPENSE</Text><Text style={styles.metricValue}>{money(expense)}</Text></Panel></View>
-          <Panel><Text style={styles.itemTitle}>Spending by category</Text>{categories.filter(c=>c.categoryType==='expense').map(category=>{const total=thisMonth.filter(t=>t.transactionType==='expense'&&t.categoryId===category.id).reduce((s,t)=>s+t.amountMinor,0);return total>0?<View key={category.id} style={styles.reportRow}><Text style={styles.muted}>{category.name}</Text><Text style={styles.itemAmount}>{money(total)}</Text></View>:null;})}</Panel>
-          <Text style={styles.muted}>This first native report view uses the locally synced transaction snapshot. Period selection and CSV export are part of the next parity pass.</Text>
+          <SectionTitle title="Reports" subtitle="Monthly summary and category breakdown" action={<Pressable style={styles.smallButton} onPress={()=>void shareReportCsv()}><Text style={styles.smallButtonText}>Share CSV</Text></Pressable>}/>
+          <Text style={styles.fieldLabel}>REPORT MONTH (YYYY-MM)</Text>
+          <TextInput value={reportMonth} onChangeText={value=>setReportMonth(value.slice(0,7))} maxLength={7} placeholder="2026-11" placeholderTextColor={theme.colors.muted} style={styles.input}/>
+          <View style={styles.metricGrid}><Panel style={styles.metric}><Text style={styles.metricLabel}>INCOME</Text><Text style={styles.metricValue}>{money(reportIncome)}</Text></Panel><Panel style={styles.metric}><Text style={styles.metricLabel}>EXPENSE</Text><Text style={styles.metricValue}>{money(reportExpense)}</Text></Panel></View>
+          <Panel><Text style={styles.itemTitle}>Spending by category</Text>{categories.filter(c=>c.categoryType==='expense').map(category=>{const total=reportTransactions.filter(t=>t.transactionType==='expense'&&t.categoryId===category.id).reduce((sum,t)=>sum+Number(t.amountMinor),0);return total>0?<View key={category.id} style={styles.reportRow}><Text style={styles.muted}>{category.name}</Text><Text style={styles.itemAmount}>{money(total)}</Text></View>:null;})}</Panel>
+          <Text style={styles.muted}>CSV share includes this month’s transaction date, type, description, category, source wallet, destination wallet and amount.</Text>
         </>}
         {active === 'radar' && <>
           <SectionTitle title="Financial Radar" subtitle="Signals calculated from your synced workspace"/>
