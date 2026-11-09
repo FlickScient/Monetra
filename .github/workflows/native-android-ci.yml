@@ -1,0 +1,135 @@
+name: Native Android app checks and APK
+
+on:
+  push:
+    branches: [feat/native-expo-android]
+    paths:
+      - "android-app/**"
+      - "Main.png"
+      - "tsconfig.json"
+      - ".github/workflows/native-android-ci.yml"
+  pull_request:
+    paths:
+      - "android-app/**"
+      - "Main.png"
+      - "tsconfig.json"
+      - ".github/workflows/native-android-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: monetra-native-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: android-app
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: android-app/package.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Configure preinstalled Android SDK
+        run: |
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+
+      - name: Install Android SDK packages
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Install JavaScript dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Prepare symbol-only Monetra launcher icon
+        run: |
+          python -m pip install --quiet Pillow
+          python scripts/prepare-icon.py
+          test -s assets/icon.png
+
+      - name: Ensure this is a standalone app (no Expo development client)
+        run: |
+          if npm ls expo-dev-client --depth=0; then
+            echo "expo-dev-client must not be installed in the standalone APK."
+            exit 1
+          fi
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Expo Doctor
+        run: npx expo-doctor
+
+      - name: Validate Expo configuration and icon
+        run: npx expo config --type public
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Assemble standalone release APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Verify standalone APK output
+        run: |
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "package: name='com.flickscient.monetramobile'"
+          if "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | grep -qi "launchable-activity"; then
+            echo "Standalone APK contains a launchable Android activity."
+          else
+            echo "APK has no launchable activity."
+            exit 1
+          fi
+
+      - name: Upload standalone Monetra APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: monetra-standalone-android-apk
+          path: android-app/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Launch release APK in Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-boot-timeout: 900
+          disable-animations: true
+          script: |
+            set +e; APK="$GITHUB_WORKSPACE/android-app/android/app/build/outputs/apk/release/app-release.apk"; adb install "$APK"; INSTALL_STATUS=$?; if [ "$INSTALL_STATUS" -eq 0 ]; then adb shell am force-stop com.flickscient.monetramobile; adb logcat -c; adb shell monkey -p com.flickscient.monetramobile 1; sleep 25; APP_PID="$(adb shell pidof com.flickscient.monetramobile | tr -d '\r')"; else APP_PID=""; fi; adb logcat -d -v threadtime -t 5000 > "$GITHUB_WORKSPACE/monetra-startup-log.txt" 2>&1; if [ "$INSTALL_STATUS" -ne 0 ]; then echo "APK installation failed"; exit "$INSTALL_STATUS"; fi; if [ -z "$APP_PID" ]; then echo "Monetra process did not remain alive after launch"; exit 1; fi; if awk -v pid="$APP_PID" '$3 == pid && ($5 == "F" || /FATAL EXCEPTION|Fatal signal/) { print; found=1 } END { exit found ? 0 : 1 }' "$GITHUB_WORKSPACE/monetra-startup-log.txt"; then echo "Monetra process emitted a fatal error."; exit 1; fi; echo "Monetra stayed alive for 25 seconds; no fatal error from its process."
+
+      - name: Upload Android startup logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monetra-android-startup-logs
+          path: monetra-startup-log.txt
+          if-no-files-found: ignore
+          retention-days: 7
+

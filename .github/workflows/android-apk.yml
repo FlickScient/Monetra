@@ -2,17 +2,6 @@ name: Monetra Android Build
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - "native-app/**"
-      - "lib/offline/**"
-      - "capacitor.config.ts"
-      - "package.json"
-      - "package-lock.json"
-      - "scripts/configure-android-sso.mjs"
-      - "android/database/**"
-      - "public/sqlite/**"
-      - ".github/workflows/android-apk.yml"
 
 concurrency:
   group: monetra-android-${{ github.ref }}
