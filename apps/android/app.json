@@ -19,7 +19,7 @@
       "expo-router",
       "expo-secure-store",
       "@clerk/expo",
-      "expo-sqlite"
+      ["expo-sqlite", { "useSQLCipher": true }]
     ],
     "experiments": {
       "typedRoutes": true
