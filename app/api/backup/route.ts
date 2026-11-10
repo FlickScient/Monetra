@@ -349,7 +349,7 @@ export async function POST(req: Request) {
         });
       const insert = async (table: any, values: any[]) => { if (values.length) await tx.insert(table).values(values); };
 
-      await insert(categories, ownerRows('categories'));
+      await insert(categories, ownerRows('categories', ['createdAt']));
       await insert(wallets, ownerRows('wallets', ['createdAt', 'updatedAt']));
       await insert(transactions, ownerRows('transactions', ['occurredAt', 'voidedAt', 'createdAt']));
       await insert(ledgerAccounts, ownerRows('ledgerAccounts', ['createdAt']));
