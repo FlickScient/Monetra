@@ -21,7 +21,7 @@ export async function getWorkspaceContext(request?: Request): Promise<WorkspaceC
 
   if (!userId && request) {
     const authorization = request.headers.get('authorization') || '';
-    const match = authorization.match(/^Bearer\\s+(.+)$/i);
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
     if (match?.[1]) {
       try {
         const claims = await verifyToken(match[1], {
