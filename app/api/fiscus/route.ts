@@ -419,8 +419,49 @@ export async function POST(request: Request) {
           }
         }
       }
+      // Suggest durable memories for the user to review. Nothing extracted by
+      // the model is trusted or used until the user explicitly approves it.
+      const userTurnCount = historyRows.filter((row) => row.role === 'user').length;
+      if (prefs?.memoryEnabled !== false && userTurnCount >= 6 && userTurnCount % 6 === 0) {
+        const existingMemories = await db.select({ content: fiscusMemories.content })
+          .from(fiscusMemories).where(and(
+            eq(fiscusMemories.clerkUserId, userId),
+            eq(fiscusMemories.workspaceId, workspaceId),
+          ));
+        const known = new Set(existingMemories.map((row) => row.content.trim().toLowerCase()));
+        const userStatements = historyRows.filter((row) => row.role === 'user').slice(-12)
+          .map((row) => row.content).join('\\n');
+        const memoryResponse = await gemini(activeModel, apiKey, [
+          { role: 'user', parts: [{ text: userStatements }] },
+        ], 'Identify at most 3 durable facts the user explicitly stated that may help future assistance. Only use clear statements, never infer. Exclude financial account numbers, credentials, exact balances, health data, intimate details, and other sensitive personal data. Return strict JSON only: {"memories":[{"type":"preference|goal|context","content":"..."}]}. If nothing qualifies return {"memories":[]}. Each content must be a concise standalone statement under 240 characters.', 500);
+        if (memoryResponse.ok) {
+          const memoryResult = await memoryResponse.json();
+          const rawMemoryText = memoryResult?.candidates?.[0]?.content?.parts
+            ?.map((part: { text?: string }) => part.text ?? '').join('').trim() ?? '';
+          try {
+            const parsed = JSON.parse(rawMemoryText.replace(/^\x60{3}(?:json)?\\s*|\\s*\x60{3}$/g, ''));
+            const suggestions = Array.isArray(parsed?.memories) ? parsed.memories.slice(0, 3) : [];
+            for (const suggestion of suggestions) {
+              const type = suggestion?.type;
+              const memoryContent = typeof suggestion?.content === 'string' ? suggestion.content.trim() : '';
+              if (!memoryContent || memoryContent.length > 1200 ||
+                  !['preference', 'goal', 'context'].includes(type) ||
+                  known.has(memoryContent.toLowerCase())) continue;
+              await db.insert(fiscusMemories).values({
+                clerkUserId: userId, workspaceId, memoryType: type, content: memoryContent,
+                userApproved: false, source: 'assistant_suggested',
+              });
+              known.add(memoryContent.toLowerCase());
+            }
+          } catch {
+            // Invalid model JSON is ignored; no unreviewed memory is saved.
+          }
+        } else {
+          await memoryResponse.body?.cancel().catch(() => undefined);
+        }
+      }
     } catch (summaryError) {
-      // Summary maintenance is best-effort; it must never fail a successful chat.
+      // Summary and memory suggestions are best-effort; they must never fail a successful chat.
       console.error('FISCUS_SUMMARY_UPDATE_FAILED', summaryError instanceof Error ? summaryError.name : 'unknown');
     }
     await db.insert(fiscusUsageLogs).values({
