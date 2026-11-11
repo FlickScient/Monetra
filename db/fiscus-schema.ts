@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, integer, timestamp, index, uniqueIndex, check } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, integer, timestamp, index, uniqueIndex, primaryKey, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { workspaces } from './schema';
 
@@ -74,7 +74,7 @@ export const fiscusPreferences = pgTable('fiscus_preferences', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
-  ownerWorkspacePk: uniqueIndex('fiscus_preferences_owner_workspace_unique').on(table.clerkUserId, table.workspaceId),
+  ownerWorkspacePk: primaryKey({ columns: [table.clerkUserId, table.workspaceId], name: 'fiscus_preferences_pkey' }),
   responseStyleValid: check('fiscus_preferences_response_style_check', sql`${table.responseStyle} in ('concise', 'balanced', 'detailed')`),
 }));
 
