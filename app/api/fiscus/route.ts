@@ -173,9 +173,15 @@ export async function POST(request: Request) {
     }
 
     if (action === 'restore') {
+      const requestedConversationId = body.conversationId;
+      if (requestedConversationId !== undefined && !isUuid(requestedConversationId)) {
+        return json({ error: 'Choose a valid conversation.' }, 400);
+      }
       const [conversation] = await db.select().from(fiscusConversations).where(and(
         eq(fiscusConversations.clerkUserId, userId), eq(fiscusConversations.workspaceId, workspaceId),
-        eq(fiscusConversations.status, 'active'),
+        ...(typeof requestedConversationId === 'string'
+          ? [eq(fiscusConversations.id, requestedConversationId)]
+          : [eq(fiscusConversations.status, 'active')]),
       )).orderBy(desc(fiscusConversations.lastMessageAt)).limit(1);
       if (!conversation) return json({ hasConversation: false, messages: [] });
       const rows = await db.select().from(fiscusMessages).where(and(
@@ -363,6 +369,60 @@ export async function POST(request: Request) {
       eq(fiscusConversations.id, conversation.id), eq(fiscusConversations.clerkUserId, userId),
       eq(fiscusConversations.workspaceId, workspaceId),
     ));
+    // Maintain a rolling long-history summary without repeatedly summarizing
+    // the same messages. Keep the latest 12 messages verbatim for near context.
+    try {
+      const historyRows = await db.select({
+        id: fiscusMessages.id, role: fiscusMessages.role, content: fiscusMessages.content,
+      }).from(fiscusMessages).where(and(
+        eq(fiscusMessages.conversationId, conversation.id),
+        eq(fiscusMessages.clerkUserId, userId),
+        eq(fiscusMessages.workspaceId, workspaceId),
+      )).orderBy(desc(fiscusMessages.createdAt)).limit(80);
+      const chronological = historyRows.reverse();
+      const [checkpoint] = await db.select({ throughMessageId: fiscusSummaries.throughMessageId, summary: fiscusSummaries.summary })
+        .from(fiscusSummaries).where(and(
+          eq(fiscusSummaries.conversationId, conversation.id),
+          eq(fiscusSummaries.clerkUserId, userId),
+          eq(fiscusSummaries.workspaceId, workspaceId),
+        )).limit(1);
+      const checkpointIndex = checkpoint?.throughMessageId
+        ? chronological.findIndex((row) => row.id === checkpoint.throughMessageId)
+        : -1;
+      // If the checkpoint fell outside the bounded fetch window, leave it
+      // untouched rather than accidentally duplicating old context.
+      if (!checkpoint?.throughMessageId || checkpointIndex >= 0) {
+        const pending = chronological.slice(checkpointIndex + 1, Math.max(checkpointIndex + 1, chronological.length - 12));
+        if (pending.length >= 12) {
+          const summaryContents = pending.map((row) => ({
+            role: row.role === 'assistant' ? 'model' as const : 'user' as const,
+            parts: [{ text: row.content }],
+          }));
+          const summaryInstruction = 'Update a compact, factual long-term summary of this conversation. Preserve the user\'s goals, preferences, decisions, constraints, unresolved questions and important context. Do not invent facts. Remove obsolete details when contradicted. Output only the updated summary, under 1800 characters. Existing summary:\n'
+            + (checkpoint?.summary || '(none)');
+          const summaryResponse = await gemini(activeModel, apiKey, summaryContents, summaryInstruction, 700);
+          if (summaryResponse.ok) {
+            const summaryResult = await summaryResponse.json();
+            const nextSummary = summaryResult?.candidates?.[0]?.content?.parts
+              ?.map((part: { text?: string }) => part.text ?? '').join('').trim();
+            if (nextSummary) {
+              await db.insert(fiscusSummaries).values({
+                clerkUserId: userId, workspaceId, conversationId: conversation.id,
+                summary: nextSummary.slice(0, 5000), throughMessageId: pending[pending.length - 1].id,
+              }).onConflictDoUpdate({
+                target: fiscusSummaries.conversationId,
+                set: { summary: nextSummary.slice(0, 5000), throughMessageId: pending[pending.length - 1].id, updatedAt: new Date() },
+              });
+            }
+          } else {
+            await summaryResponse.body?.cancel().catch(() => undefined);
+          }
+        }
+      }
+    } catch (summaryError) {
+      // Summary maintenance is best-effort; it must never fail a successful chat.
+      console.error('FISCUS_SUMMARY_UPDATE_FAILED', summaryError instanceof Error ? summaryError.name : 'unknown');
+    }
     await db.insert(fiscusUsageLogs).values({
       clerkUserId: userId, workspaceId, conversationId: conversation.id, model: activeModel,
       status: 'succeeded', latencyMs, inputTokens, outputTokens, fallbackUsed,
