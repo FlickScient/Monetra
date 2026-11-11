@@ -421,7 +421,15 @@ export async function POST(request: Request) {
       }
       // Suggest durable memories for the user to review. Nothing extracted by
       // the model is trusted or used until the user explicitly approves it.
-      const userTurnCount = historyRows.filter((row) => row.role === 'user').length;
+      const [userTurnCountRow] = await db.select({
+        count: sql<number>`COUNT(*)::int`,
+      }).from(fiscusMessages).where(and(
+        eq(fiscusMessages.conversationId, conversation.id),
+        eq(fiscusMessages.clerkUserId, userId),
+        eq(fiscusMessages.workspaceId, workspaceId),
+        eq(fiscusMessages.role, 'user'),
+      ));
+      const userTurnCount = userTurnCountRow?.count ?? 0;
       if (prefs?.memoryEnabled !== false && userTurnCount >= 6 && userTurnCount % 6 === 0) {
         const existingMemories = await db.select({ content: fiscusMemories.content })
           .from(fiscusMemories).where(and(
