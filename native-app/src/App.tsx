@@ -331,16 +331,23 @@ export default function App() {
       try {
         const token = await getToken();
         if (!token) throw new Error('Your Clerk session is not ready. Sign in again.');
+        // Android may report an active network even when mobile data has no
+        // internet access. Bound startup requests so cached offline data can
+        // be used instead of leaving the app on "Preparing your money space".
         const response = await fetch(API_BASE + '/api/workspaces', {
           headers: { Authorization: 'Bearer ' + token },
           cache: 'no-store',
+          signal: AbortSignal.timeout(10000),
         });
         const rows = await response.json().catch(() => null);
         if (!response.ok || !Array.isArray(rows)) throw new Error(rows?.error || 'Could not load your Monetra workspaces.');
         setAvailableWorkspaces(rows as CachedWorkspace[]);
         const selected = (rows as CachedWorkspace[]).find((item) => item.type === 'personal') || (rows as CachedWorkspace[])[0];
         if (!selected?.id) throw new Error('No personal workspace is available for this account.');
-        await syncNativeWorkspace(userId, selected.id);
+        await Promise.race([
+          syncNativeWorkspace(userId, selected.id),
+          new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error('Initial sync timed out.')), 15000)),
+        ]);
         setWorkspace(selected);
         const hasPin = await hasNativeAppPin(userId);
         setMode(hasPin ? 'unlock' : 'setup-pin');
