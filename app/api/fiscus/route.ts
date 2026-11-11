@@ -430,7 +430,7 @@ export async function POST(request: Request) {
           ));
         const known = new Set(existingMemories.map((row) => row.content.trim().toLowerCase()));
         const userStatements = historyRows.filter((row) => row.role === 'user').slice(-12)
-          .map((row) => row.content).join('\\n');
+          .map((row) => row.content).join('\n');
         const memoryResponse = await gemini(activeModel, apiKey, [
           { role: 'user', parts: [{ text: userStatements }] },
         ], 'Identify at most 3 durable facts the user explicitly stated that may help future assistance. Only use clear statements, never infer. Exclude financial account numbers, credentials, exact balances, health data, intimate details, and other sensitive personal data. Return strict JSON only: {"memories":[{"type":"preference|goal|context","content":"..."}]}. If nothing qualifies return {"memories":[]}. Each content must be a concise standalone statement under 240 characters.', 500);
