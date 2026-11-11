@@ -4,15 +4,10 @@ import ws from 'ws';
 
 neonConfig.webSocketConstructor = ws;
 
-// GitHub CI must validate the Next.js build without connecting to or mutating
-// the user's finance database. Vercel builds do not set this CI-only flag.
+// GitHub CI validates application code only. It must not require a database
+// secret or connect to any user database during a pull-request build.
 if (process.env.MONETRA_CI_BUILD === '1') {
-  console.log('WORKSPACE_MIGRATION: migrations disabled; running read-only finance sync preflight and verification.');
-  for (const script of ['db:preflight:finance-sync', 'db:verify:finance-sync']) {
-    const result = spawnSync('npm', ['run', script], { stdio: 'inherit', env: process.env });
-    if (result.error) throw result.error;
-    if (result.status !== 0) process.exit(result.status ?? 1);
-  }
+  console.log('WORKSPACE_MIGRATION: skipped in CI; database checks run only against the isolated QA branch.');
   process.exit(0);
 }
 
