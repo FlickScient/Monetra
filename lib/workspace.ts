@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server';
+import { verifyToken } from '@clerk/backend';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { workspaces } from '@/db/schema';
@@ -11,10 +12,28 @@ const WORKSPACE_TYPES = ['personal', 'family', 'business'] as const;
 
 /**
  * Resolve a workspace strictly within the authenticated Clerk user's ownership.
+ * Browser sessions use Clerk cookies; Capacitor clients may use a Clerk bearer token.
  * Requests without x-workspace-id intentionally fall back to Personal.
  */
 export async function getWorkspaceContext(request?: Request): Promise<WorkspaceContext> {
-  const { userId } = await auth();
+  const session = await auth();
+  let userId: string | null = session.userId;
+
+  if (!userId && request) {
+    const authorization = request.headers.get('authorization') || '';
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    if (match?.[1]) {
+      try {
+        const claims = await verifyToken(match[1], {
+          secretKey: process.env.CLERK_SECRET_KEY,
+        });
+        userId = claims.sub;
+      } catch (error) {
+        console.warn('MONETRA_NATIVE_AUTH_REJECTED:', error instanceof Error ? error.message : 'Invalid bearer token');
+      }
+    }
+  }
+
   if (!userId) return { ok: false, status: 401, error: 'Unauthorized' };
 
   const requestedWorkspaceId = request?.headers.get('x-workspace-id')?.trim();
@@ -28,7 +47,7 @@ export async function getWorkspaceContext(request?: Request): Promise<WorkspaceC
       await db.transaction(async (tx) => {
         for (const workspaceType of WORKSPACE_TYPES) {
           await tx.insert(workspaces).values({
-            userId,
+            userId: userId!,
             workspaceType,
             name: workspaceType[0].toUpperCase() + workspaceType.slice(1),
           }).onConflictDoNothing({
