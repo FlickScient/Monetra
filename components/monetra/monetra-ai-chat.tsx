@@ -3,12 +3,13 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import {
-  ArrowUp, Bot, Clock3, MessageSquare, Plus,
-  Search, Send, Sparkles, Trash2, UserRound, X,
+  ArrowUp, Bot, Brain, Clock3, MessageSquare, Plus,
+  Search, Send, Sparkles, Trash2, UserRound, X, ShieldCheck,
 } from 'lucide-react';
 
 type Message = { role: 'user' | 'model'; content: string };
-type FiscusAction = 'chat' | 'restore' | 'clear' | 'history' | 'new' | 'select' | 'delete';
+type FiscusAction = 'chat' | 'restore' | 'clear' | 'history' | 'new' | 'select' | 'delete' | 'memory_list' | 'memory_create' | 'memory_approve' | 'memory_delete' | 'memory_toggle';
+type FiscusMemory = { id: string; memoryType: 'preference' | 'goal' | 'context'; content: string; userApproved: boolean };
 type Conversation = {
   id: string;
   title: string;
@@ -30,24 +31,14 @@ async function invokeFiscus(
   action: FiscusAction,
   payload: Record<string, unknown> = {},
 ) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !publishableKey) {
-    throw new Error('Fiscus AI is not connected yet. Supabase frontend settings are missing.');
-  }
-
   const token = await getToken();
   if (!token) throw new Error('Your session has expired. Please sign in again.');
 
-  const response = await fetch(supabaseUrl.replace(/\/$/, '') + '/functions/v1/fiscus-chat', {
+  const response = await fetch('/api/fiscus', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: 'Bearer ' + token,
-      apikey: publishableKey,
     },
     body: JSON.stringify({ ...payload, action, workspaceId }),
     cache: 'no-store',
@@ -107,6 +98,12 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState('');
   const [showHistory, setShowHistory] = useState(true);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [memories, setMemories] = useState<FiscusMemory[]>([]);
+  const [memoryDraft, setMemoryDraft] = useState('');
+  const [memoryType, setMemoryType] = useState<'preference' | 'goal' | 'context'>('context');
+  const [memoryEnabled, setMemoryEnabled] = useState(true);
+  const [memoryBusy, setMemoryBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
 
@@ -114,6 +111,64 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
     const data = await invokeFiscus(getToken, workspaceId, 'history');
     setConversations(Array.isArray(data.conversations) ? data.conversations : []);
   }, [getToken, workspaceId]);
+
+  const refreshMemories = useCallback(async () => {
+    const data = await invokeFiscus(getToken, workspaceId, 'memory_list');
+    setMemories(Array.isArray(data.memories) ? data.memories : []);
+    setMemoryEnabled(data.memoryEnabled !== false);
+  }, [getToken, workspaceId]);
+
+  async function addMemory() {
+    const content = memoryDraft.trim();
+    if (!content || memoryBusy) return;
+    setMemoryBusy(true);
+    setError('');
+    try {
+      await invokeFiscus(getToken, workspaceId, 'memory_create', { content, memoryType });
+      setMemoryDraft('');
+      await refreshMemories();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save this memory.');
+    } finally {
+      setMemoryBusy(false);
+    }
+  }
+
+  async function changeMemoryApproval(memory: FiscusMemory, approved: boolean) {
+    setMemoryBusy(true);
+    try {
+      await invokeFiscus(getToken, workspaceId, 'memory_approve', { memoryId: memory.id, approved });
+      await refreshMemories();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update this memory.');
+    } finally {
+      setMemoryBusy(false);
+    }
+  }
+
+  async function removeMemory(memoryId: string) {
+    setMemoryBusy(true);
+    try {
+      await invokeFiscus(getToken, workspaceId, 'memory_delete', { memoryId });
+      await refreshMemories();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete this memory.');
+    } finally {
+      setMemoryBusy(false);
+    }
+  }
+
+  async function toggleMemory(enabled: boolean) {
+    setMemoryBusy(true);
+    try {
+      await invokeFiscus(getToken, workspaceId, 'memory_toggle', { enabled });
+      setMemoryEnabled(enabled);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update memory settings.');
+    } finally {
+      setMemoryBusy(false);
+    }
+  }
 
   const restoreConversation = useCallback(async (conversationId?: string) => {
     const data = await invokeFiscus(
@@ -181,7 +236,7 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
     setLoading(true);
     try {
       const data = await invokeFiscus(getToken, workspaceId, 'chat', {
-        messages: nextMessages.slice(-12),
+        message: content,
       });
       if (typeof data.answer !== 'string' || !data.answer.trim()) {
         throw new Error('Fiscus returned an empty response.');
@@ -289,12 +344,58 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
           <button type="button" className="monetra-ai-icon-btn mobile-history-toggle" onClick={() => setShowHistory((value) => !value)} aria-label="Toggle chat history">
             {showHistory ? <X size={17} /> : <Clock3 size={17} />}
           </button>
+          <button type="button" className="monetra-ai-icon-btn" onClick={async () => {
+            const next = !memoryOpen;
+            setMemoryOpen(next);
+            if (next) {
+              try { await refreshMemories(); } catch (err) { setError(err instanceof Error ? err.message : 'Memory could not load.'); }
+            }
+          }} aria-label="Manage Fiscus memory" title="Memory">
+            <Brain size={17} />
+          </button>
           <button type="button" className="monetra-ai-new-chat" onClick={startNewChat} disabled={!ready || loading || historyLoading}>
             <Plus size={15} /><span>New chat</span>
           </button>
         </div>
       </header>
 
+      {memoryOpen && (
+        <section className="fiscus-memory-panel" style={{ padding: 16, borderBottom: '1px solid var(--border, #e5e7eb)', background: 'var(--card, #fff)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <strong style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Brain size={17} /> Fiscus memory</strong>
+              <small style={{ opacity: 0.7 }}>Only approved memories are included in future answers. Chat history is stored separately.</small>
+            </div>
+            <button type="button" className="monetra-ai-icon-btn" onClick={() => setMemoryOpen(false)} aria-label="Close memory"><X size={16} /></button>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 13 }}>
+            <input type="checkbox" checked={memoryEnabled} disabled={memoryBusy} onChange={(event) => void toggleMemory(event.target.checked)} />
+            Use approved memories in Fiscus responses
+          </label>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <select value={memoryType} onChange={(event) => setMemoryType(event.target.value as typeof memoryType)} aria-label="Memory type">
+              <option value="context">Context</option><option value="preference">Preference</option><option value="goal">Goal</option>
+            </select>
+            <input value={memoryDraft} onChange={(event) => setMemoryDraft(event.target.value)} maxLength={1200} placeholder="Add something Fiscus should remember…" style={{ flex: '1 1 220px', minWidth: 0 }} />
+            <button type="button" className="monetra-ai-new-chat" onClick={() => void addMemory()} disabled={!memoryDraft.trim() || memoryBusy}><Plus size={14} /> Save memory</button>
+          </div>
+          <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+            {memories.length ? memories.map((memory) => (
+              <div key={memory.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 10, border: '1px solid var(--border, #e5e7eb)', borderRadius: 10 }}>
+                <ShieldCheck size={16} style={{ flex: '0 0 auto', marginTop: 2, opacity: memory.userApproved ? 1 : 0.45 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <small style={{ textTransform: 'capitalize', opacity: 0.65 }}>{memory.memoryType} · {memory.userApproved ? 'Approved' : 'Not approved'}</small>
+                  <p style={{ margin: '3px 0 0', overflowWrap: 'anywhere' }}>{memory.content}</p>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12 }}>
+                    <input type="checkbox" checked={memory.userApproved} disabled={memoryBusy} onChange={(event) => void changeMemoryApproval(memory, event.target.checked)} /> Include in answers
+                  </label>
+                </div>
+                <button type="button" className="monetra-ai-history-delete" onClick={() => void removeMemory(memory.id)} disabled={memoryBusy} aria-label="Delete memory"><Trash2 size={14} /></button>
+              </div>
+            )) : <small style={{ opacity: 0.7 }}>No saved memories in this workspace yet.</small>}
+          </div>
+        </section>
+      )}
       <div className={'monetra-ai-shell' + (showHistory ? '' : ' history-collapsed')}>
         <aside className="monetra-ai-history">
           <div className="monetra-ai-history-head">

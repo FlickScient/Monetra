@@ -4,15 +4,19 @@ import ws from 'ws';
 
 neonConfig.webSocketConstructor = ws;
 
-// GitHub CI must validate the Next.js build without connecting to or mutating
-// the user's finance database. Vercel builds do not set this CI-only flag.
+// GitHub CI validates application code only. It must not require a database
+// secret or connect to any user database during a pull-request build.
 if (process.env.MONETRA_CI_BUILD === '1') {
-  console.log('WORKSPACE_MIGRATION: migrations disabled; running read-only finance sync preflight and verification.');
-  for (const script of ['db:preflight:finance-sync', 'db:verify:finance-sync']) {
-    const result = spawnSync('npm', ['run', script], { stdio: 'inherit', env: process.env });
-    if (result.error) throw result.error;
-    if (result.status !== 0) process.exit(result.status ?? 1);
-  }
+  console.log('WORKSPACE_MIGRATION: skipped in CI; database checks run only against the isolated QA branch.');
+  process.exit(0);
+}
+
+// Vercel Preview deployments must never run schema migrations. Preview
+// DATABASE_URL values can point at production when no isolated preview DB is
+// configured, so keep previews build-only and leave all database changes to an
+// explicitly controlled migration step.
+if (process.env.VERCEL_ENV === 'preview') {
+  console.log('WORKSPACE_MIGRATION: skipped for Vercel Preview; no database changes will run.');
   process.exit(0);
 }
 

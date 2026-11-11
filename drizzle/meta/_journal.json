@@ -10,6 +10,7 @@
     {"idx":5,"version":"7","when":1793966400000,"tag":"0005_transaction_voiding","breakpoints":true},
     {"idx":6,"version":"7","when":1794052800000,"tag":"0006_finance_operations","breakpoints":true},
     {"idx":7,"version":"7","when":1794139200000,"tag":"0007_finance_query_performance","breakpoints":true},
-    {"idx":8,"version":"7","when":1794225600000,"tag":"0008_finance_sync_change_log","breakpoints":true}
+    {"idx":8,"version":"7","when":1794225600000,"tag":"0008_finance_sync_change_log","breakpoints":true},
+    {"idx":9,"version":"7","when":1794403500000,"tag":"0009_fiscus_neon","breakpoints":true}
   ]
 }
