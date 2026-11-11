@@ -1,4 +1,5 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import { useAuth, useSignIn, useSignUp, useSSO } from 'capacitor-clerk';
 import {
   getLastNativeSessionOwner,
@@ -16,6 +17,7 @@ import {
   type CachedWorkspace,
 } from '@/lib/offline/native-finance';
 import { configureFinanceSyncClient } from '@/lib/offline/sync-client';
+import HomePage from '@/app/page';
 
 const API_BASE = (import.meta.env.VITE_MONETRA_API_URL || 'https://monetra-4rax.vercel.app').replace(/\/+$/, '');
 type Wallet = { id: string; name: string; walletType?: string; currentBalanceMinor?: number; currency?: string; status?: string };
@@ -26,6 +28,38 @@ type DebtPayment = { id: string; dueDebtId: string; amountMinor: number };
 type Mode = 'checking' | 'sign-in' | 'prepare' | 'setup-pin' | 'unlock' | 'dashboard' | 'error';
 type AppView = 'home' | 'activity' | 'insights' | 'debts' | 'fiscus' | 'settings';
 type FiscusMessage = { role: 'user' | 'model'; content: string };
+
+class DashboardErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: string | null }
+> {
+  state = { error: null as string | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error: error?.message || 'Unknown dashboard rendering error.' };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('MONETRA_DASHBOARD_RENDER_ERROR:', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <main className="screen center">
+          <div className="brand-mark">M</div>
+          <h1>Monetra dashboard couldn’t load</h1>
+          <p>The PIN is saved. Your finance data has not been erased.</p>
+          <pre className="error" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', textAlign: 'left', width: '100%', maxWidth: 520, fontSize: 12 }}>
+            {this.state.error}
+          </pre>
+          <button onClick={() => window.location.reload()}>Try again</button>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function money(minor: number): string {
   return new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 2 }).format((minor || 0) / 100);
@@ -297,16 +331,23 @@ export default function App() {
       try {
         const token = await getToken();
         if (!token) throw new Error('Your Clerk session is not ready. Sign in again.');
+        // Android may report an active network even when mobile data has no
+        // internet access. Bound startup requests so cached offline data can
+        // be used instead of leaving the app on "Preparing your money space".
         const response = await fetch(API_BASE + '/api/workspaces', {
           headers: { Authorization: 'Bearer ' + token },
           cache: 'no-store',
+          signal: AbortSignal.timeout(10000),
         });
         const rows = await response.json().catch(() => null);
         if (!response.ok || !Array.isArray(rows)) throw new Error(rows?.error || 'Could not load your Monetra workspaces.');
         setAvailableWorkspaces(rows as CachedWorkspace[]);
         const selected = (rows as CachedWorkspace[]).find((item) => item.type === 'personal') || (rows as CachedWorkspace[])[0];
         if (!selected?.id) throw new Error('No personal workspace is available for this account.');
-        await syncNativeWorkspace(userId, selected.id);
+        await Promise.race([
+          syncNativeWorkspace(userId, selected.id),
+          new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error('Initial sync timed out.')), 15000)),
+        ]);
         setWorkspace(selected);
         const hasPin = await hasNativeAppPin(userId);
         setMode(hasPin ? 'unlock' : 'setup-pin');
@@ -372,10 +413,11 @@ export default function App() {
     setBusy(true); setError('');
     try {
       await setNativeAppPin(ownerId, pin);
+      if (!workspace?.id) throw new Error('Your workspace is not ready yet. Reopen Monetra while connected to finish setup.');
+      await loadLocal(workspace.id);
       setPin(''); setPinConfirm('');
-      setMode('dashboard');
-      if (workspace) await loadLocal(workspace.id);
       setMessage('Local app lock enabled. Your finance snapshot is saved on this device.');
+      setMode('dashboard');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not set the local PIN.');
     } finally { setBusy(false); }
@@ -557,39 +599,11 @@ export default function App() {
   }
   if (mode === 'error') return <main className="screen center"><div className="brand-mark">M</div><h1>Monetra couldn’t open</h1><pre className="error" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', textAlign: 'left', width: '100%', maxWidth: 520, fontSize: 12 }}>{error}</pre>{isLoaded && !isSignedIn && navigator.onLine && <button onClick={() => setMode('sign-in')}>Sign in</button>}<button className="secondary" onClick={() => window.location.reload()}>Try again</button></main>;
 
-  const transactionWallet = (id?: string) => wallets.find((item) => item.id === id)?.name || 'Wallet';
+  // After the native sign-in + PIN gate, render the exact website finance experience.
+  // Its own data adapter uses the same hosted APIs and the existing SQLite cache.
   return (
-    <main className="app">
-      <header className="topbar"><div className="brand"><div className="brand-mark small">M</div><div><b>Monetra</b><small>Local-first finance</small></div></div><div className="topbar-actions">{availableWorkspaces.length > 1 && <select className="workspace-select" aria-label="Switch workspace" value={workspace?.id || ''} onChange={(event) => void switchWorkspace(event.target.value)} disabled={busy}>{availableWorkspaces.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}<button className="sync-button" onClick={() => void refresh()} disabled={busy}>{busy ? 'Working…' : navigator.onLine ? 'Sync now' : 'Offline'}</button></div></header>
-      <section className="hero"><span className="eyebrow">TOTAL WALLET BALANCE</span><h1>{money(totalBalance)}</h1><p>{navigator.onLine ? 'Your local vault is ready to sync.' : 'Saved on this device · no internet required.'}</p></section>
-      {message && <p className="notice">{message}</p>}{error && <p className="error notice">{error}</p>}
-      <nav className="native-nav" aria-label="Main navigation">{([['home','Home'],['activity','Activity'],['insights','Insights'],['debts','Due'],['fiscus','Fiscus'],['settings','Settings']] as const).map(([key,label]) => <button key={key} type="button" className={view===key?'active':''} onClick={() => setView(key)}>{label}</button>)}</nav>
-      {view === 'home' && <>
-      <section className="panel"><div className="section-heading"><div><span className="eyebrow">QUICK ENTRY</span><h2>Record activity</h2></div></div>
-        <form className="entry-form" onSubmit={saveEntry}>
-          <div className="segmented">{(['expense','income','transfer','debt'] as const).map((item) => <button type="button" key={item} className={kind===item?'selected':''} onClick={() => setKind(item)}>{item === 'debt' ? 'Debt payment' : item[0].toUpperCase()+item.slice(1)}</button>)}</div>
-          <label>Amount (৳)<input required inputMode="decimal" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" /></label>
-          {kind !== 'debt' && <label>{kind === 'transfer' ? 'From wallet' : 'Wallet'}<select required value={walletId} onChange={(e) => setWalletId(e.target.value)}><option value="">Choose wallet</option>{wallets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
-          {kind === 'transfer' && <label>To wallet<select required value={destinationWalletId} onChange={(e) => setDestinationWalletId(e.target.value)}><option value="">Choose destination</option>{wallets.filter((item) => item.id !== walletId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
-          {(kind === 'income' || kind === 'expense') && <label>Category<select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}><option value="">Uncategorised</option>{categories.filter((item) => item.categoryType === kind).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
-          {kind === 'debt' && <label>Debt<select required value={debtId} onChange={(e) => setDebtId(e.target.value)}><option value="">Choose debt</option>{debts.map((item) => <option key={item.id} value={item.id}>{item.counterpartyName || 'Due'} · {money(Number(item.principalMinor || 0))}</option>)}</select></label>}
-          <label>Description / note<input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What was this for?" maxLength={500} /></label>
-          <button className="primary" disabled={busy || !amount || (kind !== 'debt' && !walletId) || (kind === 'transfer' && !destinationWalletId) || (kind === 'debt' && !debtId)}>{busy ? 'Saving…' : 'Save entry'}</button>
-        </form>
-      </section>
-      <section className="panel"><div className="section-heading"><div><span className="eyebrow">YOUR WALLETS</span><h2>Wallet balances</h2></div></div>
-        {wallets.length ? wallets.map((item) => <div className="wallet-row" key={item.id}><div><b>{item.name}</b><small>{item.walletType || 'Wallet'}</small></div><strong>{money(Number(item.currentBalanceMinor || 0))}</strong></div>) : <p className="empty">No cached wallets yet. Connect and sync your account first.</p>}
-      </section>
-      <section className="panel"><div className="section-heading"><div><span className="eyebrow">RECENT ACTIVITY</span><h2>Transactions</h2></div></div>
-        {transactions.length ? transactions.slice(0,40).map((item) => <div className="transaction-row" key={item.id}><div><b>{item.description || item.transactionType}</b><small>{new Date(item.occurredAt || Date.now()).toLocaleString()} · {transactionWallet(item.walletId)}{item.pendingSync ? ' · Pending sync' : ''}</small></div><strong className={item.transactionType==='income'?'positive':item.transactionType==='expense'?'negative':''}>{item.transactionType==='income'?'+':item.transactionType==='expense'?'-':''}{money(Number(item.amountMinor || 0))}</strong></div>) : <p className="empty">Your local transaction list will appear here.</p>}
-      </section>
-      </>}
-      {view === 'activity' && <section className="panel"><div className="section-heading"><div><span className="eyebrow">LEDGER</span><h2>All activity</h2></div><strong>{transactions.length}</strong></div><input className="search-input" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} placeholder="Search descriptions or wallets" aria-label="Search activity"/><div className="filter-row">{(['all','income','expense','transfer'] as const).map((filter) => <button type="button" key={filter} className={activityFilter===filter?'active':''} onClick={() => setActivityFilter(filter)}>{filter[0].toUpperCase()+filter.slice(1)}</button>)}</div>{filteredTransactions.length ? filteredTransactions.map((item) => <div className="transaction-row" key={item.id}><div><b>{item.description || item.transactionType}</b><small>{new Date(item.occurredAt || Date.now()).toLocaleString()} · {transactionWallet(item.walletId)}{item.pendingSync ? ' · Pending sync' : ''}</small></div><strong className={item.transactionType==='income'?'positive':item.transactionType==='expense'?'negative':''}>{item.transactionType==='income'?'+':item.transactionType==='expense'?'-':''}{money(Number(item.amountMinor || 0))}</strong></div>) : <p className="empty">No matching activity in this local snapshot.</p>}</section>}
-      {view === 'insights' && <><section className="panel"><span className="eyebrow">THIS MONTH</span><h2>{new Date().toLocaleDateString('en', {month:'long',year:'numeric'})}</h2><div className="metric-grid"><div><small>Income</small><strong className="positive">{money(monthIncome)}</strong></div><div><small>Expenses</small><strong className="negative">{money(monthExpense)}</strong></div><div><small>Net cash flow</small><strong>{money(monthIncome-monthExpense)}</strong></div><div><small>Transactions</small><strong>{monthTransactions.length}</strong></div></div></section><section className="panel"><span className="eyebrow">SPENDING SNAPSHOT</span><h2>Where things stand</h2><div className="metric-line"><span>Wallet balance</span><b>{money(totalBalance)}</b></div><div className="metric-line"><span>Outstanding due</span><b>{money(openDebtTotal)}</b></div><div className="metric-line"><span>Average expense / entry</span><b>{money(monthTransactions.filter((item) => item.transactionType === 'expense').length ? monthExpense / monthTransactions.filter((item) => item.transactionType === 'expense').length : 0)}</b></div><p className="empty">Insights are calculated from the transactions currently stored on this device. Sync to refresh the snapshot.</p></section></>}
-      {view === 'debts' && <section className="panel"><div className="section-heading"><div><span className="eyebrow">DUE & DEBT</span><h2>Outstanding balances</h2></div><strong>{money(openDebtTotal)}</strong></div>{debts.length ? debts.map((item) => {const principal=Number(item.principalMinor||0);const paid=paidForDebt(item.id);const remaining=Math.max(0,principal-paid);return <div className="debt-row" key={item.id}><div><b>{item.counterpartyName||'Due'}</b><small>{item.direction==='receivable'?'Owed to you':'You owe'} · {paid>0?'Partially paid':'Unpaid'} · {money(paid)} paid</small><div className="debt-track"><span style={{width:`${principal>0?Math.min(100,paid/principal*100):0}%`}}/></div></div><strong>{money(remaining)}</strong></div>}) : <p className="empty">No outstanding debts in this local snapshot.</p>}<p className="empty">Debt creation and editing will be enabled after the local ledger operations are implemented.</p></section>}
-      {view === 'fiscus' && <section className="panel fiscus-panel"><div className="section-heading"><div><span className="eyebrow">MONETRA INTELLIGENCE</span><h2>Fiscus AI</h2><p className="empty">Your personal financial thinking partner · online</p></div><button className="sync-button" type="button" onClick={() => void startFiscusChat()} disabled={!isSignedIn || fiscusLoading}>New chat</button></div>{!isSignedIn && <p className="empty">Connect to the internet and sign in to use Fiscus.</p>}{fiscusMessages.length===0 && <div className="fiscus-welcome"><b>What are we figuring out today?</b><p>Ask about spending patterns, monthly cash flow, wallet balances, or whether a purchase fits your finances.</p></div>}<div className="fiscus-messages">{fiscusMessages.map((item,index)=><div className={'fiscus-message '+item.role} key={index}><small>{item.role==='user'?'YOU':'FISCUS'}</small><p>{item.content}</p></div>)}{fiscusLoading && <p className="empty">Fiscus is thinking…</p>}</div>{fiscusError && <p className="error">{fiscusError}</p>}<form className="fiscus-composer" onSubmit={sendFiscusMessage}><textarea value={fiscusDraft} onChange={(event)=>setFiscusDraft(event.target.value)} placeholder="Ask Fiscus anything about your money…" rows={3} maxLength={3000} disabled={!isSignedIn || fiscusLoading}/><button className="primary" disabled={!isSignedIn || fiscusLoading || !fiscusDraft.trim()}>{fiscusLoading?'Thinking…':'Send message'}</button></form><p className="empty">Fiscus requires internet. It can analyze synced account data; unsynced offline entries are not included until they sync.</p></section>}
-      {view === 'settings' && <section className="panel"><span className="eyebrow">DEVICE & ACCOUNT</span><h2>Settings</h2><div className="metric-line"><span>Workspace</span><b>{workspace?.name||'Personal'}</b></div><div className="metric-line"><span>Connection</span><b>{navigator.onLine?'Online':'Offline'}</b></div><div className="metric-line"><span>Local database</span><b>Encrypted SQLite</b></div><div className="metric-line"><span>Sync</span><b>{busy?'In progress':'Manual / reconnect'}</b></div><button className="primary settings-action" type="button" onClick={() => void refresh()} disabled={busy}>{busy?'Working…':'Sync now'}</button><p className="empty">Your six-digit device PIN protects local access. Fiscus AI is an online feature and is not available while offline.</p></section>}
-      <footer>Encrypted local database · {navigator.onLine ? 'Online' : 'Offline'} · Fiscus AI requires internet</footer>
-    </main>
+    <DashboardErrorBoundary>
+      <HomePage />
+    </DashboardErrorBoundary>
   );
 }

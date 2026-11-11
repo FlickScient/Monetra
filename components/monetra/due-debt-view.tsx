@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { financeApiFetch } from '@/lib/native-api-fetch';
 import { ArrowDownLeft, ArrowUpRight, CalendarClock, CirclePlus, Download, HandCoins, History, Pencil, Plus, Search, ShieldCheck, Trash2, Wallet, X } from 'lucide-react';
 import { isNativeFinanceApp, queueNativeDebtPayment, readCachedNativeWorkspace } from '@/lib/offline/native-finance';
 
@@ -47,7 +48,7 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
     setEntries([]);
     setLoading(true);
     setError('');
-    fetch('/api/due-debt', { headers: { 'x-workspace-id': workspaceId } })
+    financeApiFetch('/api/due-debt', { headers: { 'x-workspace-id': workspaceId } })
       .then(async response => {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || 'Could not load Due & Debt records.');
@@ -130,7 +131,7 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
   async function deleteEntry(entry: Entry) {
     if (!window.confirm('Archive the record for ' + entry.person + '? Its payment history will be preserved.')) return;
     try {
-      const response = await fetch('/api/due-debt/' + entry.id, { method: 'DELETE', headers: { 'x-workspace-id': workspaceId } });
+      const response = await financeApiFetch('/api/due-debt/' + entry.id, { method: 'DELETE', headers: { 'x-workspace-id': workspaceId } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not archive this record.');
       setEntries(current => current.filter(item => item.id !== entry.id));
@@ -153,7 +154,7 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
       let payment: { id: string; amountMinor: number; paidAt: string; note?: string | null } | null = null;
       let response: Response | null = null;
       try {
-        response = await fetch('/api/due-debt/' + repayId + '/payments', {
+        response = await financeApiFetch('/api/due-debt/' + repayId + '/payments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId, 'idempotency-key': idempotencyKey },
           body: JSON.stringify({ amountMinor: amount, note: repayNote.trim() || null }),
@@ -198,7 +199,7 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
     if (!amount) { setError('Enter a valid payment amount.'); return; }
     setPaymentBusy(true); setError('');
     try {
-      const response = await fetch('/api/due-debt/' + paymentEdit.debtId + '/payments/' + paymentEdit.payment.id, {
+      const response = await financeApiFetch('/api/due-debt/' + paymentEdit.debtId + '/payments/' + paymentEdit.payment.id, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId },
         body: JSON.stringify({ amountMinor: amount, paidAt: paymentEditDate, note: paymentEditNote.trim() || null }),
       });
@@ -216,7 +217,7 @@ export function DueDebtView({ workspaceId }: { workspaceId: string }) {
   async function deletePayment(debtId: string, payment: Payment) {
     if (!window.confirm('Delete this payment of ' + taka(payment.amount) + '? The outstanding balance will increase again.')) return;
     try {
-      const response = await fetch('/api/due-debt/' + debtId + '/payments/' + payment.id, { method:'DELETE', headers:{'x-workspace-id':workspaceId} });
+      const response = await financeApiFetch('/api/due-debt/' + debtId + '/payments/' + payment.id, { method:'DELETE', headers:{'x-workspace-id':workspaceId} });
       const data = await response.json().catch(()=>({}));
       if (!response.ok) throw new Error(data.error || 'Could not delete payment.');
       setEntries(current => current.map(entry => entry.id===debtId ? {...entry,repayments:entry.repayments.filter(p=>p.id!==payment.id)} : entry));

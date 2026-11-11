@@ -3,8 +3,10 @@ import { createRoot } from 'react-dom/client';
 import { ClerkProvider } from 'capacitor-clerk';
 import App from './App';
 import './styles.css';
+import '../../app/globals.css';
 
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+window.__MONETRA_API_BASE__ = (import.meta.env.VITE_MONETRA_API_URL || 'https://monetra-4rax.vercel.app').replace(/\/+$/, '');
 
 // Keep a small, redacted diagnostic trail so native WebView startup failures
 // are visible on-device instead of being hidden behind the generic timeout.

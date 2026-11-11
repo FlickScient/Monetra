@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { verifyToken } from '@clerk/backend';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { workspaces } from '@/db/schema';
@@ -17,15 +18,38 @@ const WORKSPACE_ORDER: Record<(typeof WORKSPACE_TYPES)[number], number> = {
   business: 2,
 };
 
-export async function GET() {
-  const { userId } = await auth();
+export async function GET(request: NextRequest) {
+  // Browser sessions are authenticated by Clerk cookies. Capacitor's native
+  // WebView sends the same Clerk session as an Authorization bearer token.
+  const session = await auth();
+  let userId: string | null = session.userId;
+
+  if (!userId) {
+    const authorization = request.headers.get('authorization') || '';
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    if (!match?.[1]) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    try {
+      const claims = await verifyToken(match[1], {
+        secretKey: process.env.CLERK_SECRET_KEY,
+      });
+      userId = claims.sub;
+    } catch (error) {
+      console.warn('MONETRA_NATIVE_AUTH_REJECTED:', error instanceof Error ? error.message : 'Invalid bearer token');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+  }
+
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authenticatedUserId = userId;
 
   try {
     await db.transaction(async (tx) => {
       for (const workspaceType of WORKSPACE_TYPES) {
         await tx.insert(workspaces).values({
-          userId,
+          userId: authenticatedUserId,
           workspaceType,
           name: WORKSPACE_NAMES[workspaceType],
         }).onConflictDoNothing({
@@ -40,7 +64,7 @@ export async function GET() {
       type: workspaces.workspaceType,
       createdAt: workspaces.createdAt,
     }).from(workspaces)
-      .where(eq(workspaces.userId, userId))
+      .where(eq(workspaces.userId, authenticatedUserId))
       .orderBy(asc(workspaces.createdAt));
 
     const response = rows

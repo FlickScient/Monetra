@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { financeApiFetch } from '@/lib/native-api-fetch';
 import { dhakaMonthStart } from '@/lib/dhaka-time';
 import { Download, Printer, RefreshCw } from 'lucide-react';
 
@@ -35,7 +36,7 @@ export function ReportsView({ workspaceId }: { workspaceId: string }) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/reports?period=' + period + '&value=' + value, {
+      const response = await financeApiFetch('/api/reports?period=' + period + '&value=' + value, {
         headers: { 'x-workspace-id': workspaceId },
         cache: 'no-store',
       });

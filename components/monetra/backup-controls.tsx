@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ChangeEvent } from 'react';
+import { financeApiFetch } from '@/lib/native-api-fetch';
 import { Download, ShieldCheck, Upload } from 'lucide-react';
 
 export function BackupControls({ workspaceId }: { workspaceId: string }) {
@@ -13,7 +14,7 @@ export function BackupControls({ workspaceId }: { workspaceId: string }) {
     setMessage('');
     setError('');
     try {
-      const response = await fetch('/api/backup', { headers: { 'x-workspace-id': workspaceId }, cache: 'no-store' });
+      const response = await financeApiFetch('/api/backup', { headers: { 'x-workspace-id': workspaceId }, cache: 'no-store' });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload.error || 'Could not create backup.');
@@ -53,7 +54,7 @@ export function BackupControls({ workspaceId }: { workspaceId: string }) {
     setError('');
     try {
       const contents = await file.text();
-      const response = await fetch('/api/backup', {
+      const response = await financeApiFetch('/api/backup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId },
         body: contents,

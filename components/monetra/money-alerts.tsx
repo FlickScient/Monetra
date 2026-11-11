@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { financeApiFetch } from '@/lib/native-api-fetch';
 import { dhakaDateString } from '@/lib/dhaka-time';
 import { AlertCircle, Bell, CalendarClock, CheckCircle2, Wallet } from 'lucide-react';
 
@@ -31,12 +32,12 @@ export function MoneyAlerts({ workspaceId, onNavigate }: { workspaceId: string; 
     setFailed(false);
     const headers = { 'x-workspace-id': workspaceId };
     Promise.all([
-      fetch('/api/finance-tools', { headers, cache: 'no-store' }).then(async response => {
+      financeApiFetch('/api/finance-tools', { headers, cache: 'no-store' }).then(async response => {
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Alerts unavailable');
         return payload;
       }),
-      fetch('/api/due-debt', { headers, cache: 'no-store' }).then(async response => {
+      financeApiFetch('/api/due-debt', { headers, cache: 'no-store' }).then(async response => {
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Due dates unavailable');
         return payload;

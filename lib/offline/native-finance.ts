@@ -55,7 +55,11 @@ export async function syncNativeWorkspace(ownerId: string, workspaceId: string):
   if (!isNativeFinanceApp()) return;
   const store = await createStore();
   const cached = await store.listLocalWorkspaces(ownerId);
-  if (!cached.some((workspace) => workspace.id === workspaceId)) {
+  const workspaceExists = cached.some((workspace) => workspace.id === workspaceId);
+  // A previous interrupted login can leave the workspace row without the
+  // actual snapshot. Rehydrate that empty cache, but never overwrite local
+  // records or any queued/conflicted offline operation.
+  if (!workspaceExists || await store.needsBootstrap(workspaceId)) {
     const snapshot = await fetchFinanceBootstrap(workspaceId);
     await store.installBootstrap(ownerId, snapshot);
   }

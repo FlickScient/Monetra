@@ -705,6 +705,25 @@ export class SqliteFinanceSyncStore implements LocalFinanceSyncStore {
     return rows.map((row) => JSON.parse(row.record_json) as T);
   }
 
+  /**
+   * A workspace row can exist before its first snapshot was installed.
+   * Re-bootstrap only when there are no cached records AND no outbox rows;
+   * never run installBootstrap over locally queued or conflicted work.
+   */
+  async needsBootstrap(workspaceId: string): Promise<boolean> {
+    const [records, outbox] = await Promise.all([
+      this.database.get<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM local_records WHERE workspace_id = ?',
+        [workspaceId],
+      ),
+      this.database.get<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM sync_outbox WHERE workspace_id = ?',
+        [workspaceId],
+      ),
+    ]);
+    return Number(records?.count ?? 0) === 0 && Number(outbox?.count ?? 0) === 0;
+  }
+
   async rememberLocalSession(ownerId: string): Promise<void> {
     await this.database.run(
       `INSERT INTO local_session_state (owner_id, last_authenticated_at, lock_required)

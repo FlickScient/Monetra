@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth } from 'capacitor-clerk';
 import {
   ArrowUp, Bot, Clock3, MessageSquare, Plus,
   Search, Send, Sparkles, Trash2, UserRound, X,
