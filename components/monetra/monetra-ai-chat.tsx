@@ -30,24 +30,14 @@ async function invokeFiscus(
   action: FiscusAction,
   payload: Record<string, unknown> = {},
 ) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !publishableKey) {
-    throw new Error('Fiscus AI is not connected yet. Supabase frontend settings are missing.');
-  }
-
   const token = await getToken();
   if (!token) throw new Error('Your session has expired. Please sign in again.');
 
-  const response = await fetch(supabaseUrl.replace(/\/$/, '') + '/functions/v1/fiscus-chat', {
+  const response = await fetch('/api/fiscus', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: 'Bearer ' + token,
-      apikey: publishableKey,
     },
     body: JSON.stringify({ ...payload, action, workspaceId }),
     cache: 'no-store',
@@ -181,7 +171,7 @@ export function MonetraAIChat({ workspaceId }: { workspaceId: string }) {
     setLoading(true);
     try {
       const data = await invokeFiscus(getToken, workspaceId, 'chat', {
-        messages: nextMessages.slice(-12),
+        message: content,
       });
       if (typeof data.answer !== 'string' || !data.answer.trim()) {
         throw new Error('Fiscus returned an empty response.');
