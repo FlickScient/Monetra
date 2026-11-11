@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAuth } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { categories, transactions, wallets, workspaces } from '@/db/schema';
@@ -137,7 +137,7 @@ async function financeContext(userId: string, workspaceId: string) {
 }
 
 export async function POST(request: Request) {
-  const { userId } = getAuth(request);
+  const { userId } = await auth();
   if (!userId) return json({ error: 'Please sign in again.', code: 'UNAUTHORIZED' }, 401);
 
   let body: Record<string, unknown>;
