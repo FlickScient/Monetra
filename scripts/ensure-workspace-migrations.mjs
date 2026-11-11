@@ -16,6 +16,15 @@ if (process.env.MONETRA_CI_BUILD === '1') {
   process.exit(0);
 }
 
+// Vercel Preview deployments must never run schema migrations. Preview
+// DATABASE_URL values can point at production when no isolated preview DB is
+// configured, so keep previews build-only and leave all database changes to an
+// explicitly controlled migration step.
+if (process.env.VERCEL_ENV === 'preview') {
+  console.log('WORKSPACE_MIGRATION: skipped for Vercel Preview; no database changes will run.');
+  process.exit(0);
+}
+
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   console.error('WORKSPACE_MIGRATION: DATABASE_URL is missing from this Vercel build environment.');
